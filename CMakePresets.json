@@ -1,0 +1,58 @@
+{
+  "version": 5,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "vs2026-x64-debug",
+      "displayName": "Visual Studio 2026 x64 Debug",
+      "description": "Configure Investor Command Center for Visual Studio 2026 Debug builds.",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF"
+      }
+    },
+    {
+      "name": "vs2026-x64-release",
+      "displayName": "Visual Studio 2026 x64 Release",
+      "description": "Configure Investor Command Center for Visual Studio 2026 Release builds.",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "vs2026-x64-debug",
+      "displayName": "Build Visual Studio 2026 x64 Debug",
+      "configurePreset": "vs2026-x64-debug",
+      "configuration": "Debug",
+      "targets": [
+        "InvestorCommandCenter"
+      ]
+    },
+    {
+      "name": "vs2026-x64-release",
+      "displayName": "Build Visual Studio 2026 x64 Release",
+      "configurePreset": "vs2026-x64-release",
+      "configuration": "Release",
+      "targets": [
+        "InvestorCommandCenter"
+      ]
+    }
+  ]
+}

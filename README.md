@@ -26,34 +26,61 @@ This app does not connect to brokerage accounts, does not sync to the cloud, doe
 
 - Windows 10 or Windows 11
 - CMake 3.24 or newer
-- Visual Studio 2022 or newer, or Visual Studio Build Tools with the Desktop development with C++ workload
+- Visual Studio 2026, or Visual Studio Build Tools with the Desktop development with C++ workload
+- CMake tools for Windows
+- Windows 11 SDK
 - Git
 - Internet access for the first configure step so CMake can fetch Dear ImGui and the SQLite amalgamation
 
-## Setup
+## Visual Studio 2026 Setup
 
-From the project root:
+1. Install Visual Studio 2026 with `Desktop development with C++`.
+2. Include `CMake tools for Windows`.
+3. Include the Windows 11 SDK.
+4. Open Visual Studio 2026.
+5. Choose `Open a local folder`.
+6. Select the repository root.
+7. In the CMake target/preset dropdown, choose `vs2026-x64-debug`.
+8. Build.
+9. Run the `InvestorCommandCenter` target.
+
+The repository uses CMake presets and should not require committing generated `.sln`, `.vcxproj`, `.vs`, `out`, or `build` files.
+
+## Command-Line Build
+
+Debug:
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Debug
+cmake --preset vs2026-x64-debug
+cmake --build --preset vs2026-x64-debug
 ```
 
-With Visual Studio 2026, use `-G "Visual Studio 18 2026"` instead.
-
-If you prefer Ninja and have a configured MSVC developer shell:
+Release:
 
 ```powershell
-cmake -S . -B build -G Ninja
-cmake --build build
+cmake --preset vs2026-x64-release
+cmake --build --preset vs2026-x64-release
 ```
+
+The presets use the Visual Studio 2026 CMake generator with x64 architecture. Generated files are written under `out/`, which is ignored by Git.
+
+## GitHub Actions / CI
+
+CI builds should use the tracked CMake presets:
+
+```powershell
+cmake --preset vs2026-x64-release
+cmake --build --preset vs2026-x64-release
+```
+
+Do not rely on `CMakeUserPresets.json`, `.vs/`, `out/`, or `build/` contents. Those are local/generated files and are intentionally ignored by Git.
 
 ## Run
 
 From the project root after building:
 
 ```powershell
-.\build\Debug\InvestorCommandCenter.exe
+.\out\build\vs2026-x64-debug\Debug\InvestorCommandCenter.exe
 ```
 
 The database is created automatically at:

@@ -1,5 +1,67 @@
 # Codex Change Log
 
+## 2026-05-28 Windows Release Workflow Presets
+
+### Changed Files
+
+- `.github/workflows/windows-release.yml`
+- `docs/Codex-ChangeLog.md`
+
+### Behavior Added
+
+- Added a Windows release workflow that configures with `cmake --preset vs2026-x64-release`.
+- Added release build step using `cmake --build --preset vs2026-x64-release`.
+- Packaged `InvestorCommandCenter.exe` from the actual preset output directory: `out/build/vs2026-x64-release/Release`.
+- Uploaded a zip artifact containing only the executable, `LICENSE`, `README.md`, and `docs/Privacy-And-Local-Data.md`.
+- Added an artifact safety check that fails packaging if database files, exports, spreadsheets, brokerage export files, or logs appear in the package folder.
+
+### Completed Validation
+
+- Confirmed the workflow references the tracked CMake release preset.
+- Built the local `vs2026-x64-release` preset successfully.
+- Confirmed artifact packaging reads from the actual release preset executable path.
+- Confirmed package contents intentionally exclude `data/`, exports, backups, logs, and local/private files.
+- Ran a local package-folder validation against the workflow's forbidden private/generated data patterns.
+- Confirmed `.vs`, `out`, `build`, and `CMakeUserPresets.json` remain ignored and unstaged locally.
+
+### Known Issues
+
+- The workflow uses `windows-2025-vs2026`, so it depends on GitHub-hosted runner availability for the Visual Studio 2026 image.
+- The workflow uploads a build artifact; it does not create a GitHub Release entry yet.
+
+## 2026-05-28 Visual Studio 2026 CMake Presets
+
+### Changed Files
+
+- `CMakePresets.json`
+- `README.md`
+- `docs/Codex-ChangeLog.md`
+
+### Behavior Added
+
+- Added Visual Studio 2026 CMake configure presets for `vs2026-x64-debug` and `vs2026-x64-release`.
+- Added matching CMake build presets for Debug and Release.
+- Configured preset output under `out/build/${presetName}` and install output under `out/install/${presetName}`.
+- Kept CMake as the build system; no `.sln` or `.vcxproj` project conversion was added.
+- Updated README instructions for opening the repository directly in Visual Studio 2026 as a local CMake folder.
+- Updated command-line build instructions to use `cmake --preset` and `cmake --build --preset`.
+
+### Completed Validation
+
+- Confirmed `CMakePresets.json` parses as valid JSON.
+- Confirmed CMake lists `vs2026-x64-debug` and `vs2026-x64-release`.
+- Confirmed Debug preset configures.
+- Confirmed Debug preset builds.
+- Confirmed Release preset configures.
+- Confirmed Release preset builds.
+- Confirmed `.vs`, `out`, `build`, and `CMakeUserPresets.json` are ignored and not staged.
+
+### Known Issues
+
+- The presets use the Visual Studio 2026 generator, so GitHub Actions runners need Visual Studio 2026 Build Tools or an equivalent image with the `Visual Studio 18 2026` CMake generator available.
+- `CMAKE_EXPORT_COMPILE_COMMANDS` is not enabled because the Visual Studio generator does not support compile command export in the same way Ninja and Makefile generators do.
+- Interactive Visual Studio folder opening was not automated from this terminal; preset parsing/listing and configure/build were validated with the Visual Studio 2026 bundled CMake.
+
 ## 2026-05-28 License and Local Data Safety
 
 ### Changed Files

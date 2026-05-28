@@ -1,0 +1,87 @@
+name: Windows Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-release:
+    name: Build Windows Release
+    runs-on: windows-2025-vs2026
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure CMake release preset
+        run: cmake --preset vs2026-x64-release
+
+      - name: Build CMake release preset
+        run: cmake --build --preset vs2026-x64-release
+
+      - name: Package release artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $presetOutput = Join-Path $env:GITHUB_WORKSPACE "out/build/vs2026-x64-release/Release"
+          $exePath = Join-Path $presetOutput "InvestorCommandCenter.exe"
+          if (-not (Test-Path -LiteralPath $exePath)) {
+            throw "Expected executable was not found at $exePath"
+          }
+
+          $packageRoot = Join-Path $env:GITHUB_WORKSPACE "out/package/InvestorCommandCenter-windows-x64"
+          New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
+
+          Copy-Item -LiteralPath $exePath -Destination $packageRoot
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "LICENSE") -Destination $packageRoot
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "README.md") -Destination $packageRoot
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "docs/Privacy-And-Local-Data.md") -Destination $packageRoot
+
+          $forbidden = @(
+            "*.db",
+            "*.sqlite",
+            "*.sqlite3",
+            "*.db-journal",
+            "*.sqlite-journal",
+            "*.sqlite3-journal",
+            "*.db-wal",
+            "*.sqlite-wal",
+            "*.sqlite3-wal",
+            "*.db-shm",
+            "*.sqlite-shm",
+            "*.sqlite3-shm",
+            "*.csv",
+            "*.tsv",
+            "*.xlsx",
+            "*.xls",
+            "*.ofx",
+            "*.qfx",
+            "*.qif",
+            "*.log"
+          )
+
+          foreach ($pattern in $forbidden) {
+            $matches = Get-ChildItem -LiteralPath $packageRoot -Recurse -File -Filter $pattern
+            if ($matches) {
+              throw "Private/generated data matched release artifact pattern '$pattern'."
+            }
+          }
+
+          $zipPath = Join-Path $env:GITHUB_WORKSPACE "out/package/InvestorCommandCenter-windows-x64.zip"
+          if (Test-Path -LiteralPath $zipPath) {
+            Remove-Item -LiteralPath $zipPath -Force
+          }
+          Compress-Archive -Path (Join-Path $packageRoot "*") -DestinationPath $zipPath
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: InvestorCommandCenter-windows-x64
+          path: out/package/InvestorCommandCenter-windows-x64.zip
+          if-no-files-found: error
