@@ -6,6 +6,14 @@ Subtitle: Long-term progress beats short-term noise.
 
 This app does not connect to brokerage accounts, does not sync to the cloud, does not call stock price APIs, and does not provide financial advice or buy/sell recommendations.
 
+## Project Intent
+
+Investor Command Center is a personal desktop investing tracker built for local-first manual tracking. The source code is public and open source, but the app follows my personal investing workflow first.
+
+I am building this to unwind and relax in the evening - AI Zombie time and flow coding. The spirit of the app is: "Everything is made up, and the points don't matter" - except they kind of do, because I am making this to track my investments my way.
+
+Bug reports are welcome. Feature requests may be considered, but this is not intended to be a commercial finance product. This app is not financial advice, does not connect to brokerage accounts, and users are responsible for their own financial decisions.
+
 ## Current App
 
 - Native Win32 desktop shell using Dear ImGui with a DirectX 11 renderer

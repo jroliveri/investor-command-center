@@ -1,5 +1,32 @@
 # Codex Change Log
 
+## 2026-05-28 Release Notes Documentation
+
+### Changed Files
+
+- `README.md`
+- `docs/Release-Notes-Guide.md`
+- `docs/Codex-ChangeLog.md`
+
+### Behavior Added
+
+- Added a release notes guide for public GitHub releases.
+- Added a standard release notes template with project intent, privacy reminder, validation, and known limitations sections.
+- Added personal-use messaging that explains the project is public source code shaped by the maintainer's personal investing workflow first.
+- Added bug report guidance that asks users not to include personal CSV files, databases, screenshots, brokerage exports, or financial records in GitHub issues.
+- Added example release notes for the current milestone.
+- Added a README Project Intent section.
+
+### Validation
+
+- Documentation-only change.
+- Confirmed no app behavior changes were made.
+- Confirmed no real personal investing data was added.
+
+### Known Issues
+
+- Release notes are guide/template documentation only; no GitHub release was created.
+
 ## 2026-05-28 CSV Mapping UI and Import Preview Alignment
 
 ### Changed Files
