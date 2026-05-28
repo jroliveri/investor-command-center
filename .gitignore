@@ -1,0 +1,46 @@
+# Build and IDE output
+build/
+build-current/
+out/
+.vs/
+.vscode/settings.json
+CMakeUserPresets.json
+
+# Local SQLite databases and journals
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/*.db-journal
+data/*.sqlite-journal
+data/*.sqlite3-journal
+data/*.db-wal
+data/*.sqlite-wal
+data/*.sqlite3-wal
+data/*.db-shm
+data/*.sqlite-shm
+data/*.sqlite3-shm
+
+# Keep the placeholder directory marker trackable
+!data/.gitkeep
+
+# Local exports and backups
+data/backups/
+data/exports/
+exports/
+backups/
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.ofx
+*.qfx
+*.qif
+
+# Logs and local user data
+*.log
+logs/
+local/
+user-data/
+secrets/
+.env
+.env.*
