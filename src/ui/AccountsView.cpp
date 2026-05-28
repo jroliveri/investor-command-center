@@ -3,6 +3,7 @@
 
 #include "app/AppState.hpp"
 #include "repositories/AccountRepository.hpp"
+#include "services/PortfolioCalculator.hpp"
 #include "ui/UiTheme.hpp"
 #include "util/Money.hpp"
 
@@ -66,7 +67,7 @@ void drawStringCombo(const char* label, std::string& value, const std::array<con
 
 void AccountsView::render(AppState& state, AccountRepository& repository, const std::function<void()>& reloadData)
 {
-    UiTheme::sectionHeading("Accounts", "Manual balances for brokerage, retirement, and cash accounts.");
+    UiTheme::sectionHeading("Accounts", "Cash is entered manually; total balance is calculated from holdings plus cash.");
 
     if (ImGui::Button("Add Account")) {
         openCreate();
@@ -81,11 +82,12 @@ void AccountsView::render(AppState& state, AccountRepository& repository, const 
     int visibleRows = 0;
     if (state.accounts.empty()) {
         UiTheme::emptyState("No accounts yet", "Add one account to start tracking balances and holdings.");
-    } else if (ImGui::BeginTable("AccountsTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp)) {
+    } else if (ImGui::BeginTable("AccountsTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 1.3f);
         ImGui::TableSetupColumn("Type");
         ImGui::TableSetupColumn("Institution");
-        ImGui::TableSetupColumn("Balance", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+        ImGui::TableSetupColumn("Calculated Balance", ImGuiTableColumnFlags_WidthFixed, 138.0f);
+        ImGui::TableSetupColumn("Holdings", ImGuiTableColumnFlags_WidthFixed, 110.0f);
         ImGui::TableSetupColumn("Cash", ImGuiTableColumnFlags_WidthFixed, 110.0f);
         ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 84.0f);
         ImGui::TableSetupColumn("Updated", ImGuiTableColumnFlags_WidthFixed, 140.0f);
@@ -98,6 +100,7 @@ void AccountsView::render(AppState& state, AccountRepository& repository, const 
             }
 
             ++visibleRows;
+            const AccountMetrics metrics = PortfolioCalculator::calculateAccount(account, state.holdings);
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Text("%s", account.accountName.c_str());
@@ -106,7 +109,9 @@ void AccountsView::render(AppState& state, AccountRepository& repository, const 
             ImGui::TableNextColumn();
             ImGui::Text("%s", account.institutionName.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(account.currentBalance).c_str());
+            ImGui::Text("%s", Money::format(metrics.calculatedBalance).c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextColored(UiTheme::MutedText, "%s", Money::format(metrics.holdingsMarketValue).c_str());
             ImGui::TableNextColumn();
             ImGui::Text("%s", Money::format(account.cashBalance).c_str());
             ImGui::TableNextColumn();
@@ -173,8 +178,8 @@ void AccountsView::drawEditor(AppState& state, AccountRepository& repository, co
         "Other",
     });
     ImGui::InputText("Institution", &draft_.institutionName);
-    ImGui::InputDouble("Current balance", &draft_.currentBalance, 0.0, 0.0, "%.2f");
     ImGui::InputDouble("Cash balance", &draft_.cashBalance, 0.0, 0.0, "%.2f");
+    ImGui::TextColored(UiTheme::MutedText, "Account balance is calculated as holdings market value plus cash balance.");
     drawStringCombo("Status", draft_.status, std::array {
         "Active",
         "Closed",

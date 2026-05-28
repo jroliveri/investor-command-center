@@ -1,5 +1,135 @@
 # Codex Change Log
 
+## 2026-05-28 CSV Mapping UI and Import Preview Alignment
+
+### Changed Files
+
+- `docs/CSV-Import.md`
+- `docs/Codex-ChangeLog.md`
+- `src/services/HoldingsCsvImport.hpp`
+- `src/services/HoldingsCsvImport.cpp`
+- `src/ui/ImportCsvView.hpp`
+- `src/ui/ImportCsvView.cpp`
+
+### Behavior Added
+
+- Replaced the floating field-to-column dropdowns with a column mapping table.
+- Added one mapping row per CSV column with CSV header, sample value, import field dropdown, parsed/calculated preview, and status.
+- Added import field options for `Ignore Column`, ticker, asset name, shares, current price, average cost, total cost basis, gain/loss dollar, gain/loss percent, asset type, and notes.
+- Added Schwab defaults for `Gain $ (Gain/Loss $)` and `Gain % (Gain/Loss %)`.
+- Added an Import Preview table that shows final app fields after mapping, including total cost basis, average cost, market value, gain/loss dollar, gain/loss percent, notes, and row errors/warnings.
+- Added manual header row override while keeping automatic header detection.
+- Kept Notes isolated to columns explicitly mapped to Notes.
+
+### UI Corrections
+
+- Fixed ambiguous dropdown labels by putting every dropdown in the same row as its CSV column header.
+- Fixed the previous visual mismatch where adjacent dropdown labels could appear to describe the wrong field.
+- Clarified that Schwab `Cost Basis` maps to total cost basis, not average cost.
+- Added section titles for Import Account, File, Header Detection, Column Mapping, Import Preview, and Validation Summary.
+
+### Completed Validation
+
+- Built the Debug preset after the mapping UI redesign.
+- Built the Release preset after the mapping UI redesign.
+- Ran a fake Schwab positions CSV smoke test outside the repository.
+- Confirmed row 3 header detection, manual header row reload, summary row skipping, Schwab default mappings, Notes isolation, total cost basis average-cost calculation, gain/loss parsing, valid-row preview, and invalid-row blocking.
+- Confirmed the service model maps CSV columns to import fields instead of relying on unlabeled field dropdowns.
+- Confirmed gain/loss columns are parsed for preview/reference but are not stored in holdings.
+
+### Known Issues
+
+- Interactive visual QA should still be performed in the running desktop app with a fake Schwab CSV.
+- Transaction CSV import remains future work.
+
+## 2026-05-28 Schwab Positions CSV Import Support
+
+### Changed Files
+
+- `docs/CSV-Import.md`
+- `docs/Codex-ChangeLog.md`
+- `src/services/HoldingsCsvImport.hpp`
+- `src/services/HoldingsCsvImport.cpp`
+- `src/ui/ImportCsvView.cpp`
+
+### Behavior Added
+
+- Added Schwab-style positions CSV header detection so metadata/title rows before the actual holdings header are ignored.
+- Added tracking for detected header row, skipped metadata rows, skipped blank rows, and skipped summary rows.
+- Added skipping for Schwab summary/cash rows: `Futures Cash`, `Futures Positions Market Value`, `Cash & Cash Investments`, and `Positions Total`.
+- Added total cost basis mapping using `Cost Basis` / `Total Cost Basis`.
+- Added average cost calculation from total cost basis divided by shares when direct average cost is unavailable.
+- Added non-blocking warnings when average cost is missing and imported as `0.00`.
+- Kept the hard required holding fields to ticker, shares, and current price; missing asset names now fall back to ticker with a warning.
+- Added Schwab asset type normalization from `Equity` to `Stock` and `ETFs & Closed End Funds` to `ETF`.
+- Improved number parsing for dollar signs, commas, percent signs, blanks, `--`, negative values, and parentheses.
+- Updated Import CSV preview stats to show valid, blocked, warning, detected-header, metadata, blank, and summary row counts.
+
+### Completed Validation
+
+- Validated the importer with a fake Schwab-style CSV created outside the repository.
+- Confirmed the fake Schwab header row is detected as row 3.
+- Confirmed `Symbol`, `Description`, `Qty (Quantity)`, `Price`, `Cost Basis`, and `Asset Type` map correctly.
+- Confirmed average cost calculates from `Cost Basis / shares`.
+- Confirmed `Equity` maps to `Stock` and `ETFs & Closed End Funds` maps to `ETF`.
+- Confirmed summary/cash rows are skipped.
+- Confirmed invalid fake rows show errors while valid fake rows preview as importable.
+- Built Debug and Release presets successfully after the Schwab importer changes.
+
+### Known Issues
+
+- The importer now supports Schwab-style positions files, but transaction CSV import is still planned future work.
+- Real CSV files should remain local and must not be committed.
+
+## 2026-05-28 Calculated Balances and Holdings CSV Import
+
+### Changed Files
+
+- `.gitignore`
+- `CMakeLists.txt`
+- `README.md`
+- `docs/CSV-Import.md`
+- `docs/Data-Model.md`
+- `docs/Product-Brief.md`
+- `docs/Roadmap.md`
+- `docs/Privacy-And-Local-Data.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/app/AppState.cpp`
+- `src/services/PortfolioCalculator.hpp`
+- `src/services/PortfolioCalculator.cpp`
+- `src/services/HoldingsCsvImport.hpp`
+- `src/services/HoldingsCsvImport.cpp`
+- `src/ui/AccountsView.cpp`
+- `src/ui/ImportCsvView.hpp`
+- `src/ui/ImportCsvView.cpp`
+
+### Behavior Added
+
+- Changed account balance display logic so account balance is calculated as holdings market value plus cash balance.
+- Kept `cash_balance` as the user-entered account cash field.
+- Kept `accounts.current_balance` only for backward compatibility; it is no longer used as the authoritative displayed balance.
+- Updated Accounts UI so calculated balance is read-only and the form no longer asks for manual current balance.
+- Updated dashboard portfolio value to use centralized calculated account balances.
+- Added an Import CSV section under Tools.
+- Added first-pass holdings CSV import with local file picker, flexible column mapping, preview, row validation, duplicate blocking, and import of valid rows into SQLite.
+- Added `.gitignore` protection for `imports/` and `data/imports/`.
+- Added CSV import documentation and updated roadmap priority from CSV export/import later to CSV import now.
+
+### Completed Validation
+
+- Built the Debug `InvestorCommandCenter` target successfully after account balance and CSV import changes.
+- Confirmed holdings calculations still use `costBasis = shares * averageCost`, `marketValue = shares * currentPrice`, dollar gain/loss, and percentage gain/loss with zero-cost protection.
+- Confirmed CSV source files remain ignored by Git via `*.csv`, `imports/`, and `data/imports/`.
+
+### Known Issues
+
+- Holdings CSV import is the first supported importer; transaction CSV import is planned.
+- CSV preview/import was implemented in UI and service code, but interactive file-picker validation still needs a hands-on app pass with fake local CSV files.
+- Duplicate handling currently blocks exact `account_id + ticker + asset_name` matches.
+
 ## 2026-05-28 Windows Release Workflow Presets
 
 ### Changed Files

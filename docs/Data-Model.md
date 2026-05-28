@@ -27,6 +27,17 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 ```
 
+`current_balance` is retained for backward compatibility with early local databases. It is not the source of truth for displayed balances.
+
+Displayed account balance is calculated in C++:
+
+```text
+accountBalance = sum(marketValue for holdings in account) + cashBalance
+marketValue = shares * currentPrice
+```
+
+Users should enter `cash_balance`; holdings provide the market value portion.
+
 ## holdings
 
 ```sql
@@ -131,7 +142,12 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 
 ## Dashboard Calculations
 
+- Account balances are calculated from holdings market value plus account cash balance.
 - Dividend totals are calculated in C++ from `dividends.date_received` using `YYYY-MM` and `YYYY` prefixes.
 - Goal progress is calculated in C++ as `current_amount / target_amount * 100`, clamped between `0` and `100`.
 - Watchlist priority counts are calculated in C++ from the `priority` field.
 - Recent transactions are loaded from `transactions` ordered by `transaction_date DESC, id DESC`.
+
+## CSV Import
+
+Holdings CSV import writes validated rows to `holdings`. Source CSV files remain local and are not copied into the repository by default.

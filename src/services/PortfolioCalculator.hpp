@@ -27,6 +27,12 @@ struct PortfolioSummary {
     int holdingCount = 0;
 };
 
+struct AccountMetrics {
+    double holdingsMarketValue = 0.0;
+    double cashBalance = 0.0;
+    double calculatedBalance = 0.0;
+};
+
 struct DividendSummary {
     double thisMonth = 0.0;
     double thisYear = 0.0;
@@ -46,6 +52,7 @@ struct WatchlistSummary {
 
 namespace PortfolioCalculator {
 HoldingMetrics calculateHolding(const Holding& holding);
+AccountMetrics calculateAccount(const Account& account, const std::vector<Holding>& holdings);
 PortfolioSummary calculateSummary(const std::vector<Account>& accounts, const std::vector<Holding>& holdings);
 DividendSummary calculateDividends(const std::vector<Dividend>& dividends, const std::string& monthPrefix, const std::string& yearPrefix);
 GoalMetrics calculateGoal(const Goal& goal);

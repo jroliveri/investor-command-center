@@ -20,6 +20,7 @@ enum class AppSection {
     Dividends,
     Goals,
     Watchlist,
+    ImportCsv,
     Reports,
     Settings
 };
@@ -46,4 +47,4 @@ public:
 };
 
 const char* sectionTitle(AppSection section);
-const std::array<SectionInfo, 9>& allSections();
+const std::array<SectionInfo, 10>& allSections();

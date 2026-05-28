@@ -14,6 +14,7 @@
 #include "ui/DividendsView.hpp"
 #include "ui/GoalsView.hpp"
 #include "ui/HoldingsView.hpp"
+#include "ui/ImportCsvView.hpp"
 #include "ui/SettingsView.hpp"
 #include "ui/TransactionsView.hpp"
 #include "ui/WatchlistView.hpp"
@@ -50,6 +51,7 @@ private:
     DividendsView dividendsView_;
     GoalsView goalsView_;
     WatchlistView watchlistView_;
+    ImportCsvView importCsvView_;
     SettingsView settingsView_;
     std::string startupError_;
 };

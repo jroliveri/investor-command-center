@@ -157,6 +157,9 @@ void App::renderSidebar()
     sidebarItem(state_, AppSection::Goals, "Goals");
     sidebarItem(state_, AppSection::Watchlist, "Watchlist");
 
+    sidebarGroup("Tools");
+    sidebarItem(state_, AppSection::ImportCsv, "Import CSV");
+
     sidebarGroup("System");
     sidebarItem(state_, AppSection::Settings, "Settings");
 
@@ -195,6 +198,9 @@ void App::renderCurrentSection()
         break;
     case AppSection::Watchlist:
         watchlistView_.render(state_, *watchlistRepository_, reload);
+        break;
+    case AppSection::ImportCsv:
+        importCsvView_.render(state_, *holdingRepository_, reload);
         break;
     case AppSection::Reports:
         renderPlaceholder("Reports", "Reports will summarize local records without advice or recommendations.");

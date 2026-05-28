@@ -15,12 +15,28 @@ HoldingMetrics calculateHolding(const Holding& holding)
     return metrics;
 }
 
+AccountMetrics calculateAccount(const Account& account, const std::vector<Holding>& holdings)
+{
+    AccountMetrics metrics;
+    metrics.cashBalance = account.cashBalance;
+
+    for (const Holding& holding : holdings) {
+        if (holding.accountId == account.id) {
+            metrics.holdingsMarketValue += calculateHolding(holding).marketValue;
+        }
+    }
+
+    metrics.calculatedBalance = metrics.holdingsMarketValue + metrics.cashBalance;
+    return metrics;
+}
+
 PortfolioSummary calculateSummary(const std::vector<Account>& accounts, const std::vector<Holding>& holdings)
 {
     PortfolioSummary summary;
 
     for (const Account& account : accounts) {
-        summary.accountBalance += account.currentBalance;
+        const AccountMetrics accountMetrics = calculateAccount(account, holdings);
+        summary.accountBalance += accountMetrics.calculatedBalance;
         summary.cashBalance += account.cashBalance;
         if (account.status == "Active") {
             ++summary.activeAccounts;

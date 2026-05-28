@@ -30,6 +30,7 @@ Investor Command Center is a private Windows desktop application for manually tr
 - Dividend records with create, edit, delete, search, and totals
 - Goal records with create, edit, delete, search, and progress bars
 - Watchlist records with create, edit, delete, search, and priority badges
+- Holdings CSV import with local preview, mapping, validation, and duplicate blocking
 - SQLite setup and migrations
 - Basic validation
 - Confirmation before deleting records

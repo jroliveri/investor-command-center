@@ -28,7 +28,7 @@ data/investor_command_center.db
 
 That database file is intentionally ignored by Git. It may contain account names, balances, holdings, transaction history, dividends, goals, watchlist notes, and other personal investing information.
 
-The repository also ignores exports, backups, logs, spreadsheets, and common brokerage export formats, including CSV, TSV, Excel, OFX, QFX, and QIF files.
+The repository also ignores imports, exports, backups, logs, spreadsheets, and common brokerage export formats, including CSV, TSV, Excel, OFX, QFX, and QIF files.
 
 ## Before Every Commit
 

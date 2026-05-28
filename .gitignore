@@ -2,6 +2,8 @@
 build/
 build-current/
 out/
+*.obj
+imgui.ini
 .vs/
 .vscode/settings.json
 CMakeUserPresets.json
@@ -26,8 +28,10 @@ data/*.sqlite3-shm
 # Local exports and backups
 data/backups/
 data/exports/
+data/imports/
 exports/
 backups/
+imports/
 *.csv
 *.tsv
 *.xlsx

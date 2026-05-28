@@ -104,6 +104,8 @@ set(APP_SOURCES
     src/repositories/WatchlistRepository.cpp
     src/services/PortfolioCalculator.hpp
     src/services/PortfolioCalculator.cpp
+    src/services/HoldingsCsvImport.hpp
+    src/services/HoldingsCsvImport.cpp
     src/ui/DashboardView.hpp
     src/ui/DashboardView.cpp
     src/ui/AccountsView.hpp
@@ -120,6 +122,8 @@ set(APP_SOURCES
     src/ui/WatchlistView.cpp
     src/ui/SettingsView.hpp
     src/ui/SettingsView.cpp
+    src/ui/ImportCsvView.hpp
+    src/ui/ImportCsvView.cpp
     src/ui/UiTheme.hpp
     src/ui/UiTheme.cpp
     src/util/Money.hpp
@@ -142,6 +146,7 @@ target_link_libraries(InvestorCommandCenter PRIVATE
     d3dcompiler
     dwmapi
     imm32
+    comdlg32
 )
 
 target_compile_definitions(InvestorCommandCenter PRIVATE

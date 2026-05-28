@@ -12,6 +12,7 @@
 - Goals CRUD
 - Watchlist CRUD
 - Search/filter tables
+- Holdings CSV import with preview, mapping, validation, and duplicate blocking
 - Dashboard summaries
 
 ## Next
@@ -19,7 +20,8 @@
 - Basic reports using local records
 - Settings page for database path and display preferences
 - Better date entry controls
-- CSV import/export for manual record entry
+- Transaction CSV import
+- CSV export for manual records
 - More complete validation and duplicate detection
 
 ## Later

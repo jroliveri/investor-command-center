@@ -17,6 +17,7 @@ This app does not connect to brokerage accounts, does not sync to the cloud, doe
 - Dividend create, edit, delete, and search workflow with month, year, and lifetime totals
 - Goal create, edit, delete, and search workflow with progress bars
 - Watchlist create, edit, delete, and search workflow with priority badges
+- Holdings CSV import with local file selection, column mapping, preview, validation, and duplicate blocking
 - SQLite database initialization at `data/investor_command_center.db`
 - SQLite migrations for `accounts`, `holdings`, `transactions`, `dividends`, `goals`, and `watchlist`
 - Basic validation and delete confirmation dialogs
@@ -105,6 +106,8 @@ This public repository is for source code and documentation only. Review `git st
 
 See `docs/Privacy-And-Local-Data.md` for the full data-safety guidance.
 
+CSV imports are local-only. Do not store real brokerage CSV files in the repository. See `docs/CSV-Import.md`.
+
 ## License
 
 Investor Command Center is released under the MIT License. See `LICENSE`.
@@ -114,6 +117,7 @@ Investor Command Center is released under the MIT License. See `LICENSE`.
 - Prices are manual fields; there are no market data APIs.
 - Reports is a placeholder section.
 - CSV export buttons are placeholders.
+- CSV import currently targets holdings only; transaction CSV import is planned.
 - Account deletion is blocked by SQLite foreign keys when holdings still reference that account.
 - Transactions and dividends can optionally reference an account, but do not enforce account foreign keys.
 - No authentication, no cloud sync, and no brokerage integration.
