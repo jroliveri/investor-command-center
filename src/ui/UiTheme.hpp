@@ -6,14 +6,27 @@
 #include <string>
 
 namespace UiTheme {
-constexpr ImVec4 Gain = ImVec4(0.40f, 0.78f, 0.55f, 1.0f);
-constexpr ImVec4 Loss = ImVec4(0.86f, 0.36f, 0.36f, 1.0f);
-constexpr ImVec4 Amber = ImVec4(0.93f, 0.68f, 0.30f, 1.0f);
-constexpr ImVec4 MutedText = ImVec4(0.62f, 0.66f, 0.64f, 1.0f);
-constexpr ImVec4 CardBackground = ImVec4(0.105f, 0.115f, 0.115f, 1.0f);
-constexpr ImVec4 PanelBackground = ImVec4(0.085f, 0.095f, 0.092f, 1.0f);
+enum class ThemeMode {
+    DarkCommandCenter,
+    LightTradingTerminal
+};
 
+extern ImVec4 Gain;
+extern ImVec4 Loss;
+extern ImVec4 Amber;
+extern ImVec4 MutedText;
+extern ImVec4 CardBackground;
+extern ImVec4 PanelBackground;
+extern ImVec4 PanelHeader;
+extern ImVec4 Accent;
+
+ThemeMode themeFromKey(const std::string& key);
+std::string themeKey(ThemeMode theme);
+const char* themeName(ThemeMode theme);
+ThemeMode currentTheme();
+ImVec4 clearColor();
 void apply();
+void apply(ThemeMode theme);
 ImVec4 moneyColor(double value);
 void textMoney(double value, const char* text);
 void sectionHeading(const char* title, const char* subtitle = nullptr);

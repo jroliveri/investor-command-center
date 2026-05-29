@@ -233,7 +233,169 @@ CREATE INDEX IF NOT EXISTS idx_watchlist_ticker ON watchlist(ticker);
 CREATE INDEX IF NOT EXISTS idx_watchlist_priority ON watchlist(priority);
 )sql";
 
-    return executeMigration(database, 6, "create_watchlist", watchlistMigration, error);
+    if (!executeMigration(database, 6, "create_watchlist", watchlistMigration, error)) {
+        return false;
+    }
+
+    const char* transactionGainMigration = R"sql(
+ALTER TABLE transactions ADD COLUMN fees REAL DEFAULT 0;
+ALTER TABLE transactions ADD COLUMN sold_quantity REAL DEFAULT 0;
+ALTER TABLE transactions ADD COLUMN sale_price REAL DEFAULT 0;
+ALTER TABLE transactions ADD COLUMN sale_proceeds REAL DEFAULT 0;
+ALTER TABLE transactions ADD COLUMN cost_basis_used REAL DEFAULT 0;
+ALTER TABLE transactions ADD COLUMN realized_gain_dollar REAL DEFAULT 0;
+ALTER TABLE transactions ADD COLUMN realized_gain_percent REAL DEFAULT 0;
+ALTER TABLE transactions ADD COLUMN is_adjustment INTEGER DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
+)sql";
+
+    if (!executeMigration(database, 7, "add_transaction_realized_gain_fields", transactionGainMigration, error)) {
+        return false;
+    }
+
+    const char* portfolioSnapshotsMigration = R"sql(
+CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_date TEXT NOT NULL,
+    portfolio_value REAL DEFAULT 0,
+    holdings_value REAL DEFAULT 0,
+    cash_balance REAL DEFAULT 0,
+    cost_basis REAL DEFAULT 0,
+    unrealized_gain REAL DEFAULT 0,
+    realized_gain_day REAL DEFAULT 0,
+    realized_gain_month REAL DEFAULT 0,
+    realized_gain_year REAL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolio_snapshots_date ON portfolio_snapshots(snapshot_date);
+)sql";
+
+    if (!executeMigration(database, 8, "create_portfolio_snapshots", portfolioSnapshotsMigration, error)) {
+        return false;
+    }
+
+    const char* csvImportWorkflowMigration = R"sql(
+ALTER TABLE holdings ADD COLUMN status TEXT DEFAULT 'Active';
+ALTER TABLE holdings ADD COLUMN last_import_batch_id INTEGER;
+ALTER TABLE holdings ADD COLUMN last_seen_at TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_holdings_status ON holdings(status);
+CREATE INDEX IF NOT EXISTS idx_holdings_account_ticker ON holdings(account_id, ticker);
+
+CREATE TABLE IF NOT EXISTS import_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    import_date TEXT NOT NULL,
+    source_type TEXT DEFAULT 'CSV',
+    source_name TEXT,
+    total_rows INTEGER DEFAULT 0,
+    imported_rows INTEGER DEFAULT 0,
+    updated_holdings INTEGER DEFAULT 0,
+    added_holdings INTEGER DEFAULT 0,
+    skipped_rows INTEGER DEFAULT 0,
+    warning_count INTEGER DEFAULT 0,
+    error_count INTEGER DEFAULT 0,
+    missing_holdings INTEGER DEFAULT 0,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_batches_account_date ON import_batches(account_id, import_date);
+
+ALTER TABLE portfolio_snapshots ADD COLUMN account_id INTEGER DEFAULT 0;
+ALTER TABLE portfolio_snapshots ADD COLUMN import_batch_id INTEGER;
+ALTER TABLE portfolio_snapshots ADD COLUMN source TEXT DEFAULT 'Manual';
+
+DROP INDEX IF EXISTS idx_portfolio_snapshots_date;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolio_snapshots_account_date_source
+    ON portfolio_snapshots(account_id, snapshot_date, source);
+)sql";
+
+    if (!executeMigration(database, 9, "csv_import_batches_and_snapshot_sources", csvImportWorkflowMigration, error)) {
+        return false;
+    }
+
+    const char* dashboardWidgetsMigration = R"sql(
+CREATE TABLE IF NOT EXISTS dashboard_widgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    widget_key TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL,
+    is_visible INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dashboard_widgets_sort_order ON dashboard_widgets(sort_order);
+)sql";
+
+    if (!executeMigration(database, 10, "create_dashboard_widgets", dashboardWidgetsMigration, error)) {
+        return false;
+    }
+
+    const char* linkedGoalAccountMigration = R"sql(
+ALTER TABLE goals ADD COLUMN use_account_value INTEGER DEFAULT 0;
+ALTER TABLE goals ADD COLUMN linked_account_id INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_goals_linked_account_id ON goals(linked_account_id);
+)sql";
+
+    if (!executeMigration(database, 11, "add_goal_account_value_link", linkedGoalAccountMigration, error)) {
+        return false;
+    }
+
+    const char* appSettingsMigration = R"sql(
+CREATE TABLE IF NOT EXISTS app_settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+)sql";
+
+    if (!executeMigration(database, 12, "create_app_settings", appSettingsMigration, error)) {
+        return false;
+    }
+
+    const char* capitalGainAllocationMigration = R"sql(
+CREATE TABLE IF NOT EXISTS capital_gain_allocation_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    percentage REAL DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_capital_gain_allocation_rules_order
+    ON capital_gain_allocation_rules(sort_order, id);
+CREATE INDEX IF NOT EXISTS idx_capital_gain_allocation_rules_active
+    ON capital_gain_allocation_rules(is_active, sort_order);
+)sql";
+
+    if (!executeMigration(database, 13, "create_capital_gain_allocation_rules", capitalGainAllocationMigration, error)) {
+        return false;
+    }
+
+    const char* dashboardChartSettingsMigration = R"sql(
+CREATE TABLE IF NOT EXISTS dashboard_chart_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chart_key TEXT NOT NULL UNIQUE,
+    data_mode TEXT NOT NULL,
+    time_range TEXT NOT NULL,
+    chart_type TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+)sql";
+
+    return executeMigration(database, 14, "create_dashboard_chart_settings", dashboardChartSettingsMigration, error);
 }
 
 }

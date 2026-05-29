@@ -5,6 +5,7 @@
 #include "repositories/DividendRepository.hpp"
 #include "services/PortfolioCalculator.hpp"
 #include "ui/UiTheme.hpp"
+#include "ui/widgets/DatePicker.hpp"
 #include "util/Date.hpp"
 #include "util/Money.hpp"
 
@@ -19,6 +20,17 @@ namespace {
 
 constexpr const char* DividendEditorPopup = "Dividend Editor";
 constexpr const char* DeleteDividendPopup = "Delete Dividend";
+constexpr const char* NewDividendEditorPopup = "Dividend Editor###dividend_edit_popup_new";
+
+std::string dividendEditorPopupId(int dividendId)
+{
+    return "Dividend Editor###dividend_edit_popup_" + std::to_string(dividendId);
+}
+
+std::string dividendDeletePopupId(int dividendId)
+{
+    return "Delete Dividend###dividend_delete_popup_" + std::to_string(dividendId);
+}
 
 std::string lowerCopy(std::string value)
 {
@@ -80,7 +92,7 @@ void DividendsView::render(AppState& state, DividendRepository& repository, cons
 
     if (ImGui::Button("Add Dividend")) {
         openCreate();
-        ImGui::OpenPopup(DividendEditorPopup);
+        openEditorPopup_ = true;
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
@@ -111,7 +123,7 @@ void DividendsView::render(AppState& state, DividendRepository& repository, cons
             ++visibleRows;
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::Text("%s", dividend.dateReceived.c_str());
+            DatePicker::drawTableDate(dividend.dateReceived);
             ImGui::TableNextColumn();
             ImGui::Text("%s", dividend.ticker.c_str());
             ImGui::TableNextColumn();
@@ -125,24 +137,34 @@ void DividendsView::render(AppState& state, DividendRepository& repository, cons
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", dividend.updatedAt.c_str());
             ImGui::TableNextColumn();
-            ImGui::PushID(dividend.id);
-            if (ImGui::SmallButton("Edit")) {
+            const std::string editButtonId = "Edit##edit_button_" + std::to_string(dividend.id);
+            if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(dividend);
-                ImGui::OpenPopup(DividendEditorPopup);
+                openEditorPopup_ = true;
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton("Delete")) {
+            const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(dividend.id);
+            if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = dividend.id;
                 deleteName_ = dividend.dateReceived + " " + dividend.ticker;
-                ImGui::OpenPopup(DeleteDividendPopup);
+                deletePopupId_ = dividendDeletePopupId(dividend.id);
+                openDeletePopup_ = true;
             }
-            ImGui::PopID();
         }
 
         ImGui::EndTable();
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No dividends match the current search.");
         }
+    }
+
+    if (openEditorPopup_) {
+        ImGui::OpenPopup(editorPopupId_.empty() ? DividendEditorPopup : editorPopupId_.c_str());
+        openEditorPopup_ = false;
+    }
+    if (openDeletePopup_) {
+        ImGui::OpenPopup(deletePopupId_.empty() ? DeleteDividendPopup : deletePopupId_.c_str());
+        openDeletePopup_ = false;
     }
 
     drawEditor(state, repository, reloadData);
@@ -154,6 +176,7 @@ void DividendsView::openCreate()
     draft_ = Dividend {};
     draft_.dateReceived = Date::todayIso8601();
     editing_ = false;
+    editorPopupId_ = NewDividendEditorPopup;
     formError_.clear();
 }
 
@@ -161,12 +184,14 @@ void DividendsView::openEdit(const Dividend& dividend)
 {
     draft_ = dividend;
     editing_ = true;
+    editorPopupId_ = dividendEditorPopupId(dividend.id);
     formError_.clear();
 }
 
 void DividendsView::drawEditor(AppState& state, DividendRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(DividendEditorPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = editorPopupId_.empty() ? DividendEditorPopup : editorPopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 
@@ -192,8 +217,7 @@ void DividendsView::drawEditor(AppState& state, DividendRepository& repository, 
 
     ImGui::InputText("Ticker", &draft_.ticker, ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CharsNoBlank);
     ImGui::InputText("Asset name", &draft_.assetName);
-    ImGui::InputText("Date received", &draft_.dateReceived);
-    ImGui::TextColored(UiTheme::MutedText, "Use YYYY-MM-DD.");
+    DatePicker::draw("Date received", draft_.dateReceived);
     ImGui::InputDouble("Amount received", &draft_.amountReceived, 0.0, 0.0, "%.2f");
     ImGui::Checkbox("Reinvested", &draft_.reinvested);
     ImGui::InputTextMultiline("Notes", &draft_.notes, ImVec2(440.0f, 86.0f));
@@ -222,7 +246,8 @@ void DividendsView::drawEditor(AppState& state, DividendRepository& repository, 
 
 void DividendsView::drawDeleteConfirmation(AppState& state, DividendRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(DeleteDividendPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = deletePopupId_.empty() ? DeleteDividendPopup : deletePopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 

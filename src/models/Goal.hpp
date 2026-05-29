@@ -8,6 +8,8 @@ struct Goal {
     std::string goalName;
     double targetAmount = 0.0;
     double currentAmount = 0.0;
+    bool useAccountValue = false;
+    int linkedAccountId = 0;
     std::string targetDate;
     std::string category;
     std::string notes;

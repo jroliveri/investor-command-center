@@ -4,11 +4,19 @@
 #include "app/AppState.hpp"
 #include "db/Database.hpp"
 #include "repositories/AccountRepository.hpp"
+#include "repositories/AppSettingsRepository.hpp"
+#include "repositories/CapitalGainAllocationRepository.hpp"
+#include "repositories/DashboardChartSettingsRepository.hpp"
+#include "repositories/DashboardLayoutRepository.hpp"
 #include "repositories/DividendRepository.hpp"
 #include "repositories/GoalRepository.hpp"
 #include "repositories/HoldingRepository.hpp"
+#include "repositories/ImportBatchRepository.hpp"
+#include "repositories/PortfolioSnapshotRepository.hpp"
 #include "repositories/TransactionRepository.hpp"
 #include "repositories/WatchlistRepository.hpp"
+#include "services/CsvImportService.hpp"
+#include "services/TransactionService.hpp"
 #include "ui/AccountsView.hpp"
 #include "ui/DashboardView.hpp"
 #include "ui/DividendsView.hpp"
@@ -28,10 +36,20 @@ public:
     void render();
 
     const std::string& startupError() const { return startupError_; }
+    bool shouldExit() const { return shouldExit_; }
 
 private:
     void reloadData();
-    void renderSidebar();
+    void navigateTo(AppSection section);
+    bool menuSectionItem(AppSection section, const char* label);
+    void requestManualSnapshot();
+    void createManualSnapshot(bool replaceExisting);
+    void renderTopMenuBar();
+    void renderAccountColumn();
+    void renderAccountInfoPanel();
+    void renderAccountsPanel();
+    void renderWatchlistPanel();
+    void renderAppPopups();
     void renderCurrentSection();
     void renderPlaceholder(const char* title, const char* note);
     void renderStatusBar();
@@ -39,10 +57,18 @@ private:
     Database database_;
     std::unique_ptr<AccountRepository> accountRepository_;
     std::unique_ptr<HoldingRepository> holdingRepository_;
+    std::unique_ptr<ImportBatchRepository> importBatchRepository_;
     std::unique_ptr<TransactionRepository> transactionRepository_;
+    std::unique_ptr<TransactionService> transactionService_;
+    std::unique_ptr<CsvImportService> csvImportService_;
     std::unique_ptr<DividendRepository> dividendRepository_;
     std::unique_ptr<GoalRepository> goalRepository_;
     std::unique_ptr<WatchlistRepository> watchlistRepository_;
+    std::unique_ptr<PortfolioSnapshotRepository> portfolioSnapshotRepository_;
+    std::unique_ptr<DashboardLayoutRepository> dashboardLayoutRepository_;
+    std::unique_ptr<DashboardChartSettingsRepository> dashboardChartSettingsRepository_;
+    std::unique_ptr<AppSettingsRepository> appSettingsRepository_;
+    std::unique_ptr<CapitalGainAllocationRepository> capitalGainAllocationRepository_;
     AppState state_;
     DashboardView dashboardView_;
     AccountsView accountsView_;
@@ -54,4 +80,8 @@ private:
     ImportCsvView importCsvView_;
     SettingsView settingsView_;
     std::string startupError_;
+    bool shouldExit_ = false;
+    bool showAboutPopup_ = false;
+    bool showPrivacyPopup_ = false;
+    bool showManualSnapshotReplacePopup_ = false;
 };

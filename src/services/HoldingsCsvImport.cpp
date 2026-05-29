@@ -6,6 +6,7 @@
 #include <charconv>
 #include <fstream>
 #include <optional>
+#include <regex>
 #include <set>
 #include <sstream>
 
@@ -244,9 +245,20 @@ bool isSummaryRow(const std::vector<std::string>& row)
     return false;
 }
 
-std::string duplicateKey(int accountId, const std::string& ticker, const std::string& assetName)
+std::string duplicateKey(int accountId, const std::string& ticker)
 {
-    return std::to_string(accountId) + "|" + lowerCopy(ticker) + "|" + lowerCopy(trim(assetName));
+    return std::to_string(accountId) + "|" + lowerCopy(ticker);
+}
+
+std::string detectIsoDate(const std::string& text)
+{
+    const std::regex yearFirstPattern(R"((20[0-9]{2})[/-]([0-9]{2})[/-]([0-9]{2}))");
+    std::smatch match;
+    if (std::regex_search(text, match, yearFirstPattern)) {
+        return match[1].str() + "-" + match[2].str() + "-" + match[3].str();
+    }
+
+    return {};
 }
 
 std::string normalizeAssetType(std::string value)
@@ -302,6 +314,10 @@ bool loadCsvFile(const std::string& path, CsvTable& table, std::string& error, i
         ++lineNumber;
         const std::vector<std::string> parsed = parseCsvLine(line);
         const bool blank = trim(line).empty() || rowIsBlank(parsed);
+
+        if (table.detectedImportDate.empty()) {
+            table.detectedImportDate = detectIsoDate(line);
+        }
 
         if (requestedHeaderRowNumber > 0 && !foundHeader) {
             if (lineNumber < requestedHeaderRowNumber) {
@@ -434,7 +450,6 @@ std::vector<HoldingsCsvPreviewRow> buildPreview(
     const std::vector<Holding>& existingHoldings)
 {
     std::vector<HoldingsCsvPreviewRow> preview;
-    std::set<std::string> existingKeys;
     std::set<std::string> seenImportKeys;
 
     const int tickerColumn = findMappedColumn(mapping, HoldingsCsvImportField::Ticker);
@@ -448,9 +463,7 @@ std::vector<HoldingsCsvPreviewRow> buildPreview(
     const int gainLossPercentColumn = findMappedColumn(mapping, HoldingsCsvImportField::GainLossPercent);
     const int notesColumn = findMappedColumn(mapping, HoldingsCsvImportField::Notes);
 
-    for (const Holding& holding : existingHoldings) {
-        existingKeys.insert(duplicateKey(holding.accountId, holding.ticker, holding.assetName));
-    }
+    (void)existingHoldings;
 
     for (const CsvDataRow& csvRow : table.rows) {
         const std::vector<std::string>& row = csvRow.cells;
@@ -461,6 +474,9 @@ std::vector<HoldingsCsvPreviewRow> buildPreview(
         previewRow.holding.assetName = cell(row, assetNameColumn);
         previewRow.holding.assetType = normalizeAssetType(cell(row, assetTypeColumn));
         previewRow.holding.notes = cell(row, notesColumn);
+        previewRow.hasAssetName = assetNameColumn >= 0 && !previewRow.holding.assetName.empty();
+        previewRow.hasAssetType = assetTypeColumn >= 0 && !previewRow.holding.assetType.empty();
+        previewRow.hasNotes = notesColumn >= 0 && !previewRow.holding.notes.empty();
 
         if (previewRow.holding.assetType.empty()) {
             previewRow.holding.assetType = "Stock";
@@ -500,11 +516,13 @@ std::vector<HoldingsCsvPreviewRow> buildPreview(
             previewRow.holding.averageCost = *directAverageCost;
             previewRow.totalCostBasis = previewRow.holding.shares * previewRow.holding.averageCost;
             previewRow.hasTotalCostBasis = true;
+            previewRow.hasAverageCost = true;
         } else if (const std::optional<double> totalCostBasis = parseOptionalDouble(row, totalCostBasisColumn, "Total cost basis", previewRow.errors)) {
             previewRow.hasTotalCostBasis = true;
             previewRow.totalCostBasis = *totalCostBasis;
             if (previewRow.holding.shares != 0.0) {
                 previewRow.holding.averageCost = *totalCostBasis / previewRow.holding.shares;
+                previewRow.hasAverageCost = true;
             } else {
                 previewRow.holding.averageCost = 0.0;
                 previewRow.warnings.push_back("Total cost basis present but shares are zero; average cost set to 0.00.");
@@ -527,11 +545,7 @@ std::vector<HoldingsCsvPreviewRow> buildPreview(
         validateMoney(previewRow.holding.averageCost, "Average cost", previewRow.errors);
         validateMoney(previewRow.holding.currentPrice, "Current price", previewRow.errors);
 
-        const std::string key = duplicateKey(accountId, previewRow.holding.ticker, previewRow.holding.assetName);
-        if (existingKeys.contains(key)) {
-            previewRow.errors.push_back("Duplicate existing holding for this account.");
-        }
-
+        const std::string key = duplicateKey(accountId, previewRow.holding.ticker);
         if (seenImportKeys.contains(key)) {
             previewRow.errors.push_back("Duplicate row in this CSV preview.");
         } else {

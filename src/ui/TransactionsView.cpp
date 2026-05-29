@@ -2,8 +2,10 @@
 #include "ui/TransactionsView.hpp"
 
 #include "app/AppState.hpp"
-#include "repositories/TransactionRepository.hpp"
+#include "services/CapitalGainAllocationService.hpp"
+#include "services/TransactionService.hpp"
 #include "ui/UiTheme.hpp"
+#include "ui/widgets/DatePicker.hpp"
 #include "util/Date.hpp"
 #include "util/Money.hpp"
 
@@ -13,12 +15,15 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
+#include <sstream>
 #include <string>
 
 namespace {
 
 constexpr const char* TransactionEditorPopup = "Transaction Editor";
 constexpr const char* DeleteTransactionPopup = "Delete Transaction";
+constexpr const char* AllocationPopup = "Capital Gains Allocation";
 
 std::string lowerCopy(std::string value)
 {
@@ -65,9 +70,28 @@ void drawStringCombo(const char* label, std::string& value, const std::array<con
     }
 }
 
+bool isSell(const Transaction& transaction)
+{
+    return transaction.transactionType == "Sell";
 }
 
-void TransactionsView::render(AppState& state, TransactionRepository& repository, const std::function<void()>& reloadData)
+std::string allocationSummaryText(const Transaction& transaction, const CapitalGainAllocationResult& result)
+{
+    std::ostringstream stream;
+    stream << "Ticker: " << (transaction.ticker.empty() ? "(none)" : transaction.ticker) << '\n';
+    stream << "Realized Gain: " << Money::format(result.realizedGain) << '\n';
+    for (const CapitalGainAllocationLine& line : result.lines) {
+        stream << line.category << ' ' << Money::formatPercent(line.percentage) << ": " << Money::format(line.amount) << '\n';
+    }
+    if (result.unallocatedAmount > 0.005) {
+        stream << "Unallocated: " << Money::format(result.unallocatedAmount) << '\n';
+    }
+    return stream.str();
+}
+
+}
+
+void TransactionsView::render(AppState& state, TransactionService& service, const std::function<void()>& reloadData)
 {
     UiTheme::sectionHeading("Transactions", "Manual buys, sells, deposits, withdrawals, and other account activity.");
 
@@ -84,7 +108,7 @@ void TransactionsView::render(AppState& state, TransactionRepository& repository
     int visibleRows = 0;
     if (state.transactions.empty()) {
         UiTheme::emptyState("No transactions yet", "Add manual activity to build a useful account feed.");
-    } else if (ImGui::BeginTable("TransactionsTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
+    } else if (ImGui::BeginTable("TransactionsTable", 12, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
         ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthFixed, 100.0f);
         ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 105.0f);
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 76.0f);
@@ -92,7 +116,10 @@ void TransactionsView::render(AppState& state, TransactionRepository& repository
         ImGui::TableSetupColumn("Account", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         ImGui::TableSetupColumn("Qty", ImGuiTableColumnFlags_WidthFixed, 88.0f);
         ImGui::TableSetupColumn("Price", ImGuiTableColumnFlags_WidthFixed, 92.0f);
+        ImGui::TableSetupColumn("Fees", ImGuiTableColumnFlags_WidthFixed, 92.0f);
         ImGui::TableSetupColumn("Total", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+        ImGui::TableSetupColumn("Realized $", ImGuiTableColumnFlags_WidthFixed, 116.0f);
+        ImGui::TableSetupColumn("Realized %", ImGuiTableColumnFlags_WidthFixed, 106.0f);
         ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 128.0f);
         ImGui::TableHeadersRow();
 
@@ -105,7 +132,7 @@ void TransactionsView::render(AppState& state, TransactionRepository& repository
             ++visibleRows;
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::Text("%s", transaction.transactionDate.c_str());
+            DatePicker::drawTableDate(transaction.transactionDate);
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::Amber, "%s", transaction.transactionType.c_str());
             ImGui::TableNextColumn();
@@ -119,18 +146,44 @@ void TransactionsView::render(AppState& state, TransactionRepository& repository
             ImGui::TableNextColumn();
             ImGui::Text("%s", Money::format(transaction.price).c_str());
             ImGui::TableNextColumn();
+            ImGui::Text("%s", Money::format(transaction.fees).c_str());
+            ImGui::TableNextColumn();
             ImGui::Text("%s", Money::format(transaction.totalAmount).c_str());
             ImGui::TableNextColumn();
+            ImGui::TextColored(UiTheme::moneyColor(transaction.realizedGainDollar), "%s", isSell(transaction) ? Money::format(transaction.realizedGainDollar).c_str() : "-");
+            ImGui::TableNextColumn();
+            ImGui::TextColored(UiTheme::moneyColor(transaction.realizedGainDollar), "%s", isSell(transaction) ? Money::formatPercent(transaction.realizedGainPercent, true).c_str() : "-");
+            ImGui::TableNextColumn();
             ImGui::PushID(transaction.id);
-            if (ImGui::SmallButton("Edit")) {
-                openEdit(transaction);
-                ImGui::OpenPopup(TransactionEditorPopup);
+            if (ImGui::SmallButton("Menu")) {
+                ImGui::OpenPopup("TransactionRowMenu");
             }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Delete")) {
-                deleteId_ = transaction.id;
-                deleteName_ = transaction.transactionDate + " " + transaction.transactionType + " " + transaction.ticker;
-                ImGui::OpenPopup(DeleteTransactionPopup);
+            if (ImGui::BeginPopup("TransactionRowMenu")) {
+                const bool sellTransaction = isSell(transaction);
+                if (!sellTransaction) {
+                    ImGui::BeginDisabled();
+                }
+                if (ImGui::MenuItem("View Gain Allocation")) {
+                    allocationTransaction_ = transaction;
+                    hasAllocationTransaction_ = true;
+                    openAllocationPopup_ = true;
+                }
+                if (!sellTransaction) {
+                    ImGui::EndDisabled();
+                    ImGui::TextColored(UiTheme::MutedText, "Allocation is available for Sell transactions.");
+                }
+
+                ImGui::Separator();
+                if (ImGui::MenuItem("Edit Transaction")) {
+                    openEdit(transaction);
+                    openEditorPopup_ = true;
+                }
+                if (ImGui::MenuItem("Delete Transaction")) {
+                    deleteId_ = transaction.id;
+                    deleteName_ = transaction.transactionDate + " " + transaction.transactionType + " " + transaction.ticker;
+                    openDeletePopup_ = true;
+                }
+                ImGui::EndPopup();
             }
             ImGui::PopID();
         }
@@ -141,8 +194,22 @@ void TransactionsView::render(AppState& state, TransactionRepository& repository
         }
     }
 
-    drawEditor(state, repository, reloadData);
-    drawDeleteConfirmation(state, repository, reloadData);
+    if (openEditorPopup_) {
+        ImGui::OpenPopup(TransactionEditorPopup);
+        openEditorPopup_ = false;
+    }
+    if (openDeletePopup_) {
+        ImGui::OpenPopup(DeleteTransactionPopup);
+        openDeletePopup_ = false;
+    }
+    if (openAllocationPopup_) {
+        ImGui::OpenPopup(AllocationPopup);
+        openAllocationPopup_ = false;
+    }
+
+    drawAllocationPopup(state);
+    drawEditor(state, service, reloadData);
+    drawDeleteConfirmation(state, service, reloadData);
 }
 
 void TransactionsView::openCreate()
@@ -161,7 +228,7 @@ void TransactionsView::openEdit(const Transaction& transaction)
     formError_.clear();
 }
 
-void TransactionsView::drawEditor(AppState& state, TransactionRepository& repository, const std::function<void()>& reloadData)
+void TransactionsView::drawEditor(AppState& state, TransactionService& service, const std::function<void()>& reloadData)
 {
     if (!ImGui::BeginPopupModal(TransactionEditorPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
@@ -190,21 +257,39 @@ void TransactionsView::drawEditor(AppState& state, TransactionRepository& reposi
     drawStringCombo("Type", draft_.transactionType, std::array {
         "Buy",
         "Sell",
-        "Deposit",
+        "Dividend",
+        "Contribution",
         "Withdrawal",
-        "Fee",
         "Transfer",
+        "Fee",
+        "Interest",
         "Other",
     });
-    ImGui::InputText("Date", &draft_.transactionDate);
-    ImGui::TextColored(UiTheme::MutedText, "Use YYYY-MM-DD.");
+    DatePicker::draw("Date", draft_.transactionDate);
     ImGui::InputText("Ticker", &draft_.ticker, ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CharsNoBlank);
     ImGui::InputText("Asset name", &draft_.assetName);
     ImGui::InputDouble("Quantity", &draft_.quantity, 0.0, 0.0, "%.4f");
     ImGui::InputDouble("Price", &draft_.price, 0.0, 0.0, "%.4f");
+    ImGui::InputDouble("Fees", &draft_.fees, 0.0, 0.0, "%.2f");
     ImGui::InputDouble("Total amount", &draft_.totalAmount, 0.0, 0.0, "%.2f");
-    if (ImGui::SmallButton("Use quantity x price")) {
-        draft_.totalAmount = draft_.quantity * draft_.price;
+    if (ImGui::SmallButton("Use quantity x price plus fees")) {
+        draft_.totalAmount = draft_.quantity * draft_.price + draft_.fees;
+    }
+
+    if (draft_.transactionType == "Sell") {
+        ImGui::Separator();
+        ImGui::Text("Sell Details");
+        ImGui::InputDouble("Sold quantity", &draft_.soldQuantity, 0.0, 0.0, "%.4f");
+        ImGui::InputDouble("Sale price", &draft_.salePrice, 0.0, 0.0, "%.4f");
+        ImGui::Checkbox("Adjustment entry", &draft_.isAdjustment);
+        ImGui::TextColored(UiTheme::MutedText, "Adjustment entries can be saved even when the holding share count is not enough.");
+
+        const Transaction preview = service.preview(draft_, state.holdings);
+        ImGui::Text("Sale proceeds: %s", Money::format(preview.saleProceeds).c_str());
+        ImGui::Text("Cost basis used: %s", Money::format(preview.costBasisUsed).c_str());
+        ImGui::TextColored(UiTheme::moneyColor(preview.realizedGainDollar), "Realized gain/loss: %s (%s)",
+            Money::format(preview.realizedGainDollar).c_str(),
+            Money::formatPercent(preview.realizedGainPercent, true).c_str());
     }
     ImGui::InputTextMultiline("Notes", &draft_.notes, ImVec2(440.0f, 86.0f));
 
@@ -212,7 +297,7 @@ void TransactionsView::drawEditor(AppState& state, TransactionRepository& reposi
 
     if (ImGui::Button(editing_ ? "Save Changes" : "Create Transaction", ImVec2(156.0f, 0.0f))) {
         std::string error;
-        const bool saved = editing_ ? repository.update(draft_, error) : repository.create(draft_, error);
+        const bool saved = editing_ ? service.update(draft_, state.holdings, error) : service.create(draft_, state.holdings, error);
         if (saved) {
             reloadData();
             state.setStatus(editing_ ? "Transaction updated." : "Transaction created.");
@@ -230,7 +315,7 @@ void TransactionsView::drawEditor(AppState& state, TransactionRepository& reposi
     ImGui::EndPopup();
 }
 
-void TransactionsView::drawDeleteConfirmation(AppState& state, TransactionRepository& repository, const std::function<void()>& reloadData)
+void TransactionsView::drawDeleteConfirmation(AppState& state, TransactionService& service, const std::function<void()>& reloadData)
 {
     if (!ImGui::BeginPopupModal(DeleteTransactionPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
@@ -241,7 +326,7 @@ void TransactionsView::drawDeleteConfirmation(AppState& state, TransactionReposi
 
     if (ImGui::Button("Delete", ImVec2(100.0f, 0.0f))) {
         std::string error;
-        if (repository.remove(deleteId_, error)) {
+        if (service.remove(deleteId_, error)) {
             reloadData();
             state.setStatus("Transaction deleted.");
             ImGui::CloseCurrentPopup();
@@ -253,6 +338,97 @@ void TransactionsView::drawDeleteConfirmation(AppState& state, TransactionReposi
 
     ImGui::SameLine();
     if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+void TransactionsView::drawAllocationPopup(const AppState& state)
+{
+    if (!ImGui::BeginPopupModal(AllocationPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+
+    ImGui::Text("Capital Gains Allocation");
+    ImGui::TextColored(UiTheme::MutedText, "Based on your saved allocation rules. This allocation helper does not move money or provide financial or tax advice.");
+    ImGui::Separator();
+
+    if (!hasAllocationTransaction_) {
+        ImGui::TextColored(UiTheme::Loss, "No transaction selected.");
+    } else if (!isSell(allocationTransaction_)) {
+        ImGui::TextColored(UiTheme::MutedText, "Allocation is available for Sell transactions with realized gains.");
+    } else {
+        const CapitalGainAllocationResult result = CapitalGainAllocationService::calculate(allocationTransaction_, state.capitalGainAllocationRules, state.holdings);
+
+        ImGui::TextColored(UiTheme::MutedText, "Transaction date");
+        ImGui::SameLine(180.0f);
+        ImGui::Text("%s", allocationTransaction_.transactionDate.c_str());
+        ImGui::TextColored(UiTheme::MutedText, "Ticker");
+        ImGui::SameLine(180.0f);
+        ImGui::Text("%s", allocationTransaction_.ticker.empty() ? "-" : allocationTransaction_.ticker.c_str());
+        ImGui::TextColored(UiTheme::MutedText, "Asset name");
+        ImGui::SameLine(180.0f);
+        ImGui::Text("%s", allocationTransaction_.assetName.empty() ? "-" : allocationTransaction_.assetName.c_str());
+        ImGui::TextColored(UiTheme::MutedText, "Sale proceeds");
+        ImGui::SameLine(180.0f);
+        ImGui::Text("%s", Money::format(result.saleProceeds).c_str());
+        ImGui::TextColored(UiTheme::MutedText, "Cost basis used");
+        ImGui::SameLine(180.0f);
+        ImGui::Text("%s", Money::format(result.costBasisUsed).c_str());
+        ImGui::TextColored(UiTheme::MutedText, "Realized gain/loss");
+        ImGui::SameLine(180.0f);
+        ImGui::TextColored(UiTheme::moneyColor(result.realizedGain), "%s", Money::format(result.realizedGain).c_str());
+        ImGui::TextColored(UiTheme::MutedText, "Allocation rules total");
+        ImGui::SameLine(180.0f);
+        ImGui::Text("%s", Money::formatPercent(result.totalPercentage).c_str());
+
+        ImGui::Spacing();
+
+        if (result.realizedGain <= 0.0) {
+            ImGui::TextColored(UiTheme::Amber, "No positive realized gain to allocate.");
+        } else if (result.lines.empty()) {
+            ImGui::TextColored(UiTheme::Amber, "No active allocation rules are available. Add categories in Settings.");
+        } else {
+            if (ImGui::BeginTable("CapitalGainAllocationPopupTable", 3,
+                    ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit,
+                    ImVec2(520.0f, 0.0f))) {
+                ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+                ImGui::TableSetupColumn("Percentage", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                ImGui::TableSetupColumn("Amount", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+                ImGui::TableHeadersRow();
+
+                for (const CapitalGainAllocationLine& line : result.lines) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", line.category.c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", Money::formatPercent(line.percentage).c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", Money::format(line.amount).c_str());
+                }
+
+                ImGui::EndTable();
+            }
+
+            if (result.totalPercentage < 99.99) {
+                ImGui::Spacing();
+                ImGui::TextColored(UiTheme::Amber, "Unallocated amount: %s", Money::format(result.unallocatedAmount).c_str());
+            } else if (result.totalPercentage > 100.01) {
+                ImGui::Spacing();
+                ImGui::TextColored(UiTheme::Loss, "Overallocated by %s. Review the percentages in Settings.",
+                    Money::format(result.allocatedAmount - result.realizedGain).c_str());
+            }
+
+            ImGui::Spacing();
+            if (ImGui::Button("Copy Summary to Clipboard", ImVec2(190.0f, 0.0f))) {
+                ImGui::SetClipboardText(allocationSummaryText(allocationTransaction_, result).c_str());
+            }
+            ImGui::SameLine();
+        }
+    }
+
+    if (ImGui::Button("Close", ImVec2(100.0f, 0.0f))) {
         ImGui::CloseCurrentPopup();
     }
 

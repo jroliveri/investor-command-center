@@ -17,19 +17,58 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 ## Current App
 
 - Native Win32 desktop shell using Dear ImGui with a DirectX 11 renderer
-- Sidebar navigation for Dashboard, Accounts, Holdings, Transactions, Dividends, Goals, Watchlist, Reports, and Settings
-- Dashboard summary cards based on local account, holding, transaction, dividend, goal, and watchlist records
+- Trading-terminal inspired desktop shell with compact top menu navigation, account information column, and modular workspace panels
+- Top menu access for Dashboard, Accounts, Holdings, Transactions, Dividends, Goals, Watchlist, Reports, Import CSV, and Settings
+- Active page shown in the workspace header and account information rail
+- Dashboard performance panels based on local accounts, holdings, transactions, dividends, and portfolio snapshots
+- Customizable Dashboard layout with local reorder, hide/show, and reset controls
+- Controlled Dashboard chart panels for allocation, performance, and income/gains with local data, time-range, and chart-type preferences
+- Theme support for Dark Command Center and Light Trading Terminal
 - Account create, edit, and delete workflow
 - Holding create, edit, and delete workflow
-- Transaction create, edit, delete, and search workflow
+- Transaction create, edit, delete, and search workflow with buy/sell fields, fees, and realized gain/loss tracking
+- Capital gains allocation helper for Sell transactions, driven by local user-defined percentages in Settings
 - Dividend create, edit, delete, and search workflow with month, year, and lifetime totals
-- Goal create, edit, delete, and search workflow with progress bars
+- Goal create, edit, delete, and search workflow with progress bars and optional linked account value tracking
 - Watchlist create, edit, delete, and search workflow with priority badges
-- Holdings CSV import with local file selection, column mapping, preview, validation, and duplicate blocking
+- Reusable calendar picker controls for transaction, dividend, and goal date entry
+- Holdings CSV import with local file selection, column mapping, preview, validation, repeated upsert imports, and import summaries
+- Import batch tracking for local CSV import metadata
+- Portfolio snapshots for local daily/monthly/yearly movement comparisons, created automatically after CSV imports
 - SQLite database initialization at `data/investor_command_center.db`
-- SQLite migrations for `accounts`, `holdings`, `transactions`, `dividends`, `goals`, and `watchlist`
+- SQLite migrations for `accounts`, `holdings`, `transactions`, `dividends`, `goals`, `watchlist`, `import_batches`, `portfolio_snapshots`, and `dashboard_widgets`
 - Basic validation and delete confirmation dialogs
 - C++ portfolio calculations for cost basis, market value, and gain/loss
+
+## Tracking Model
+
+CSV import is the normal update workflow. Import a brokerage positions CSV, review the preview, confirm import, and the app updates holdings for the selected account by `account_id + ticker`.
+
+Repeated imports are expected. Existing holdings are updated, new tickers are added, and active holdings missing from the latest CSV for that account are marked inactive instead of being hard deleted.
+
+Each successful CSV import stores import metadata in SQLite and automatically creates or updates a portfolio snapshot for the import date. Manual snapshots remain available as an optional advanced tool.
+
+Holdings show what is currently owned. Transactions explain how those holdings got there.
+
+Buy and sell transactions support a simple average-cost first pass. New buy transactions can increase matching holding shares and update average cost. New sell transactions can reduce matching holding shares and calculate realized gain/loss separately from unrealized holding gain/loss.
+
+Dashboard daily, monthly, and yearly movement is based on local portfolio snapshots. This first pass shows simple dollar movement and may include deposits or withdrawals; contribution-adjusted returns are planned for a future update.
+
+Dashboard layout preferences are stored locally in SQLite. Reordering or hiding dashboard sections changes only the view; it does not change portfolio calculations or stored financial records. `Reset Dashboard Layout` restores the default view.
+
+The Dashboard uses compact terminal-style panels for portfolio review, movement, holdings, recent activity, realized gains, dividends, snapshot history, and allocation views. It remains a personal tracking dashboard and does not provide trading recommendations.
+
+Navigation is handled from the top menu bar. The left rail is an information column for portfolio context, account summaries, and quick watchlist symbols, not a page navigation menu.
+
+Dashboard chart preferences are stored locally in SQLite. The chart panels can switch between common investing views: allocation bars for asset/account/holding allocation, line charts for snapshot-based performance, and monthly bar charts for dividends or realized gains. These charts are for personal review only and do not provide financial advice.
+
+Theme preference is stored locally in SQLite. The Light Trading Terminal theme uses light gray panels, thin borders, subtle blue highlights, and green/red financial movement colors.
+
+Date fields use compact calendar picker controls and are stored in SQLite as `YYYY-MM-DD` text. Manual date entry remains available, but invalid dates are rejected before saving.
+
+Goals can use either a manually entered current amount or a linked account value. Linked goal progress is calculated at runtime from the selected account's local calculated balance: active holdings market value plus account cash balance. This is a tracking convenience only and is not financial advice.
+
+Capital gains allocation rules are user-defined Settings records. For a Sell transaction with a positive realized gain, the Transactions page can show an allocation plan based on those saved percentages. This is a display/calculation helper only; it does not move money, create transfers, provide tax advice, or provide financial advice.
 
 ## Build Requirements
 
@@ -126,6 +165,13 @@ Investor Command Center is released under the MIT License. See `LICENSE`.
 - Reports is a placeholder section.
 - CSV export buttons are placeholders.
 - CSV import currently targets holdings only; transaction CSV import is planned.
+- Dashboard panels use Move Up/Move Down customization; freeform docking is not implemented yet.
+- Snapshot-based daily/monthly/yearly performance is not contribution-adjusted yet.
+- CSV import upserts by account and ticker; full import review/merge tooling is planned.
+- Date picker controls are intentionally simple; locale-specific date display formats are not implemented.
+- Full transaction reconciliation for edited or deleted historical transactions is planned future work.
+- FIFO/LIFO and tax-lot accounting are not implemented; realized gain/loss currently uses average cost basis.
+- Capital gains allocation is a local planning display only and does not create money movement, transfers, or tax guidance.
 - Account deletion is blocked by SQLite foreign keys when holdings still reference that account.
 - Transactions and dividends can optionally reference an account, but do not enforce account foreign keys.
 - No authentication, no cloud sync, and no brokerage integration.

@@ -59,7 +59,8 @@ std::vector<Transaction> TransactionRepository::listAll(std::string& error) cons
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
             "SELECT id, account_id, ticker, asset_name, transaction_type, transaction_date, quantity, price, "
-            "total_amount, notes, created_at, updated_at "
+            "fees, total_amount, sold_quantity, sale_price, sale_proceeds, cost_basis_used, "
+            "realized_gain_dollar, realized_gain_percent, is_adjustment, notes, created_at, updated_at "
             "FROM transactions ORDER BY transaction_date DESC, id DESC;",
             &statement)) {
         error = database_.lastError();
@@ -76,10 +77,18 @@ std::vector<Transaction> TransactionRepository::listAll(std::string& error) cons
         transaction.transactionDate = textColumn(statement, 5);
         transaction.quantity = sqlite3_column_double(statement, 6);
         transaction.price = sqlite3_column_double(statement, 7);
-        transaction.totalAmount = sqlite3_column_double(statement, 8);
-        transaction.notes = textColumn(statement, 9);
-        transaction.createdAt = textColumn(statement, 10);
-        transaction.updatedAt = textColumn(statement, 11);
+        transaction.fees = sqlite3_column_double(statement, 8);
+        transaction.totalAmount = sqlite3_column_double(statement, 9);
+        transaction.soldQuantity = sqlite3_column_double(statement, 10);
+        transaction.salePrice = sqlite3_column_double(statement, 11);
+        transaction.saleProceeds = sqlite3_column_double(statement, 12);
+        transaction.costBasisUsed = sqlite3_column_double(statement, 13);
+        transaction.realizedGainDollar = sqlite3_column_double(statement, 14);
+        transaction.realizedGainPercent = sqlite3_column_double(statement, 15);
+        transaction.isAdjustment = sqlite3_column_int(statement, 16) != 0;
+        transaction.notes = textColumn(statement, 17);
+        transaction.createdAt = textColumn(statement, 18);
+        transaction.updatedAt = textColumn(statement, 19);
         transactions.push_back(transaction);
     }
 
@@ -102,8 +111,9 @@ bool TransactionRepository::create(Transaction& transaction, std::string& error)
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
             "INSERT INTO transactions(account_id, ticker, asset_name, transaction_type, transaction_date, quantity, "
-            "price, total_amount, notes, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            "price, fees, total_amount, sold_quantity, sale_price, sale_proceeds, cost_basis_used, "
+            "realized_gain_dollar, realized_gain_percent, is_adjustment, notes, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
             &statement)) {
         error = database_.lastError();
         return false;
@@ -116,10 +126,18 @@ bool TransactionRepository::create(Transaction& transaction, std::string& error)
     sqlite3_bind_text(statement, 5, transaction.transactionDate.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_double(statement, 6, transaction.quantity);
     sqlite3_bind_double(statement, 7, transaction.price);
-    sqlite3_bind_double(statement, 8, transaction.totalAmount);
-    sqlite3_bind_text(statement, 9, transaction.notes.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 10, transaction.createdAt.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 11, transaction.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(statement, 8, transaction.fees);
+    sqlite3_bind_double(statement, 9, transaction.totalAmount);
+    sqlite3_bind_double(statement, 10, transaction.soldQuantity);
+    sqlite3_bind_double(statement, 11, transaction.salePrice);
+    sqlite3_bind_double(statement, 12, transaction.saleProceeds);
+    sqlite3_bind_double(statement, 13, transaction.costBasisUsed);
+    sqlite3_bind_double(statement, 14, transaction.realizedGainDollar);
+    sqlite3_bind_double(statement, 15, transaction.realizedGainPercent);
+    sqlite3_bind_int(statement, 16, transaction.isAdjustment ? 1 : 0);
+    sqlite3_bind_text(statement, 17, transaction.notes.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 18, transaction.createdAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 19, transaction.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());
@@ -151,7 +169,9 @@ bool TransactionRepository::update(const Transaction& transaction, std::string& 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
             "UPDATE transactions SET account_id = ?, ticker = ?, asset_name = ?, transaction_type = ?, "
-            "transaction_date = ?, quantity = ?, price = ?, total_amount = ?, notes = ?, updated_at = ? "
+            "transaction_date = ?, quantity = ?, price = ?, fees = ?, total_amount = ?, sold_quantity = ?, "
+            "sale_price = ?, sale_proceeds = ?, cost_basis_used = ?, realized_gain_dollar = ?, "
+            "realized_gain_percent = ?, is_adjustment = ?, notes = ?, updated_at = ? "
             "WHERE id = ?;",
             &statement)) {
         error = database_.lastError();
@@ -165,10 +185,18 @@ bool TransactionRepository::update(const Transaction& transaction, std::string& 
     sqlite3_bind_text(statement, 5, normalized.transactionDate.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_double(statement, 6, normalized.quantity);
     sqlite3_bind_double(statement, 7, normalized.price);
-    sqlite3_bind_double(statement, 8, normalized.totalAmount);
-    sqlite3_bind_text(statement, 9, normalized.notes.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 10, timestamp.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(statement, 11, normalized.id);
+    sqlite3_bind_double(statement, 8, normalized.fees);
+    sqlite3_bind_double(statement, 9, normalized.totalAmount);
+    sqlite3_bind_double(statement, 10, normalized.soldQuantity);
+    sqlite3_bind_double(statement, 11, normalized.salePrice);
+    sqlite3_bind_double(statement, 12, normalized.saleProceeds);
+    sqlite3_bind_double(statement, 13, normalized.costBasisUsed);
+    sqlite3_bind_double(statement, 14, normalized.realizedGainDollar);
+    sqlite3_bind_double(statement, 15, normalized.realizedGainPercent);
+    sqlite3_bind_int(statement, 16, normalized.isAdjustment ? 1 : 0);
+    sqlite3_bind_text(statement, 17, normalized.notes.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 18, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 19, normalized.id);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());
@@ -220,8 +248,10 @@ bool TransactionRepository::validate(const Transaction& transaction, std::string
         return false;
     }
 
-    if (transaction.quantity < 0.0 || transaction.price < 0.0) {
-        error = "Quantity and price cannot be negative. Use total amount for cash-only activity.";
+    if (transaction.quantity < 0.0 || transaction.price < 0.0 || transaction.fees < 0.0 ||
+        transaction.soldQuantity < 0.0 || transaction.salePrice < 0.0 || transaction.saleProceeds < 0.0 ||
+        transaction.costBasisUsed < 0.0) {
+        error = "Quantity, price, fees, and sell calculation fields cannot be negative.";
         return false;
     }
 

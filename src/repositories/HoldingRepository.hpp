@@ -16,6 +16,7 @@ public:
     bool create(Holding& holding, std::string& error) const;
     bool update(const Holding& holding, std::string& error) const;
     bool remove(int id, std::string& error) const;
+    bool softDelete(int id, std::string& error) const;
 
     static bool validate(const Holding& holding, std::string& error);
 

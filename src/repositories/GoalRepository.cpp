@@ -23,6 +23,20 @@ bool isBlank(const std::string& value)
     });
 }
 
+int nullableIntColumn(sqlite3_stmt* statement, int column)
+{
+    return sqlite3_column_type(statement, column) == SQLITE_NULL ? 0 : sqlite3_column_int(statement, column);
+}
+
+void bindNullableInt(sqlite3_stmt* statement, int index, int value)
+{
+    if (value > 0) {
+        sqlite3_bind_int(statement, index, value);
+    } else {
+        sqlite3_bind_null(statement, index);
+    }
+}
+
 }
 
 GoalRepository::GoalRepository(Database& database)
@@ -37,7 +51,8 @@ std::vector<Goal> GoalRepository::listAll(std::string& error) const
 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
-            "SELECT id, goal_name, target_amount, current_amount, target_date, category, notes, created_at, updated_at "
+            "SELECT id, goal_name, target_amount, current_amount, use_account_value, linked_account_id, "
+            "target_date, category, notes, created_at, updated_at "
             "FROM goals ORDER BY target_date IS NULL, target_date, goal_name COLLATE NOCASE;",
             &statement)) {
         error = database_.lastError();
@@ -50,11 +65,13 @@ std::vector<Goal> GoalRepository::listAll(std::string& error) const
         goal.goalName = textColumn(statement, 1);
         goal.targetAmount = sqlite3_column_double(statement, 2);
         goal.currentAmount = sqlite3_column_double(statement, 3);
-        goal.targetDate = textColumn(statement, 4);
-        goal.category = textColumn(statement, 5);
-        goal.notes = textColumn(statement, 6);
-        goal.createdAt = textColumn(statement, 7);
-        goal.updatedAt = textColumn(statement, 8);
+        goal.useAccountValue = sqlite3_column_int(statement, 4) != 0;
+        goal.linkedAccountId = nullableIntColumn(statement, 5);
+        goal.targetDate = textColumn(statement, 6);
+        goal.category = textColumn(statement, 7);
+        goal.notes = textColumn(statement, 8);
+        goal.createdAt = textColumn(statement, 9);
+        goal.updatedAt = textColumn(statement, 10);
         goals.push_back(goal);
     }
 
@@ -75,8 +92,9 @@ bool GoalRepository::create(Goal& goal, std::string& error) const
 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
-            "INSERT INTO goals(goal_name, target_amount, current_amount, target_date, category, notes, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+            "INSERT INTO goals(goal_name, target_amount, current_amount, use_account_value, linked_account_id, "
+            "target_date, category, notes, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
             &statement)) {
         error = database_.lastError();
         return false;
@@ -85,11 +103,13 @@ bool GoalRepository::create(Goal& goal, std::string& error) const
     sqlite3_bind_text(statement, 1, goal.goalName.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_double(statement, 2, goal.targetAmount);
     sqlite3_bind_double(statement, 3, goal.currentAmount);
-    sqlite3_bind_text(statement, 4, goal.targetDate.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 5, goal.category.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 6, goal.notes.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 7, goal.createdAt.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 8, goal.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 4, goal.useAccountValue ? 1 : 0);
+    bindNullableInt(statement, 5, goal.linkedAccountId);
+    sqlite3_bind_text(statement, 6, goal.targetDate.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 7, goal.category.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 8, goal.notes.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 9, goal.createdAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 10, goal.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());
@@ -118,8 +138,8 @@ bool GoalRepository::update(const Goal& goal, std::string& error) const
 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
-            "UPDATE goals SET goal_name = ?, target_amount = ?, current_amount = ?, target_date = ?, "
-            "category = ?, notes = ?, updated_at = ? "
+            "UPDATE goals SET goal_name = ?, target_amount = ?, current_amount = ?, use_account_value = ?, "
+            "linked_account_id = ?, target_date = ?, category = ?, notes = ?, updated_at = ? "
             "WHERE id = ?;",
             &statement)) {
         error = database_.lastError();
@@ -129,11 +149,13 @@ bool GoalRepository::update(const Goal& goal, std::string& error) const
     sqlite3_bind_text(statement, 1, goal.goalName.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_double(statement, 2, goal.targetAmount);
     sqlite3_bind_double(statement, 3, goal.currentAmount);
-    sqlite3_bind_text(statement, 4, goal.targetDate.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 5, goal.category.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 6, goal.notes.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 7, timestamp.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(statement, 8, goal.id);
+    sqlite3_bind_int(statement, 4, goal.useAccountValue ? 1 : 0);
+    bindNullableInt(statement, 5, goal.linkedAccountId);
+    sqlite3_bind_text(statement, 6, goal.targetDate.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 7, goal.category.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 8, goal.notes.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 9, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 10, goal.id);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());

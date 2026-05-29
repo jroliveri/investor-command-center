@@ -2,7 +2,8 @@
 #include "ui/ImportCsvView.hpp"
 
 #include "app/AppState.hpp"
-#include "repositories/HoldingRepository.hpp"
+#include "services/CsvImportService.hpp"
+#include "util/Date.hpp"
 #include "ui/UiTheme.hpp"
 #include "util/Money.hpp"
 
@@ -13,6 +14,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
 
 namespace {
 
@@ -45,7 +47,7 @@ std::string joinErrors(const std::vector<std::string>& errors)
 
 }
 
-void ImportCsvView::render(AppState& state, HoldingRepository& repository, const std::function<void()>& reloadData)
+void ImportCsvView::render(AppState& state, CsvImportService& importService, const std::function<void()>& reloadData)
 {
     UiTheme::sectionHeading("Import CSV", "Import holdings from local CSV files with preview, mapping, and validation.");
 
@@ -69,7 +71,7 @@ void ImportCsvView::render(AppState& state, HoldingRepository& repository, const
         ImGui::Spacing();
         drawPreviewTable();
         ImGui::Spacing();
-        drawValidationSummary(state, repository, reloadData);
+        drawValidationSummary(state, importService, reloadData);
     }
 
     if (!importMessage_.empty()) {
@@ -200,6 +202,8 @@ void ImportCsvView::drawHeaderDetection(const AppState& state)
     ImGui::Text("Header Detection");
     ImGui::BeginChild("HeaderDetectionSection", ImVec2(0.0f, 106.0f), true);
     ImGui::Text("Detected header row: %d", table_.headerRowNumber);
+    ImGui::SameLine();
+    ImGui::TextColored(UiTheme::MutedText, "Import date: %s", table_.detectedImportDate.empty() ? Date::todayIso8601().c_str() : table_.detectedImportDate.c_str());
     ImGui::SameLine();
     ImGui::TextColored(UiTheme::MutedText, "Skipped metadata: %d", table_.skippedMetadataRowCount);
     ImGui::SameLine();
@@ -374,7 +378,7 @@ void ImportCsvView::drawPreviewTable()
     }
 }
 
-void ImportCsvView::drawValidationSummary(AppState& state, HoldingRepository& repository, const std::function<void()>& reloadData)
+void ImportCsvView::drawValidationSummary(AppState& state, CsvImportService& importService, const std::function<void()>& reloadData)
 {
     const int validRows = static_cast<int>(std::count_if(previewRows_.begin(), previewRows_.end(), [](const HoldingsCsvPreviewRow& row) {
         return row.valid();
@@ -395,7 +399,7 @@ void ImportCsvView::drawValidationSummary(AppState& state, HoldingRepository& re
     ImGui::TextColored(UiTheme::MutedText, "Required: ticker, shares, and current price. Average cost can be imported directly or calculated from total cost basis.");
     ImGui::BeginDisabled(validRows == 0);
     if (ImGui::Button("Import Valid Rows")) {
-        importValidRows(state, repository, reloadData);
+        importValidRows(state, importService, reloadData);
     }
     ImGui::EndDisabled();
     ImGui::EndChild();
@@ -496,31 +500,22 @@ void ImportCsvView::setColumnMapping(std::size_t columnIndex, HoldingsCsvImportF
     }
 }
 
-void ImportCsvView::importValidRows(AppState& state, HoldingRepository& repository, const std::function<void()>& reloadData)
+void ImportCsvView::importValidRows(AppState& state, CsvImportService& importService, const std::function<void()>& reloadData)
 {
-    int imported = 0;
-    int failed = 0;
-
-    for (const HoldingsCsvPreviewRow& row : previewRows_) {
-        if (!row.valid()) {
-            continue;
-        }
-
-        Holding holding = row.holding;
-        std::string error;
-        if (repository.create(holding, error)) {
-            ++imported;
-        } else {
-            ++failed;
-        }
+    const std::string importDate = table_.detectedImportDate.empty() ? Date::todayIso8601() : table_.detectedImportDate;
+    std::string sourceName;
+    if (!csvPath_.empty()) {
+        sourceName = std::filesystem::path(csvPath_).filename().string();
     }
 
-    reloadData();
-    importMessage_ = "Imported " + std::to_string(imported) + " holdings.";
-    if (failed > 0) {
-        state.setStatus(std::to_string(failed) + " holdings failed during import.", true);
+    CsvImportSummary summary;
+    std::string error;
+    if (importService.importHoldings(state, selectedAccountId_, previewRows_, importDate, sourceName, summary, error)) {
+        reloadData();
+        importMessage_ = summary.message;
+        state.setStatus(summary.message);
     } else {
-        state.setStatus(importMessage_);
+        state.setStatus("CSV import failed: " + error, true);
     }
 
     rebuildPreview(state);

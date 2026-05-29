@@ -8,11 +8,11 @@
 #include <vector>
 
 class AppState;
-class HoldingRepository;
+class CsvImportService;
 
 class ImportCsvView {
 public:
-    void render(AppState& state, HoldingRepository& repository, const std::function<void()>& reloadData);
+    void render(AppState& state, CsvImportService& importService, const std::function<void()>& reloadData);
 
 private:
     void browseForCsv();
@@ -25,8 +25,8 @@ private:
     bool drawImportFieldCombo(std::size_t columnIndex);
     void drawMappingEditor(const AppState& state);
     void drawPreviewTable();
-    void drawValidationSummary(AppState& state, HoldingRepository& repository, const std::function<void()>& reloadData);
-    void importValidRows(AppState& state, HoldingRepository& repository, const std::function<void()>& reloadData);
+    void drawValidationSummary(AppState& state, CsvImportService& importService, const std::function<void()>& reloadData);
+    void importValidRows(AppState& state, CsvImportService& importService, const std::function<void()>& reloadData);
     std::string sampleValueForColumn(std::size_t columnIndex) const;
     std::string mappingPreviewForField(HoldingsCsvImportField field) const;
     const char* mappingStatusForColumn(std::size_t columnIndex) const;

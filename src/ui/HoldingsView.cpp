@@ -18,6 +18,17 @@ namespace {
 
 constexpr const char* HoldingEditorPopup = "Holding Editor";
 constexpr const char* DeleteHoldingPopup = "Delete Holding";
+constexpr const char* NewHoldingEditorPopup = "Holding Editor###holding_edit_popup_new";
+
+std::string holdingEditorPopupId(int holdingId)
+{
+    return "Holding Editor###holding_edit_popup_" + std::to_string(holdingId);
+}
+
+std::string holdingDeletePopupId(int holdingId)
+{
+    return "Delete Holding###holding_delete_popup_" + std::to_string(holdingId);
+}
 
 std::string lowerCopy(std::string value)
 {
@@ -77,7 +88,7 @@ void HoldingsView::render(AppState& state, HoldingRepository& repository, const 
         ImGui::TextColored(UiTheme::MutedText, "Create an account first.");
     } else if (ImGui::Button("Add Holding")) {
         openCreate(state);
-        ImGui::OpenPopup(HoldingEditorPopup);
+        openEditorPopup_ = true;
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
@@ -88,10 +99,11 @@ void HoldingsView::render(AppState& state, HoldingRepository& repository, const 
     int visibleRows = 0;
     if (state.holdings.empty()) {
         UiTheme::emptyState("No holdings yet", "Add a holding after creating at least one account.");
-    } else if (ImGui::BeginTable("HoldingsTable", 11, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
+    } else if (ImGui::BeginTable("HoldingsTable", 12, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 76.0f);
         ImGui::TableSetupColumn("Asset", ImGuiTableColumnFlags_WidthStretch, 1.2f);
         ImGui::TableSetupColumn("Account", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 86.0f);
         ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 96.0f);
         ImGui::TableSetupColumn("Shares", ImGuiTableColumnFlags_WidthFixed, 92.0f);
         ImGui::TableSetupColumn("Avg Cost", ImGuiTableColumnFlags_WidthFixed, 96.0f);
@@ -119,6 +131,8 @@ void HoldingsView::render(AppState& state, HoldingRepository& repository, const 
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", accountName);
             ImGui::TableNextColumn();
+            ImGui::TextColored(holding.status == "Inactive" ? UiTheme::MutedText : UiTheme::Gain, "%s", holding.status.c_str());
+            ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", holding.assetType.c_str());
             ImGui::TableNextColumn();
             ImGui::Text("%s", Money::formatQuantity(holding.shares).c_str());
@@ -135,24 +149,34 @@ void HoldingsView::render(AppState& state, HoldingRepository& repository, const 
                 Money::format(metrics.gainLossDollar).c_str(),
                 Money::formatPercent(metrics.gainLossPercent).c_str());
             ImGui::TableNextColumn();
-            ImGui::PushID(holding.id);
-            if (ImGui::SmallButton("Edit")) {
+            const std::string editButtonId = "Edit##edit_button_" + std::to_string(holding.id);
+            if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(holding);
-                ImGui::OpenPopup(HoldingEditorPopup);
+                openEditorPopup_ = true;
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton("Delete")) {
+            const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(holding.id);
+            if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = holding.id;
                 deleteName_ = holding.ticker + " - " + holding.assetName;
-                ImGui::OpenPopup(DeleteHoldingPopup);
+                deletePopupId_ = holdingDeletePopupId(holding.id);
+                openDeletePopup_ = true;
             }
-            ImGui::PopID();
         }
 
         ImGui::EndTable();
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No holdings match the current search.");
         }
+    }
+
+    if (openEditorPopup_) {
+        ImGui::OpenPopup(editorPopupId_.empty() ? HoldingEditorPopup : editorPopupId_.c_str());
+        openEditorPopup_ = false;
+    }
+    if (openDeletePopup_) {
+        ImGui::OpenPopup(deletePopupId_.empty() ? DeleteHoldingPopup : deletePopupId_.c_str());
+        openDeletePopup_ = false;
     }
 
     drawEditor(state, repository, reloadData);
@@ -164,7 +188,9 @@ void HoldingsView::openCreate(const AppState& state)
     draft_ = Holding {};
     draft_.assetType = "Stock";
     draft_.accountId = state.accounts.empty() ? 0 : state.accounts.front().id;
+    draft_.status = "Active";
     editing_ = false;
+    editorPopupId_ = NewHoldingEditorPopup;
     formError_.clear();
 }
 
@@ -172,12 +198,14 @@ void HoldingsView::openEdit(const Holding& holding)
 {
     draft_ = holding;
     editing_ = true;
+    editorPopupId_ = holdingEditorPopupId(holding.id);
     formError_.clear();
 }
 
 void HoldingsView::drawEditor(AppState& state, HoldingRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(HoldingEditorPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = editorPopupId_.empty() ? HoldingEditorPopup : editorPopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 
@@ -212,6 +240,10 @@ void HoldingsView::drawEditor(AppState& state, HoldingRepository& repository, co
     ImGui::InputDouble("Shares", &draft_.shares, 0.0, 0.0, "%.4f");
     ImGui::InputDouble("Average cost", &draft_.averageCost, 0.0, 0.0, "%.4f");
     ImGui::InputDouble("Current price", &draft_.currentPrice, 0.0, 0.0, "%.4f");
+    drawStringCombo("Status", draft_.status, std::array {
+        "Active",
+        "Inactive",
+    });
     ImGui::InputTextMultiline("Notes", &draft_.notes, ImVec2(440.0f, 86.0f));
 
     const HoldingMetrics metrics = PortfolioCalculator::calculateHolding(draft_);
@@ -245,18 +277,20 @@ void HoldingsView::drawEditor(AppState& state, HoldingRepository& repository, co
 
 void HoldingsView::drawDeleteConfirmation(AppState& state, HoldingRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(DeleteHoldingPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = deletePopupId_.empty() ? DeleteHoldingPopup : deletePopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 
-    ImGui::Text("Delete holding?");
+    ImGui::Text("Mark holding inactive?");
     ImGui::TextColored(UiTheme::MutedText, "%s", deleteName_.c_str());
+    ImGui::TextWrapped("Inactive holdings stay in the local record but no longer count toward account balance or dashboard totals.");
 
-    if (ImGui::Button("Delete", ImVec2(100.0f, 0.0f))) {
+    if (ImGui::Button("Mark Inactive", ImVec2(130.0f, 0.0f))) {
         std::string error;
         if (repository.remove(deleteId_, error)) {
             reloadData();
-            state.setStatus("Holding deleted.");
+            state.setStatus("Holding marked inactive.");
             ImGui::CloseCurrentPopup();
         } else {
             state.setStatus("Could not delete holding: " + error, true);

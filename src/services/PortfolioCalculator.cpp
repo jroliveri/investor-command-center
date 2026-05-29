@@ -5,6 +5,36 @@
 
 namespace PortfolioCalculator {
 
+namespace {
+
+bool isActiveHolding(const Holding& holding)
+{
+    return holding.status.empty() || holding.status == "Active";
+}
+
+const Account* findAccount(const std::vector<Account>& accounts, int accountId)
+{
+    for (const Account& account : accounts) {
+        if (account.id == accountId) {
+            return &account;
+        }
+    }
+
+    return nullptr;
+}
+
+GoalMetrics calculateGoalFromCurrentAmount(const Goal& goal, double currentAmount)
+{
+    GoalMetrics metrics;
+    metrics.effectiveCurrentAmount = currentAmount;
+    metrics.remainingAmount = std::max(0.0, goal.targetAmount - currentAmount);
+    metrics.progressPercent = goal.targetAmount == 0.0 ? 0.0 : (currentAmount / goal.targetAmount) * 100.0;
+    metrics.progressPercent = std::clamp(metrics.progressPercent, 0.0, 100.0);
+    return metrics;
+}
+
+}
+
 HoldingMetrics calculateHolding(const Holding& holding)
 {
     HoldingMetrics metrics;
@@ -21,7 +51,7 @@ AccountMetrics calculateAccount(const Account& account, const std::vector<Holdin
     metrics.cashBalance = account.cashBalance;
 
     for (const Holding& holding : holdings) {
-        if (holding.accountId == account.id) {
+        if (holding.accountId == account.id && isActiveHolding(holding)) {
             metrics.holdingsMarketValue += calculateHolding(holding).marketValue;
         }
     }
@@ -43,9 +73,12 @@ PortfolioSummary calculateSummary(const std::vector<Account>& accounts, const st
         }
     }
 
-    summary.holdingCount = static_cast<int>(holdings.size());
-
     for (const Holding& holding : holdings) {
+        if (!isActiveHolding(holding)) {
+            continue;
+        }
+
+        ++summary.holdingCount;
         const HoldingMetrics metrics = calculateHolding(holding);
         summary.holdingsMarketValue += metrics.marketValue;
         summary.costBasis += metrics.costBasis;
@@ -80,10 +113,28 @@ DividendSummary calculateDividends(const std::vector<Dividend>& dividends, const
 
 GoalMetrics calculateGoal(const Goal& goal)
 {
-    GoalMetrics metrics;
-    metrics.remainingAmount = std::max(0.0, goal.targetAmount - goal.currentAmount);
-    metrics.progressPercent = goal.targetAmount == 0.0 ? 0.0 : (goal.currentAmount / goal.targetAmount) * 100.0;
-    metrics.progressPercent = std::clamp(metrics.progressPercent, 0.0, 100.0);
+    GoalMetrics metrics = calculateGoalFromCurrentAmount(goal, goal.currentAmount);
+    metrics.usesAccountValue = goal.useAccountValue;
+    metrics.missingLinkedAccount = goal.useAccountValue;
+    return metrics;
+}
+
+GoalMetrics calculateGoal(const Goal& goal, const std::vector<Account>& accounts, const std::vector<Holding>& holdings)
+{
+    if (!goal.useAccountValue) {
+        return calculateGoal(goal);
+    }
+
+    const Account* account = findAccount(accounts, goal.linkedAccountId);
+    if (account == nullptr) {
+        GoalMetrics metrics = calculateGoalFromCurrentAmount(goal, 0.0);
+        metrics.usesAccountValue = true;
+        metrics.missingLinkedAccount = true;
+        return metrics;
+    }
+
+    GoalMetrics metrics = calculateGoalFromCurrentAmount(goal, calculateAccount(*account, holdings).calculatedBalance);
+    metrics.usesAccountValue = true;
     return metrics;
 }
 

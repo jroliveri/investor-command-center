@@ -40,8 +40,11 @@ struct DividendSummary {
 };
 
 struct GoalMetrics {
+    double effectiveCurrentAmount = 0.0;
     double progressPercent = 0.0;
     double remainingAmount = 0.0;
+    bool usesAccountValue = false;
+    bool missingLinkedAccount = false;
 };
 
 struct WatchlistSummary {
@@ -56,5 +59,6 @@ AccountMetrics calculateAccount(const Account& account, const std::vector<Holdin
 PortfolioSummary calculateSummary(const std::vector<Account>& accounts, const std::vector<Holding>& holdings);
 DividendSummary calculateDividends(const std::vector<Dividend>& dividends, const std::string& monthPrefix, const std::string& yearPrefix);
 GoalMetrics calculateGoal(const Goal& goal);
+GoalMetrics calculateGoal(const Goal& goal, const std::vector<Account>& accounts, const std::vector<Holding>& holdings);
 WatchlistSummary calculateWatchlist(const std::vector<WatchlistItem>& watchlist);
 }

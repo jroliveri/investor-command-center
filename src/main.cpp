@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "app/App.hpp"
+#include "ui/UiTheme.hpp"
 
 #include <d3d11.h>
 #include <tchar.h>
@@ -102,9 +103,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
         ImGui::NewFrame();
 
         app.render();
+        if (app.shouldExit()) {
+            PostQuitMessage(0);
+        }
 
         ImGui::Render();
-        const float clearColor[4] = { 0.055f, 0.060f, 0.060f, 1.0f };
+        const ImVec4 themeClearColor = UiTheme::clearColor();
+        const float clearColor[4] = { themeClearColor.x, themeClearColor.y, themeClearColor.z, themeClearColor.w };
         g_d3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
         g_d3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clearColor);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());

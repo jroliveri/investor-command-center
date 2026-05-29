@@ -1,6 +1,6 @@
 # CSV Import
 
-CSV importing is a priority feature for Investor Command Center because many users already have brokerage-style exports and spreadsheets they want to bring into a local tracker.
+CSV importing is the normal update workflow for Investor Command Center. Import a brokerage positions CSV, preview the rows, confirm the import, and the app updates local holdings for the selected account.
 
 ## Privacy Warning
 
@@ -30,6 +30,14 @@ Target fields:
 - `notes`
 
 The user selects the account before importing. Imported rows are written to the `holdings` table only after preview and validation.
+
+Repeated imports are supported and expected:
+
+- Existing holdings are updated by `account_id + ticker`.
+- New tickers are inserted as new holdings.
+- Holdings that were active for the account but missing from the latest CSV are marked `Inactive`.
+- The app does not blindly duplicate holdings on repeated imports.
+- Source CSV files stay local and are not copied into the project folder by default.
 
 ## Flexible Column Mapping
 
@@ -103,6 +111,28 @@ Importer behavior for this format:
 
 Cash balance should be managed separately on the account. The holdings importer imports normal holding rows only.
 
+## Import Batches And Snapshots
+
+Every successful CSV import creates an `import_batches` record with import metadata:
+
+- Account
+- Import date
+- Source type and source name
+- Total rows
+- Imported rows
+- Updated holdings
+- Added holdings
+- Skipped rows
+- Warning count
+- Error count
+- Missing holdings
+
+Only metadata is stored. The original CSV file is not copied into the repository or stored in SQLite.
+
+After holdings are updated, the app automatically creates or updates a portfolio snapshot for the import date. If a CSV import snapshot already exists for the same account and date, the latest import replaces that snapshot instead of creating a duplicate.
+
+Manual snapshots are optional. CSV import is the primary snapshot workflow.
+
 ## Validation Behavior
 
 Rows are previewed before saving. Invalid rows are blocked and show row-level errors.
@@ -134,13 +164,15 @@ The Import Preview table shows the final app fields after mapping:
 
 ## Duplicate Handling
 
-The first-pass duplicate strategy blocks rows that match an existing holding by:
+Repeated imports update rows that match an existing holding by:
 
 ```text
-account_id + ticker + asset_name
+account_id + ticker
 ```
 
-The preview also blocks duplicate rows inside the same CSV import batch. This avoids importing duplicate holdings blindly.
+The preview still blocks duplicate tickers inside the same CSV import batch. This avoids importing conflicting rows blindly.
+
+Repeated imports do not block rows just because a holding already exists. Existing holdings are updated by account and ticker.
 
 ## Future Plans
 

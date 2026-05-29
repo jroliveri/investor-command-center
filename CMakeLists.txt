@@ -85,15 +85,32 @@ set(APP_SOURCES
     src/db/Migrations.hpp
     src/db/Migrations.cpp
     src/models/Account.hpp
+    src/models/CapitalGainAllocationRule.hpp
+    src/models/DashboardChartSetting.hpp
+    src/models/DashboardWidget.hpp
     src/models/Holding.hpp
+    src/models/ImportBatch.hpp
+    src/models/PortfolioSnapshot.hpp
     src/models/Transaction.hpp
     src/models/Dividend.hpp
     src/models/Goal.hpp
     src/models/WatchlistItem.hpp
     src/repositories/AccountRepository.hpp
     src/repositories/AccountRepository.cpp
+    src/repositories/AppSettingsRepository.hpp
+    src/repositories/AppSettingsRepository.cpp
+    src/repositories/CapitalGainAllocationRepository.hpp
+    src/repositories/CapitalGainAllocationRepository.cpp
+    src/repositories/DashboardChartSettingsRepository.hpp
+    src/repositories/DashboardChartSettingsRepository.cpp
+    src/repositories/DashboardLayoutRepository.hpp
+    src/repositories/DashboardLayoutRepository.cpp
     src/repositories/HoldingRepository.hpp
     src/repositories/HoldingRepository.cpp
+    src/repositories/ImportBatchRepository.hpp
+    src/repositories/ImportBatchRepository.cpp
+    src/repositories/PortfolioSnapshotRepository.hpp
+    src/repositories/PortfolioSnapshotRepository.cpp
     src/repositories/TransactionRepository.hpp
     src/repositories/TransactionRepository.cpp
     src/repositories/DividendRepository.hpp
@@ -104,6 +121,18 @@ set(APP_SOURCES
     src/repositories/WatchlistRepository.cpp
     src/services/PortfolioCalculator.hpp
     src/services/PortfolioCalculator.cpp
+    src/services/CapitalGainAllocationService.hpp
+    src/services/CapitalGainAllocationService.cpp
+    src/services/CsvImportService.hpp
+    src/services/CsvImportService.cpp
+    src/services/PerformanceCalculator.hpp
+    src/services/PerformanceCalculator.cpp
+    src/services/DashboardService.hpp
+    src/services/DashboardService.cpp
+    src/services/DashboardLayoutService.hpp
+    src/services/DashboardLayoutService.cpp
+    src/services/TransactionService.hpp
+    src/services/TransactionService.cpp
     src/services/HoldingsCsvImport.hpp
     src/services/HoldingsCsvImport.cpp
     src/ui/DashboardView.hpp
@@ -124,6 +153,10 @@ set(APP_SOURCES
     src/ui/SettingsView.cpp
     src/ui/ImportCsvView.hpp
     src/ui/ImportCsvView.cpp
+    src/ui/widgets/DatePicker.hpp
+    src/ui/widgets/DatePicker.cpp
+    src/ui/widgets/TerminalPanel.hpp
+    src/ui/widgets/TerminalPanel.cpp
     src/ui/UiTheme.hpp
     src/ui/UiTheme.cpp
     src/util/Money.hpp

@@ -2,9 +2,14 @@
 #pragma once
 
 #include "models/Account.hpp"
+#include "models/CapitalGainAllocationRule.hpp"
 #include "models/Dividend.hpp"
 #include "models/Goal.hpp"
 #include "models/Holding.hpp"
+#include "models/ImportBatch.hpp"
+#include "models/DashboardWidget.hpp"
+#include "models/DashboardChartSetting.hpp"
+#include "models/PortfolioSnapshot.hpp"
 #include "models/Transaction.hpp"
 #include "models/WatchlistItem.hpp"
 
@@ -39,6 +44,12 @@ public:
     std::vector<Dividend> dividends;
     std::vector<Goal> goals;
     std::vector<WatchlistItem> watchlist;
+    std::vector<PortfolioSnapshot> portfolioSnapshots;
+    std::vector<ImportBatch> importBatches;
+    std::vector<DashboardWidget> dashboardWidgets;
+    std::vector<DashboardChartSetting> dashboardChartSettings;
+    std::vector<CapitalGainAllocationRule> capitalGainAllocationRules;
+    std::string themeKey = "dark_command_center";
     std::string statusMessage;
     bool statusIsError = false;
 

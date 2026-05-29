@@ -1,5 +1,508 @@
 # Codex Change Log
 
+## 2026-05-29 Dashboard Chart Controls
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/db/Migrations.cpp`
+- `src/models/DashboardChartSetting.hpp`
+- `src/repositories/DashboardChartSettingsRepository.hpp`
+- `src/repositories/DashboardChartSettingsRepository.cpp`
+- `src/services/DashboardLayoutService.cpp`
+- `src/ui/DashboardView.hpp`
+- `src/ui/DashboardView.cpp`
+
+### Behavior Added
+
+- Removed the duplicate fixed allocation chart behavior by replacing legacy chart widgets with three controlled chart panels.
+- Added an Allocation panel with data selector for Asset Type, Account, and Ticker / Holding.
+- Added a Performance panel with data selector for Portfolio Value, Holdings Value, Cash Balance, and Unrealized Gain/Loss.
+- Added an Income / Gains panel with data selector for Dividends and Realized Gains.
+- Added in-panel time range selectors.
+- Added in-panel chart type selectors using practical local chart types: Allocation Bars, Line Chart, and Bar Chart.
+- Added clear no-data messaging for unsupported or insufficient ranges.
+- Added local `dashboard_chart_settings` persistence for chart data mode, time range, and chart type.
+- Seeded safe defaults for `allocation_panel`, `performance_panel`, and `income_gains_panel`.
+- Ignored legacy fixed chart widget keys so old local layouts do not show duplicate chart panels.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran a temporary SQLite smoke test for chart settings migration, default seeding, and setting persistence.
+- Smoke-launched the app from an ignored temporary working directory to verify startup migrations without touching the real local database.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, `.vs`, `out`, `build`, and object files are ignored and not staged.
+
+### Known Issues
+
+- Allocation history by asset/account/ticker is not stored yet, so Allocation ranges other than `Latest` show a no-data message.
+- Pie/donut rendering is not implemented; allocation uses horizontal allocation bars for reliability.
+- Interactive chart control click-through should still be performed in the running desktop app.
+
+## 2026-05-29 Holdings And Dividends Row Actions
+
+### Changed Files
+
+- `docs/Codex-ChangeLog.md`
+- `src/ui/HoldingsView.hpp`
+- `src/ui/HoldingsView.cpp`
+- `src/ui/DividendsView.hpp`
+- `src/ui/DividendsView.cpp`
+
+### Behavior Added
+
+- Fixed Holdings row actions by using stable per-record Edit/Delete button IDs.
+- Fixed Holdings edit and delete modal opening by deferring popup opens until after table row rendering.
+- Added record-specific Holdings modal IDs such as `holding_edit_popup_<id>` and `holding_delete_popup_<id>`.
+- Kept Holdings delete as soft delete through the existing inactive status behavior.
+- Fixed Dividends row actions with stable per-record Edit/Delete button IDs.
+- Fixed Dividends edit and delete modal opening by deferring popup opens until after table row rendering.
+- Added record-specific Dividends modal IDs such as `dividend_edit_popup_<id>` and `dividend_delete_popup_<id>`.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran a temporary SQLite smoke test for Holding update, Holding soft delete to `Inactive`, Dividend update, and Dividend delete.
+- Planned manual click-through for Holdings edit/save, Holdings inactive delete, Dividends edit/save, and Dividends delete in the running desktop UI.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, `.vs`, `out`, `build`, and object files are ignored and not staged.
+
+### Known Issues
+
+- Dividends delete still hard-deletes because dividends do not currently have an inactive/status field.
+- Interactive desktop click-through should still be performed with local test records.
+
+## 2026-05-29 Top Menu Navigation
+
+### Changed Files
+
+- `README.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+
+### Behavior Added
+
+- Made the top menu bar the primary navigation system.
+- Added a `View` menu with every main page: Dashboard, Accounts, Holdings, Transactions, Dividends, Goals, Watchlist, Reports, and Settings.
+- Added a `Records` menu for record-focused sections.
+- Expanded the `Dashboard` menu with Dashboard, Customize Dashboard, Reset Dashboard Layout, Refresh Dashboard, and Create Manual Snapshot.
+- Expanded the `Tools` menu with Import CSV, Capital Gains Allocation Settings, Data Privacy / Local Data, and a disabled Backup placeholder.
+- Kept File and Help menu access for import, settings, exit, about, and privacy notices.
+- Removed the old side page navigation list from the left rail.
+- Kept the left rail as an account information and watchlist context column.
+- Added active page display in the workspace header and left information rail.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Smoke-launched the app from an ignored temporary working directory to verify startup without touching the real local database.
+- Confirmed the old side navigation helper calls are no longer present in `App.cpp`.
+- Confirmed top-menu entries cover Dashboard, Accounts, Holdings, Transactions, Dividends, Goals, Watchlist, Reports, Import CSV, and Settings.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, `.vs`, `out`, `build`, and object files are ignored and not staged.
+
+### Known Issues
+
+- The left rail is still present for portfolio context; only the page navigation controls were removed.
+- Backup and bug-report menu entries are placeholders only.
+- Interactive visual menu click-through should still be performed in the running desktop app.
+
+## 2026-05-29 Capital Gains Allocation Helper
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/db/Migrations.cpp`
+- `src/models/CapitalGainAllocationRule.hpp`
+- `src/repositories/CapitalGainAllocationRepository.hpp`
+- `src/repositories/CapitalGainAllocationRepository.cpp`
+- `src/services/CapitalGainAllocationService.hpp`
+- `src/services/CapitalGainAllocationService.cpp`
+- `src/ui/SettingsView.hpp`
+- `src/ui/SettingsView.cpp`
+- `src/ui/TransactionsView.hpp`
+- `src/ui/TransactionsView.cpp`
+
+### Behavior Added
+
+- Added local `capital_gain_allocation_rules` storage for user-defined realized-gain allocation categories.
+- Seeded optional default categories with `0%` values when no allocation rules exist: Checking, Savings, and Reinvest.
+- Added a Settings section for adding, editing, deactivating, deleting, and reordering capital gains allocation rules.
+- Added active percentage total display with warnings when active rules do not total `100%`.
+- Added a Transactions row menu with `View Gain Allocation` for Sell transactions.
+- Added a Capital Gains Allocation popup showing transaction details, realized gain/loss, rule percentages, allocation amounts, unallocated amount, and overallocated warning.
+- Added a copy-to-clipboard summary for allocation plans.
+- Kept allocation behavior as a display helper only; it does not move money, create transfers, provide tax advice, or provide financial advice.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran a temporary SQLite smoke test for migration creation, default allocation rule seeding, rule persistence, 25/25/50 allocation math, average-cost fallback, and zero/negative realized gain handling.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed `data/.gitkeep` remains tracked.
+- Confirmed local SQLite databases, `.vs`, `out`, and `build` are ignored and not staged.
+
+### Known Issues
+
+- Allocation rules are simple percentages only; no per-account, tax-lot, or destination-account logic is implemented.
+- The helper is shown from Transactions only and is not a dashboard feature yet.
+
+## 2026-05-29 Trading-Terminal Interface Redesign
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/main.cpp`
+- `src/db/Migrations.cpp`
+- `src/repositories/AppSettingsRepository.hpp`
+- `src/repositories/AppSettingsRepository.cpp`
+- `src/services/DashboardLayoutService.cpp`
+- `src/ui/DashboardView.hpp`
+- `src/ui/DashboardView.cpp`
+- `src/ui/SettingsView.hpp`
+- `src/ui/SettingsView.cpp`
+- `src/ui/UiTheme.hpp`
+- `src/ui/UiTheme.cpp`
+- `src/ui/widgets/TerminalPanel.hpp`
+- `src/ui/widgets/TerminalPanel.cpp`
+
+### Behavior Added
+
+- Added a compact desktop top menu with File, Dashboard, records, Import, Reports, Tools, and Help actions.
+- Reworked the left side into a professional account column with Account Info, compact account balances, and watchlist-style quick symbols.
+- Redesigned the Dashboard as a modular terminal-style workspace using thin-bordered panels in a compact grid.
+- Added a Holdings dashboard panel for quick portfolio review.
+- Kept dashboard show/hide, Move Up / Move Down, and Reset Dashboard Layout behavior.
+- Added dynamic theme support with Dark Command Center and Light Trading Terminal palettes.
+- Added local `app_settings` storage for theme preferences.
+- Added Settings page theme selector with local persistence.
+- Added About and Privacy / Local Data help dialogs.
+
+### UI Corrections
+
+- Reduced spacing and table padding for a denser desktop-workstation feel.
+- Added light gray panel, border, blue accent, and green/red movement colors for the Light Trading Terminal theme.
+- Kept dashboard language focused on portfolio review, snapshot history, holdings, recent activity, and import status.
+- Avoided brokerage branding, brokerage names, trading execution language, and buy/sell recommendation language.
+
+### Validation
+
+- Built the Debug CMake preset after the shell/theme/dashboard refactor.
+- Built the Release CMake preset after the shell/theme/dashboard refactor.
+- Smoke-launched the app from a temporary working directory to verify startup without touching the real local database.
+- Ran a local settings smoke test confirming theme preference persistence after reopening the SQLite database.
+- Confirmed no files are staged.
+- Confirmed no untracked, unignored CSV/database/import/export/backup/log/build/IDE private files are visible to Git.
+
+### Known Issues
+
+- Freeform draggable docking is not implemented; dashboard layout customization still uses persisted show/hide and Move Up / Move Down controls.
+- CSV export remains a placeholder.
+
+## 2026-05-29 Account-Linked Goal Current Amounts
+
+### Changed Files
+
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/db/Migrations.cpp`
+- `src/models/Goal.hpp`
+- `src/repositories/GoalRepository.cpp`
+- `src/services/PortfolioCalculator.hpp`
+- `src/services/PortfolioCalculator.cpp`
+- `src/ui/GoalsView.cpp`
+
+### Behavior Added
+
+- Added `use_account_value` and `linked_account_id` fields to goals.
+- Kept `current_amount` as the stored manual amount for manual goals.
+- Added runtime goal progress calculation from linked account value when `Use account value` is enabled.
+- Linked account value uses the existing local account calculation: active holdings market value plus account cash balance.
+- Updated the Goals editor with a `Use account value` checkbox, account selector, read-only calculated current amount, and helper text.
+- Manual current amount remains editable when `Use account value` is unchecked.
+- Missing or invalid linked accounts show a warning and treat effective current amount as `0.00`.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran a local goal account-link smoke test against a temporary SQLite database.
+- Confirmed manual goal metrics use stored `current_amount`.
+- Confirmed linked goal metrics use active holdings market value plus account cash balance.
+- Confirmed inactive holdings are excluded from linked account goal value.
+- Confirmed missing linked accounts use `0.00` and set the warning flag.
+- Confirmed no files are staged.
+- Confirmed no untracked, unignored CSV/database/import/export/backup/log/build/IDE private files are visible to Git.
+
+### Known Issues
+
+- Linked goals calculate from the current selected account only; multi-account goal linking is not implemented.
+- This is a local tracking convenience only and does not provide financial advice.
+
+## 2026-05-29 Calendar Date Picker Controls
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/ui/TransactionsView.cpp`
+- `src/ui/DividendsView.cpp`
+- `src/ui/GoalsView.cpp`
+- `src/ui/widgets/DatePicker.hpp`
+- `src/ui/widgets/DatePicker.cpp`
+- `src/util/Date.hpp`
+- `src/util/Date.cpp`
+
+### Behavior Added
+
+- Added a reusable Dear ImGui calendar date picker control.
+- Added calendar picker support to transaction dates, dividend received dates, and goal target dates.
+- Kept manual date entry available for fast keyboard entry.
+- Added inline date validation messaging near date fields.
+- Added optional-date handling with a Clear action for goal target dates.
+- Added table date rendering that flags invalid stored dates instead of silently presenting them as normal.
+- Improved date utilities with strict `YYYY-MM-DD` parsing, date formatting, leap year handling, days-in-month lookup, and day clamping.
+- Tightened repository validation through the shared date utility so invalid dates such as `2026-99-99`, `05/28/2026`, and `abc` are rejected.
+- Kept SQLite date storage as `TEXT` in `YYYY-MM-DD` format.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran a local date utility smoke test for strict parsing, leap years, invalid manual formats, days-in-month behavior, and date clamping.
+- Confirmed editable date fields now use the shared picker in Transactions, Dividends, and Goals.
+- Confirmed no files are staged.
+- Confirmed no untracked, unignored CSV/database/import/export/backup/log/build/IDE private files are visible to Git.
+
+### Known Issues
+
+- The calendar picker is intentionally simple and does not provide locale-specific display formats.
+- Portfolio snapshot and import batch dates are created by app workflows today; there is no direct manual editor for those dates yet.
+
+## 2026-05-28 Customizable Dashboard Layout
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/db/Migrations.cpp`
+- `src/models/DashboardWidget.hpp`
+- `src/repositories/DashboardLayoutRepository.hpp`
+- `src/repositories/DashboardLayoutRepository.cpp`
+- `src/services/DashboardLayoutService.hpp`
+- `src/services/DashboardLayoutService.cpp`
+- `src/ui/DashboardView.hpp`
+- `src/ui/DashboardView.cpp`
+
+### Behavior Added
+
+- Added a `dashboard_widgets` SQLite table for local dashboard layout preferences.
+- Added default dashboard widget seeding when no saved layout exists.
+- Added a dashboard layout repository and service to keep ordering and visibility logic out of the view layer.
+- Added `Customize Dashboard` mode with visible checkboxes and Move Up / Move Down buttons.
+- Added `Reset Dashboard Layout` to restore the default dashboard order and visibility.
+- Dashboard sections now render from stable widget keys and saved sort order.
+- Hidden dashboard sections stay available in customize mode so they can be re-enabled.
+- Unknown widget keys are ignored safely.
+
+### UI Corrections
+
+- Kept the dark dashboard style while adding a compact customization panel.
+- Added helper copy explaining that the dashboard can be rearranged to match the user's review workflow.
+- Added a local-storage note for dashboard layout preferences.
+- Kept dashboard customization separate from financial calculations.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran a temp SQLite dashboard layout reopen smoke test outside the repository.
+- Confirmed default layout seeding.
+- Confirmed Move Up persistence after reopening the database.
+- Confirmed hide/show persistence after reopening the database.
+- Confirmed Reset Dashboard Layout restores default order and visibility after reopening the database.
+- Confirmed no files are staged.
+- Confirmed no untracked, unignored CSV/database/export/backup/log/build/IDE private files are visible to Git.
+
+### Known Issues
+
+- Drag-and-drop dashboard reordering is not implemented in this first pass; Move Up / Move Down buttons are used instead.
+
+## 2026-05-28 CSV Import Workflow, Automatic Snapshots, And Holdings Actions
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/CSV-Import.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/db/Migrations.cpp`
+- `src/models/Holding.hpp`
+- `src/models/ImportBatch.hpp`
+- `src/models/PortfolioSnapshot.hpp`
+- `src/repositories/HoldingRepository.hpp`
+- `src/repositories/HoldingRepository.cpp`
+- `src/repositories/ImportBatchRepository.hpp`
+- `src/repositories/ImportBatchRepository.cpp`
+- `src/repositories/PortfolioSnapshotRepository.hpp`
+- `src/repositories/PortfolioSnapshotRepository.cpp`
+- `src/services/CsvImportService.hpp`
+- `src/services/CsvImportService.cpp`
+- `src/services/DashboardService.hpp`
+- `src/services/DashboardService.cpp`
+- `src/services/HoldingsCsvImport.hpp`
+- `src/services/HoldingsCsvImport.cpp`
+- `src/services/PortfolioCalculator.cpp`
+- `src/services/TransactionService.cpp`
+- `src/ui/DashboardView.cpp`
+- `src/ui/HoldingsView.cpp`
+- `src/ui/ImportCsvView.hpp`
+- `src/ui/ImportCsvView.cpp`
+
+### Behavior Added
+
+- Made repeated CSV imports the normal holdings update workflow.
+- Added `import_batches` metadata tracking for each CSV import.
+- Added holding metadata for `status`, `last_import_batch_id`, and `last_seen_at`.
+- Changed CSV import from insert-only to upsert by `account_id + ticker`.
+- Existing holdings update on repeated imports instead of duplicating.
+- New CSV tickers are inserted as holdings.
+- Active holdings missing from the latest account CSV are marked `Inactive`.
+- Added CSV import summaries with imported rows, updated holdings, added holdings, skipped rows, missing holdings, warnings, and errors.
+- Added automatic CSV-created portfolio snapshots after successful imports.
+- CSV import snapshots are replaced for the same account/date/source instead of silently duplicated.
+- Dashboard copy now treats CSV-created snapshots as the primary workflow and manual snapshots as optional.
+- Dashboard now shows last CSV import date, last snapshot date, and snapshot source.
+- Fixed Holdings Edit/Delete modal behavior by opening popups outside the row ID scope.
+- Changed holding delete to a soft inactive action so holdings history is retained locally.
+- Inactive holdings are excluded from account balance and dashboard portfolio totals.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran a temp SQLite smoke test outside the repository with fake Schwab-style CSV files.
+- Confirmed first import adds holdings and creates an import batch plus CSV snapshot.
+- Confirmed second import updates existing holdings, adds new holdings, marks missing holdings inactive, and creates a new snapshot.
+- Confirmed a repeated same-account/same-date CSV import updates the existing CSV snapshot instead of duplicating it.
+- Confirmed soft-inactive holdings are excluded from dashboard portfolio totals.
+- Smoke-launched the app from a temporary working directory to verify startup migrations without touching the real local database.
+
+### Known Issues
+
+- Missing holdings are marked inactive automatically for this first pass; a richer review/confirm workflow is planned.
+- Original CSV files are not stored, only import metadata.
+- CSV import remains local-only and does not connect to brokerage accounts.
+
+## 2026-05-28 Dashboard Performance and Transaction Foundation
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/db/Migrations.cpp`
+- `src/models/PortfolioSnapshot.hpp`
+- `src/models/Transaction.hpp`
+- `src/repositories/PortfolioSnapshotRepository.hpp`
+- `src/repositories/PortfolioSnapshotRepository.cpp`
+- `src/repositories/TransactionRepository.cpp`
+- `src/services/DashboardService.hpp`
+- `src/services/DashboardService.cpp`
+- `src/services/PerformanceCalculator.hpp`
+- `src/services/PerformanceCalculator.cpp`
+- `src/services/TransactionService.hpp`
+- `src/services/TransactionService.cpp`
+- `src/ui/DashboardView.hpp`
+- `src/ui/DashboardView.cpp`
+- `src/ui/TransactionsView.hpp`
+- `src/ui/TransactionsView.cpp`
+
+### Behavior Added
+
+- Added transaction fields for fees, sell quantities, sale price, sale proceeds, cost basis used, realized gain/loss dollars, realized gain/loss percent, and adjustment entries.
+- Added SQLite migrations for transaction realized gain fields and `portfolio_snapshots`.
+- Added a portfolio snapshot repository.
+- Added transaction service logic for simple new buy/sell handling using average cost basis.
+- Added realized gain/loss calculations for sell transactions.
+- Added centralized performance and dashboard calculation services.
+- Upgraded Dashboard cards for portfolio value, holdings value, cash, cost basis, unrealized gain/loss, realized gains, snapshot-based daily/monthly/yearly movement, and dividends.
+- Added Snapshot Status panel with last snapshot date, snapshot count, and `Create Today's Snapshot`.
+- Added Recent Transactions and Realized Gains dashboard panels.
+- Added manual snapshot replacement confirmation when today's snapshot already exists.
+
+### Validation
+
+- Built Debug and Release CMake presets.
+- Ran a temp SQLite smoke test outside the repository.
+- Confirmed migrations create transaction realized-gain fields and `portfolio_snapshots`.
+- Confirmed a Buy transaction saves and creates/updates holdings using average cost basis.
+- Confirmed a Sell transaction saves, reduces shares, and calculates sale proceeds, cost basis used, realized gain dollars, and realized gain percent.
+- Confirmed DashboardService reports realized gains for today, this month, and this year.
+- Confirmed a portfolio snapshot can be saved from current dashboard totals.
+- Smoke-launched the app from a temporary working directory so the real local database was not touched.
+
+### Known Limitations
+
+- Snapshot-based daily/monthly/yearly movement is simple dollar movement and may include deposits or withdrawals.
+- Contribution-adjusted returns are planned for a future update.
+- Realized gain/loss uses average cost basis only.
+- New buy/sell transactions can update holdings, but full historical reconciliation for edited/deleted transactions is still future work.
+- FIFO/LIFO and tax-lot accounting are not implemented.
+
 ## 2026-05-28 Release Notes Documentation
 
 ### Changed Files

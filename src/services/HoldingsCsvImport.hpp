@@ -28,6 +28,7 @@ struct CsvDataRow {
 struct CsvTable {
     std::vector<std::string> headers;
     std::vector<CsvDataRow> rows;
+    std::string detectedImportDate;
     int headerRowNumber = 0;
     int skippedMetadataRowCount = 0;
     int skippedBlankRowCount = 0;
@@ -43,6 +44,10 @@ struct HoldingsCsvPreviewRow {
     Holding holding;
     bool hasTotalCostBasis = false;
     double totalCostBasis = 0.0;
+    bool hasAverageCost = false;
+    bool hasAssetName = false;
+    bool hasAssetType = false;
+    bool hasNotes = false;
     double marketValue = 0.0;
     double gainLossDollar = 0.0;
     double gainLossPercent = 0.0;

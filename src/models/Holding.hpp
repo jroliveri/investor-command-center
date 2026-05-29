@@ -13,6 +13,9 @@ struct Holding {
     double averageCost = 0.0;
     double currentPrice = 0.0;
     std::string notes;
+    std::string status = "Active";
+    int lastImportBatchId = 0;
+    std::string lastSeenAt;
     std::string createdAt;
     std::string updatedAt;
 };
