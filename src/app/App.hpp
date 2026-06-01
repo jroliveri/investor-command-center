@@ -49,6 +49,7 @@ private:
     void requestManualSnapshot();
     void createManualSnapshot(bool replaceExisting);
     void refreshSelectedResearchSymbol();
+    void refreshDashboardPrices();
     void renderTopMenuBar();
     void renderAccountColumn();
     void renderAccountInfoPanel();

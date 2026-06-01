@@ -154,8 +154,11 @@ void SettingsView::render(AppState& state,
     ImGui::TextColored(UiTheme::MutedText, "Refresh interval");
     ImGui::SameLine(180.0f);
     ImGui::Text("Manual only");
+    ImGui::TextColored(UiTheme::MutedText, "Update holdings current_price");
+    ImGui::SameLine(180.0f);
+    ImGui::Text("Off");
     ImGui::Spacing();
-    ImGui::TextWrapped("Research data is informational, may be delayed or unavailable, and is not financial advice. CSV import remains the primary portfolio update workflow.");
+    ImGui::TextWrapped("Research data is informational, may be delayed or unavailable, and is not financial advice. CSV import remains the primary portfolio update workflow. Dashboard price refreshes are display-only in this pass.");
     ImGui::TextColored(UiTheme::MutedText, "Yahoo Finance quote cache metadata is stored locally for convenience only.");
     ImGui::EndChild();
 

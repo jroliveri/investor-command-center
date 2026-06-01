@@ -1,5 +1,51 @@
 # Codex Change Log
 
+## 2026-06-01 Dashboard Current Price Refresh Foundation
+
+### Changed Files
+
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/services/DashboardService.hpp`
+- `src/services/DashboardService.cpp`
+- `src/ui/DashboardView.hpp`
+- `src/ui/DashboardView.cpp`
+- `src/ui/SettingsView.cpp`
+
+### Behavior Added
+
+- Added manual Dashboard current-price refresh using the existing market data provider service.
+- Added Dashboard, Research menu, and Tools menu actions for `Refresh Current Prices`.
+- Collected active holding tickers from active accounts before requesting quotes.
+- Added session-only dashboard price overrides so refreshed prices update dashboard display calculations without writing to `holdings.current_price`.
+- Updated dashboard portfolio value, holdings value, unrealized gain/loss, holdings table, allocation, and top gainers/losers to use refreshed display prices when available.
+- Added dashboard price source/status UI with provider, last refresh time, refreshed count, failed count, cached count, and warning messages.
+- Added a disabled placeholder for `Create Snapshot From Refreshed Prices`; snapshots are not created automatically.
+- Added Settings copy showing dashboard price refresh is manual and does not persist refreshed prices to holdings in this pass.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Re-ran the temporary market research provider/cache smoke test.
+- Confirmed the dashboard refresh action uses `MarketDataService` and does not call Yahoo Finance directly from UI code.
+- Confirmed refreshed prices are kept in memory and do not overwrite shares, average cost, cost basis, transactions, or snapshots.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, CSV/import/export/backup/log folders, `.vs`, `out`, `build`, object files, and `CMakeUserPresets.json` are not staged.
+
+### Known Issues
+
+- Refreshed prices are session-only and are not persisted to holdings yet.
+- Creating snapshots from refreshed prices is still a placeholder.
+- Yahoo Finance data can be delayed, unavailable, rate-limited, or incomplete.
+- Interactive desktop click-through should still be performed with local test holdings.
+
 ## 2026-06-01 Research Menu And Yahoo Finance Foundation
 
 ### Changed Files

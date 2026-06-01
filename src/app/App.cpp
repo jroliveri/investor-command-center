@@ -11,6 +11,9 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cctype>
+#include <set>
+#include <vector>
 
 namespace {
 
@@ -24,6 +27,40 @@ void compactMetric(const char* label, const std::string& value, ImVec4 color)
     ImGui::TextColored(UiTheme::MutedText, "%s", label);
     ImGui::SameLine(170.0f);
     ImGui::TextColored(color, "%s", value.c_str());
+}
+
+std::string normalizeSymbol(std::string symbol)
+{
+    symbol.erase(symbol.begin(), std::find_if(symbol.begin(), symbol.end(), [](unsigned char character) {
+        return std::isspace(character) == 0;
+    }));
+    symbol.erase(std::find_if(symbol.rbegin(), symbol.rend(), [](unsigned char character) {
+        return std::isspace(character) == 0;
+    }).base(), symbol.end());
+    std::transform(symbol.begin(), symbol.end(), symbol.begin(), [](unsigned char character) {
+        return static_cast<char>(std::toupper(character));
+    });
+    return symbol;
+}
+
+bool isActiveAccount(const Account& account)
+{
+    return account.status.empty() || account.status == "Active";
+}
+
+bool isActiveHolding(const Holding& holding)
+{
+    return holding.status.empty() || holding.status == "Active";
+}
+
+const Account* accountForHolding(const std::vector<Account>& accounts, int accountId)
+{
+    for (const Account& account : accounts) {
+        if (account.id == accountId) {
+            return &account;
+        }
+    }
+    return nullptr;
 }
 
 }
@@ -253,6 +290,85 @@ void App::refreshSelectedResearchSymbol()
     stockResearchView_.refreshCurrent(*marketDataService_, state_);
 }
 
+void App::refreshDashboardPrices()
+{
+    std::set<std::string> uniqueTickers;
+    for (const Holding& holding : state_.holdings) {
+        if (!isActiveHolding(holding)) {
+            continue;
+        }
+
+        const Account* account = accountForHolding(state_.accounts, holding.accountId);
+        if (account == nullptr || !isActiveAccount(*account)) {
+            continue;
+        }
+
+        const std::string symbol = normalizeSymbol(holding.ticker);
+        if (!symbol.empty()) {
+            uniqueTickers.insert(symbol);
+        }
+    }
+
+    state_.dashboardPriceOverrides.clear();
+    state_.dashboardPriceRefreshStatus = DashboardPriceRefreshStatus {};
+    state_.dashboardPriceRefreshStatus.hasRun = true;
+    state_.dashboardPriceRefreshStatus.provider = marketDataService_->providerName();
+    state_.dashboardPriceRefreshStatus.lastRefreshedAt = Date::nowIso8601();
+
+    if (uniqueTickers.empty()) {
+        state_.dashboardPriceRefreshStatus.warning = "No active holding tickers were available to refresh.";
+        state_.setStatus("No active holding tickers were available to refresh.", true);
+        return;
+    }
+
+    std::vector<std::string> failedSymbols;
+    for (const std::string& symbol : uniqueTickers) {
+        MarketQuoteResult result = marketDataService_->fetchQuote(symbol);
+        if (result.success && result.quote.currentPrice.has_value()) {
+            DashboardPriceOverride priceOverride;
+            priceOverride.symbol = symbol;
+            priceOverride.currentPrice = *result.quote.currentPrice;
+            priceOverride.provider = result.quote.provider.empty() ? marketDataService_->providerName() : result.quote.provider;
+            priceOverride.fetchedAt = result.quote.fetchedAt;
+            priceOverride.fromCache = result.fromCache;
+            priceOverride.source = result.fromCache ? "Cached Quote" : "Live Quote";
+            state_.dashboardPriceOverrides.push_back(priceOverride);
+            ++state_.dashboardPriceRefreshStatus.refreshedSymbols;
+            if (result.fromCache) {
+                ++state_.dashboardPriceRefreshStatus.cachedSymbols;
+            }
+        } else {
+            ++state_.dashboardPriceRefreshStatus.failedSymbols;
+            failedSymbols.push_back(symbol);
+        }
+    }
+
+    if (state_.dashboardPriceRefreshStatus.cachedSymbols > 0) {
+        state_.dashboardPriceRefreshStatus.warning = "Some symbols are using cached quotes because live data was unavailable.";
+    }
+    if (!failedSymbols.empty()) {
+        std::string failed = "Failed symbols:";
+        const int limit = std::min<int>(6, static_cast<int>(failedSymbols.size()));
+        for (int index = 0; index < limit; ++index) {
+            failed += index == 0 ? " " : ", ";
+            failed += failedSymbols[static_cast<std::size_t>(index)];
+        }
+        if (static_cast<int>(failedSymbols.size()) > limit) {
+            failed += ", ...";
+        }
+        state_.dashboardPriceRefreshStatus.warning = state_.dashboardPriceRefreshStatus.warning.empty()
+            ? failed
+            : state_.dashboardPriceRefreshStatus.warning + " " + failed;
+    }
+    if (state_.dashboardPriceRefreshStatus.warning.empty()) {
+        state_.dashboardPriceRefreshStatus.warning = "Current prices refreshed for dashboard display only. Holdings records and snapshots were not modified.";
+    }
+
+    navigateTo(AppSection::Dashboard);
+    state_.setStatus("Dashboard prices refreshed for display: " + std::to_string(state_.dashboardPriceRefreshStatus.refreshedSymbols) + " updated, " +
+        std::to_string(state_.dashboardPriceRefreshStatus.failedSymbols) + " failed.");
+}
+
 void App::renderTopMenuBar()
 {
     if (!ImGui::BeginMainMenuBar()) {
@@ -307,6 +423,9 @@ void App::renderTopMenuBar()
             reloadData();
             state_.setStatus("Dashboard refreshed.");
         }
+        if (ImGui::MenuItem("Refresh Current Prices")) {
+            refreshDashboardPrices();
+        }
         if (ImGui::MenuItem("Create Manual Snapshot")) {
             requestManualSnapshot();
         }
@@ -325,6 +444,9 @@ void App::renderTopMenuBar()
 
     if (ImGui::BeginMenu("Tools")) {
         menuSectionItem(AppSection::ImportCsv, "Import CSV");
+        if (ImGui::MenuItem("Refresh Current Prices")) {
+            refreshDashboardPrices();
+        }
         if (ImGui::MenuItem("Capital Gains Allocation Settings")) {
             navigateTo(AppSection::Settings);
             state_.setStatus("Capital gains allocation rules are managed in Settings.");
@@ -343,9 +465,9 @@ void App::renderTopMenuBar()
         if (ImGui::MenuItem("Refresh Selected Symbol")) {
             refreshSelectedResearchSymbol();
         }
-        ImGui::BeginDisabled();
-        ImGui::MenuItem("Refresh Dashboard Prices");
-        ImGui::EndDisabled();
+        if (ImGui::MenuItem("Refresh Dashboard Prices")) {
+            refreshDashboardPrices();
+        }
         if (ImGui::MenuItem("Research Settings")) {
             navigateTo(AppSection::Settings);
             state_.setStatus("Research settings are shown in Settings. Dashboard price refresh remains manual/off.");
@@ -428,8 +550,9 @@ void App::renderAccountsPanel()
         ImGui::TableSetupColumn("Cash", ImGuiTableColumnFlags_WidthFixed, 78.0f);
         ImGui::TableHeadersRow();
 
+        const std::vector<Holding> holdings = DashboardService::holdingsWithDashboardPrices(state_);
         for (const Account& account : state_.accounts) {
-            const AccountMetrics metrics = PortfolioCalculator::calculateAccount(account, state_.holdings);
+            const AccountMetrics metrics = PortfolioCalculator::calculateAccount(account, holdings);
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Text("%s", account.accountName.c_str());
@@ -486,7 +609,10 @@ void App::renderCurrentSection()
 
     switch (state_.currentSection) {
     case AppSection::Dashboard:
-        dashboardView_.render(state_, *portfolioSnapshotRepository_, *dashboardLayoutRepository_, *dashboardChartSettingsRepository_, reload);
+        dashboardView_.render(state_, *portfolioSnapshotRepository_, *dashboardLayoutRepository_, *dashboardChartSettingsRepository_, [this]() {
+            refreshDashboardPrices();
+        },
+            reload);
         break;
     case AppSection::Accounts:
         accountsView_.render(state_, *accountRepository_, reload);
@@ -565,7 +691,7 @@ void App::renderAppPopups()
         ImGui::Separator();
         ImGui::TextWrapped("Stock Research uses Yahoo Finance as the first informational market data source. Yahoo Finance endpoints may be delayed, unavailable, rate-limited, or changed without notice.");
         ImGui::Spacing();
-        ImGui::TextWrapped("Research data is fetched only when explicitly requested. It does not update dashboard holdings prices, replace CSV imports, connect to brokerage accounts, or provide financial advice.");
+        ImGui::TextWrapped("Research data is fetched only when explicitly requested. Stock Research lookups do not write local holdings; Dashboard price refresh uses a display-only overlay. Neither replaces CSV imports, connects to brokerage accounts, or provides financial advice.");
         ImGui::Spacing();
         ImGui::TextColored(UiTheme::Amber, "CSV import remains the primary portfolio update workflow.");
         if (ImGui::Button("Close", ImVec2(100.0f, 0.0f))) {

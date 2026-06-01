@@ -45,6 +45,11 @@ bool isActiveHolding(const Holding& holding)
     return holding.status.empty() || holding.status == "Active";
 }
 
+std::vector<Holding> dashboardHoldings(const AppState& state)
+{
+    return DashboardService::holdingsWithDashboardPrices(state);
+}
+
 struct ChartPoint {
     std::string label;
     double value = 0.0;
@@ -450,7 +455,8 @@ void drawMonthlyBarChart(const std::vector<ChartPoint>& points, ImVec4 color, co
 void drawAllocationChart(const AppState& state)
 {
     std::map<std::string, double> allocation;
-    for (const Holding& holding : state.holdings) {
+    const std::vector<Holding> holdings = dashboardHoldings(state);
+    for (const Holding& holding : holdings) {
         if (!isActiveHolding(holding)) {
             continue;
         }
@@ -609,6 +615,35 @@ void drawPortfolioSummary(const DashboardData& data)
     TerminalPanel::end();
 }
 
+void drawPriceRefreshStatus(const AppState& state, const std::function<void()>& refreshCurrentPrices)
+{
+    TerminalPanel::begin("Current Price Refresh", ImVec2(0.0f, 150.0f));
+    if (ImGui::Button("Refresh Current Prices", ImVec2(180.0f, 0.0f))) {
+        refreshCurrentPrices();
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled();
+    ImGui::Button("Create Snapshot From Refreshed Prices", ImVec2(260.0f, 0.0f));
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::TextColored(UiTheme::MutedText, "Manual snapshot option planned.");
+
+    ImGui::Spacing();
+    const DashboardPriceRefreshStatus& status = state.dashboardPriceRefreshStatus;
+    ImGui::Text("Provider: %s", status.provider.empty() ? "Yahoo Finance" : status.provider.c_str());
+    ImGui::SameLine(230.0f);
+    ImGui::Text("Last refresh: %s", status.hasRun && !status.lastRefreshedAt.empty() ? status.lastRefreshedAt.c_str() : "Not refreshed this session");
+    ImGui::Text("Price source: %s", status.hasRun ? "Live Quote / Cached Quote overlay" : "CSV Import / Manual");
+    ImGui::SameLine(230.0f);
+    ImGui::Text("Refreshed: %d   Failed: %d   Cached: %d", status.refreshedSymbols, status.failedSymbols, status.cachedSymbols);
+    if (!status.warning.empty()) {
+        ImGui::TextColored(status.failedSymbols > 0 ? UiTheme::Amber : UiTheme::MutedText, "%s", status.warning.c_str());
+    } else {
+        ImGui::TextColored(UiTheme::MutedText, "Current prices may be delayed or unavailable. CSV import remains the primary portfolio workflow.");
+    }
+    TerminalPanel::end();
+}
+
 void drawSingleMetricSection(const MetricCardData& card)
 {
     TerminalPanel::begin(card.title.c_str(), ImVec2(0.0f, 150.0f));
@@ -678,24 +713,26 @@ void drawRecentTransactionsPanel(const AppState& state)
 void drawHoldingsTablePanel(const AppState& state)
 {
     TerminalPanel::begin("Holdings", ImVec2(0.0f, 290.0f));
-    if (state.holdings.empty()) {
+    const std::vector<Holding> holdings = dashboardHoldings(state);
+    if (holdings.empty()) {
         UiTheme::emptyState("No holdings yet", "Import a positions CSV or add holdings manually.");
         TerminalPanel::end();
         return;
     }
 
-    if (ImGui::BeginTable("DashboardHoldingsTable", 7, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 225.0f))) {
+    if (ImGui::BeginTable("DashboardHoldingsTable", 8, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 225.0f))) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 70.0f);
         ImGui::TableSetupColumn("Asset");
         ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 76.0f);
         ImGui::TableSetupColumn("Shares", ImGuiTableColumnFlags_WidthFixed, 82.0f);
         ImGui::TableSetupColumn("Price", ImGuiTableColumnFlags_WidthFixed, 86.0f);
+        ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthFixed, 92.0f);
         ImGui::TableSetupColumn("Market Value", ImGuiTableColumnFlags_WidthFixed, 112.0f);
         ImGui::TableSetupColumn("Unrealized", ImGuiTableColumnFlags_WidthFixed, 104.0f);
         ImGui::TableHeadersRow();
 
         int rendered = 0;
-        for (const Holding& holding : state.holdings) {
+        for (const Holding& holding : holdings) {
             if (!isActiveHolding(holding)) {
                 continue;
             }
@@ -711,6 +748,9 @@ void drawHoldingsTablePanel(const AppState& state)
             ImGui::Text("%s", Money::formatQuantity(holding.shares).c_str());
             ImGui::TableNextColumn();
             ImGui::Text("%s", Money::format(holding.currentPrice).c_str());
+            ImGui::TableNextColumn();
+            const std::string priceSource = DashboardService::priceSourceForHolding(state, holding);
+            ImGui::TextColored(priceSource == "Live Quote" ? UiTheme::Gain : (priceSource == "Cached Quote" ? UiTheme::Amber : UiTheme::MutedText), "%s", priceSource.c_str());
             ImGui::TableNextColumn();
             ImGui::Text("%s", Money::format(metrics.marketValue).c_str());
             ImGui::TableNextColumn();
@@ -773,16 +813,17 @@ void drawSnapshotStatusPanel(
 std::vector<ChartPoint> allocationPoints(const AppState& state, const std::string& dataMode)
 {
     std::map<std::string, double> grouped;
+    const std::vector<Holding> holdings = dashboardHoldings(state);
 
     if (dataMode == "Account") {
         for (const Account& account : state.accounts) {
-            const AccountMetrics metrics = PortfolioCalculator::calculateAccount(account, state.holdings);
+            const AccountMetrics metrics = PortfolioCalculator::calculateAccount(account, holdings);
             if (metrics.calculatedBalance > 0.0) {
                 grouped[account.accountName] += metrics.calculatedBalance;
             }
         }
     } else if (dataMode == "Ticker / Holding") {
-        for (const Holding& holding : state.holdings) {
+        for (const Holding& holding : holdings) {
             if (!isActiveHolding(holding)) {
                 continue;
             }
@@ -792,7 +833,7 @@ std::vector<ChartPoint> allocationPoints(const AppState& state, const std::strin
             }
         }
     } else {
-        for (const Holding& holding : state.holdings) {
+        for (const Holding& holding : holdings) {
             if (!isActiveHolding(holding)) {
                 continue;
             }
@@ -948,8 +989,9 @@ void drawAccountAllocationPanel(const AppState& state)
     TerminalPanel::begin("Account Allocation", ImVec2(0.0f, 250.0f));
     std::vector<double> values;
     std::vector<std::string> labels;
+    const std::vector<Holding> holdings = dashboardHoldings(state);
     for (const Account& account : state.accounts) {
-        const AccountMetrics metrics = PortfolioCalculator::calculateAccount(account, state.holdings);
+        const AccountMetrics metrics = PortfolioCalculator::calculateAccount(account, holdings);
         if (metrics.calculatedBalance <= 0.0) {
             continue;
         }
@@ -988,7 +1030,8 @@ void drawTopGainersLosersPanel(const AppState& state)
     };
 
     std::vector<HoldingRow> rows;
-    for (const Holding& holding : state.holdings) {
+    const std::vector<Holding> holdings = dashboardHoldings(state);
+    for (const Holding& holding : holdings) {
         if (!isActiveHolding(holding)) {
             continue;
         }
@@ -1083,6 +1126,7 @@ void DashboardView::render(
     PortfolioSnapshotRepository& snapshotRepository,
     DashboardLayoutRepository& layoutRepository,
     DashboardChartSettingsRepository& chartSettingsRepository,
+    const std::function<void()>& refreshCurrentPrices,
     const std::function<void()>& reloadData)
 {
     const std::string today = Date::todayIso8601();
@@ -1093,6 +1137,12 @@ void DashboardView::render(
     if (ImGui::Button(customizeMode_ ? "Done Customizing" : "Customize Dashboard")) {
         customizeMode_ = !customizeMode_;
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Refresh Current Prices")) {
+        refreshCurrentPrices();
+    }
+    ImGui::Spacing();
+    drawPriceRefreshStatus(state, refreshCurrentPrices);
     ImGui::Spacing();
 
     if (customizeMode_) {

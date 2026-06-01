@@ -23,6 +23,7 @@
 - All main app sections reachable from the top menu bar without side navigation
 - Research menu with first-pass Stock Research using a Yahoo Finance provider abstraction
 - Local quote cache for user-requested research lookups
+- Manual dashboard current-price refresh using market data as a display-only overlay
 - Portfolio snapshots
 - Buy/sell transaction foundation using average cost basis
 - Reusable calendar picker controls for editable date fields
@@ -45,7 +46,8 @@
 - Full transaction reconciliation for edited/deleted buy and sell activity
 - Contribution-adjusted performance calculations
 - Historical price charting in Stock Research
-- Optional explicit workflow to apply researched prices to local holdings
+- Optional explicit workflow to persist refreshed prices to local holdings after confirmation
+- Optional explicit workflow to create snapshots from refreshed dashboard prices
 
 ## Later
 

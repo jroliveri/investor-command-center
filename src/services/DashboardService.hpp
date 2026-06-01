@@ -18,6 +18,9 @@ struct DashboardData {
 
 namespace DashboardService {
 DashboardData build(const AppState& state, const std::string& today, const std::string& monthPrefix, const std::string& yearPrefix);
+std::vector<Holding> holdingsWithDashboardPrices(const AppState& state);
+const DashboardPriceOverride* priceOverrideForSymbol(const AppState& state, const std::string& symbol);
+std::string priceSourceForHolding(const AppState& state, const Holding& holding);
 PortfolioSnapshot buildSnapshot(const DashboardData& data, const std::string& snapshotDate);
 bool hasSnapshotForDate(const AppState& state, const std::string& snapshotDate);
 const PortfolioSnapshot* latestSnapshot(const AppState& state);

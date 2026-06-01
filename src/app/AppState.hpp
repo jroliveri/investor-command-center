@@ -37,6 +37,25 @@ struct SectionInfo {
     const char* label;
 };
 
+struct DashboardPriceOverride {
+    std::string symbol;
+    double currentPrice = 0.0;
+    std::string provider = "Yahoo Finance";
+    std::string fetchedAt;
+    std::string source = "Live Quote";
+    bool fromCache = false;
+};
+
+struct DashboardPriceRefreshStatus {
+    bool hasRun = false;
+    std::string provider = "Yahoo Finance";
+    std::string lastRefreshedAt;
+    int refreshedSymbols = 0;
+    int failedSymbols = 0;
+    int cachedSymbols = 0;
+    std::string warning;
+};
+
 class AppState {
 public:
     AppSection currentSection = AppSection::Dashboard;
@@ -51,6 +70,8 @@ public:
     std::vector<DashboardWidget> dashboardWidgets;
     std::vector<DashboardChartSetting> dashboardChartSettings;
     std::vector<MarketQuote> marketQuoteCache;
+    std::vector<DashboardPriceOverride> dashboardPriceOverrides;
+    DashboardPriceRefreshStatus dashboardPriceRefreshStatus;
     std::vector<CapitalGainAllocationRule> capitalGainAllocationRules;
     std::string themeKey = "dark_command_center";
     std::string statusMessage;

@@ -414,6 +414,26 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Watchlist priority counts are calculated in C++ from the `priority` field.
 - Recent transactions are loaded from `transactions` ordered by `transaction_date DESC, id DESC`.
 
+## Dashboard Current Price Refresh
+
+Dashboard current-price refresh is an in-memory display overlay. It collects active holding tickers, fetches current quote prices through `MarketDataService`, and temporarily applies those prices to dashboard calculations for:
+
+- Current holdings market value
+- Current portfolio value
+- Current unrealized gain/loss
+- Allocation and top gainers/losers display
+
+The overlay is not a SQLite table and does not overwrite `holdings.current_price`. It does not change shares, average cost, cost basis, transactions, import batches, or portfolio snapshots.
+
+Price source labels are displayed as:
+
+- `Live Quote`
+- `Cached Quote`
+- `CSV Import`
+- `Manual`
+
+Cached quote data comes from `market_quote_cache` only when an online fetch fails and a cached quote is available. Cached data is labeled and should not be treated as brokerage-verified data.
+
 ## CSV Import
 
 Holdings CSV import is the normal update workflow. Valid rows are upserted by `account_id + ticker`. Existing active holdings for the same account that are missing from the latest import are marked `Inactive`, not hard deleted. A successful CSV import creates an `import_batches` record and automatically creates or updates a CSV import portfolio snapshot for the import date.

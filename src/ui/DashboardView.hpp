@@ -14,6 +14,7 @@ public:
         PortfolioSnapshotRepository& snapshotRepository,
         DashboardLayoutRepository& layoutRepository,
         DashboardChartSettingsRepository& chartSettingsRepository,
+        const std::function<void()>& refreshCurrentPrices,
         const std::function<void()>& reloadData);
     void setCustomizeMode(bool enabled) { customizeMode_ = enabled; }
 
