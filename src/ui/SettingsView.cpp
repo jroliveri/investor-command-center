@@ -121,12 +121,12 @@ void SettingsView::render(AppState& state,
     ImGui::BeginChild("Privacy", ImVec2(panelWidth, 220.0f), true);
     ImGui::Text("Data Privacy");
     ImGui::Separator();
-    ImGui::TextWrapped("Investor Command Center stores records locally and does not connect to brokerage accounts, cloud services, or stock price APIs.");
+    ImGui::TextWrapped("Investor Command Center stores records locally and does not connect to brokerage accounts or cloud services. Stock Research fetches informational market data only when explicitly requested.");
     ImGui::Spacing();
     ImGui::TextColored(UiTheme::Gain, "Local-first");
     ImGui::TextColored(UiTheme::MutedText, "No login");
     ImGui::TextColored(UiTheme::MutedText, "No cloud sync");
-    ImGui::TextColored(UiTheme::MutedText, "No external market data calls");
+    ImGui::TextColored(UiTheme::MutedText, "No automatic market data refresh");
     ImGui::EndChild();
 
     ImGui::SameLine();
@@ -138,6 +138,25 @@ void SettingsView::render(AppState& state,
     ImGui::Spacing();
     ImGui::TextColored(UiTheme::Amber, "Suggested cadence: monthly");
     ImGui::TextColored(UiTheme::MutedText, "Close the app before copying the database file.");
+    ImGui::EndChild();
+
+    ImGui::Spacing();
+
+    ImGui::BeginChild("ResearchSettings", ImVec2(0.0f, 190.0f), true);
+    ImGui::Text("Research Settings");
+    ImGui::Separator();
+    ImGui::TextColored(UiTheme::MutedText, "Data source");
+    ImGui::SameLine(180.0f);
+    ImGui::Text("Yahoo Finance");
+    ImGui::TextColored(UiTheme::MutedText, "Dashboard price refresh");
+    ImGui::SameLine(180.0f);
+    ImGui::Text("Off");
+    ImGui::TextColored(UiTheme::MutedText, "Refresh interval");
+    ImGui::SameLine(180.0f);
+    ImGui::Text("Manual only");
+    ImGui::Spacing();
+    ImGui::TextWrapped("Research data is informational, may be delayed or unavailable, and is not financial advice. CSV import remains the primary portfolio update workflow.");
+    ImGui::TextColored(UiTheme::MutedText, "Yahoo Finance quote cache metadata is stored locally for convenience only.");
     ImGui::EndChild();
 
     ImGui::Spacing();

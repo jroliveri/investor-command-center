@@ -30,6 +30,7 @@ Investor Command Center is a private Windows desktop application for manually tr
 - Dividend records with create, edit, delete, search, and totals
 - Goal records with create, edit, delete, search, and progress bars
 - Watchlist records with create, edit, delete, search, and priority badges
+- Stock Research page with explicit Yahoo Finance informational quote fetches
 - Holdings CSV import with local preview, mapping, validation, and duplicate blocking
 - SQLite setup and migrations
 - Basic validation
@@ -37,7 +38,7 @@ Investor Command Center is a private Windows desktop application for manually tr
 
 ## Out of Scope
 
-- Stock price APIs
+- Automatic portfolio price sync
 - Brokerage account connections
 - Cloud sync
 - Login or account management

@@ -34,6 +34,8 @@ const char* sectionTitle(AppSection section)
         return "Watchlist";
     case AppSection::ImportCsv:
         return "Import CSV";
+    case AppSection::StockResearch:
+        return "Stock Research";
     case AppSection::Reports:
         return "Reports";
     case AppSection::Settings:
@@ -43,9 +45,9 @@ const char* sectionTitle(AppSection section)
     return "Dashboard";
 }
 
-const std::array<SectionInfo, 10>& allSections()
+const std::array<SectionInfo, 11>& allSections()
 {
-    static const std::array<SectionInfo, 10> sections {{
+    static const std::array<SectionInfo, 11> sections {{
         { AppSection::Dashboard, "Dashboard" },
         { AppSection::Accounts, "Accounts" },
         { AppSection::Holdings, "Holdings" },
@@ -54,6 +56,7 @@ const std::array<SectionInfo, 10>& allSections()
         { AppSection::Goals, "Goals" },
         { AppSection::Watchlist, "Watchlist" },
         { AppSection::ImportCsv, "Import CSV" },
+        { AppSection::StockResearch, "Stock Research" },
         { AppSection::Reports, "Reports" },
         { AppSection::Settings, "Settings" },
     }};

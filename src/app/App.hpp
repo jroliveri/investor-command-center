@@ -12,11 +12,14 @@
 #include "repositories/GoalRepository.hpp"
 #include "repositories/HoldingRepository.hpp"
 #include "repositories/ImportBatchRepository.hpp"
+#include "repositories/MarketQuoteCacheRepository.hpp"
 #include "repositories/PortfolioSnapshotRepository.hpp"
 #include "repositories/TransactionRepository.hpp"
 #include "repositories/WatchlistRepository.hpp"
 #include "services/CsvImportService.hpp"
+#include "services/MarketDataService.hpp"
 #include "services/TransactionService.hpp"
+#include "services/YahooFinanceProvider.hpp"
 #include "ui/AccountsView.hpp"
 #include "ui/DashboardView.hpp"
 #include "ui/DividendsView.hpp"
@@ -24,6 +27,7 @@
 #include "ui/HoldingsView.hpp"
 #include "ui/ImportCsvView.hpp"
 #include "ui/SettingsView.hpp"
+#include "ui/StockResearchView.hpp"
 #include "ui/TransactionsView.hpp"
 #include "ui/WatchlistView.hpp"
 
@@ -44,6 +48,7 @@ private:
     bool menuSectionItem(AppSection section, const char* label);
     void requestManualSnapshot();
     void createManualSnapshot(bool replaceExisting);
+    void refreshSelectedResearchSymbol();
     void renderTopMenuBar();
     void renderAccountColumn();
     void renderAccountInfoPanel();
@@ -64,11 +69,14 @@ private:
     std::unique_ptr<DividendRepository> dividendRepository_;
     std::unique_ptr<GoalRepository> goalRepository_;
     std::unique_ptr<WatchlistRepository> watchlistRepository_;
+    std::unique_ptr<MarketQuoteCacheRepository> marketQuoteCacheRepository_;
     std::unique_ptr<PortfolioSnapshotRepository> portfolioSnapshotRepository_;
     std::unique_ptr<DashboardLayoutRepository> dashboardLayoutRepository_;
     std::unique_ptr<DashboardChartSettingsRepository> dashboardChartSettingsRepository_;
     std::unique_ptr<AppSettingsRepository> appSettingsRepository_;
     std::unique_ptr<CapitalGainAllocationRepository> capitalGainAllocationRepository_;
+    std::unique_ptr<YahooFinanceProvider> yahooFinanceProvider_;
+    std::unique_ptr<MarketDataService> marketDataService_;
     AppState state_;
     DashboardView dashboardView_;
     AccountsView accountsView_;
@@ -78,10 +86,12 @@ private:
     GoalsView goalsView_;
     WatchlistView watchlistView_;
     ImportCsvView importCsvView_;
+    StockResearchView stockResearchView_;
     SettingsView settingsView_;
     std::string startupError_;
     bool shouldExit_ = false;
     bool showAboutPopup_ = false;
     bool showPrivacyPopup_ = false;
+    bool showResearchDisclaimerPopup_ = false;
     bool showManualSnapshotReplacePopup_ = false;
 };

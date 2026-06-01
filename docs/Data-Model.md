@@ -244,6 +244,42 @@ The Allocation panel can display current allocation by asset type, account, or t
 
 Unknown or incomplete chart settings fall back to safe defaults. Chart preferences do not affect portfolio calculations or stored financial records.
 
+## market_quote_cache
+
+```sql
+CREATE TABLE IF NOT EXISTS market_quote_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL UNIQUE,
+    provider TEXT NOT NULL,
+    company_name TEXT,
+    current_price REAL,
+    previous_close REAL,
+    open_price REAL,
+    day_high REAL,
+    day_low REAL,
+    fifty_two_week_high REAL,
+    fifty_two_week_low REAL,
+    market_cap REAL,
+    volume REAL,
+    average_volume REAL,
+    pe_ratio REAL,
+    eps REAL,
+    dividend_yield REAL,
+    beta REAL,
+    currency TEXT,
+    exchange_name TEXT,
+    quote_time TEXT,
+    fetched_at TEXT NOT NULL,
+    raw_status TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
+
+Market quote cache records store the latest user-requested Stock Research quote by symbol. The first provider is Yahoo Finance. Cached quotes are convenience metadata only; they are not brokerage-verified account records and do not update holdings, account balances, dashboard totals, or CSV-imported data.
+
+If an online research fetch fails and a cached quote exists, the app may show the cached quote with a warning. Missing Yahoo Finance fields are displayed as `N/A`.
+
 ## app_settings
 
 ```sql
@@ -370,6 +406,7 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Dashboard chart preferences are loaded from `dashboard_chart_settings` and only affect chart display mode, range, and chart type.
 - Theme preference is loaded from `app_settings` and only affects local UI styling.
 - Capital gain allocation rules are loaded from `capital_gain_allocation_rules` and only affect the local transaction allocation helper.
+- Market quote cache records are used by Stock Research only and do not affect portfolio calculations.
 - Dividend totals are calculated in C++ from `dividends.date_received` using `YYYY-MM` and `YYYY` prefixes.
 - Realized gain/loss totals are calculated from sell transactions.
 - Daily, monthly, and yearly gain/loss are calculated from portfolio snapshots.
@@ -382,3 +419,9 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 Holdings CSV import is the normal update workflow. Valid rows are upserted by `account_id + ticker`. Existing active holdings for the same account that are missing from the latest import are marked `Inactive`, not hard deleted. A successful CSV import creates an `import_batches` record and automatically creates or updates a CSV import portfolio snapshot for the import date.
 
 Source CSV files remain local and are not copied into the repository by default.
+
+## Stock Research
+
+Stock Research is informational and currently uses Yahoo Finance as the first market data source behind a provider abstraction. The UI calls `MarketDataService`; network calls are isolated in `YahooFinanceProvider` and `HttpClient`.
+
+Yahoo Finance data may be delayed, unavailable, rate-limited, incomplete, or changed without notice. Research data does not provide financial advice, tax advice, trading recommendations, brokerage sync, or automatic portfolio price updates.

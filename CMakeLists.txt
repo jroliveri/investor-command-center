@@ -90,11 +90,14 @@ set(APP_SOURCES
     src/models/DashboardWidget.hpp
     src/models/Holding.hpp
     src/models/ImportBatch.hpp
+    src/models/MarketQuote.hpp
     src/models/PortfolioSnapshot.hpp
     src/models/Transaction.hpp
     src/models/Dividend.hpp
     src/models/Goal.hpp
     src/models/WatchlistItem.hpp
+    src/net/HttpClient.hpp
+    src/net/HttpClient.cpp
     src/repositories/AccountRepository.hpp
     src/repositories/AccountRepository.cpp
     src/repositories/AppSettingsRepository.hpp
@@ -109,6 +112,8 @@ set(APP_SOURCES
     src/repositories/HoldingRepository.cpp
     src/repositories/ImportBatchRepository.hpp
     src/repositories/ImportBatchRepository.cpp
+    src/repositories/MarketQuoteCacheRepository.hpp
+    src/repositories/MarketQuoteCacheRepository.cpp
     src/repositories/PortfolioSnapshotRepository.hpp
     src/repositories/PortfolioSnapshotRepository.cpp
     src/repositories/TransactionRepository.hpp
@@ -135,6 +140,12 @@ set(APP_SOURCES
     src/services/TransactionService.cpp
     src/services/HoldingsCsvImport.hpp
     src/services/HoldingsCsvImport.cpp
+    src/services/MarketDataProvider.hpp
+    src/services/MarketDataProvider.cpp
+    src/services/MarketDataService.hpp
+    src/services/MarketDataService.cpp
+    src/services/YahooFinanceProvider.hpp
+    src/services/YahooFinanceProvider.cpp
     src/ui/DashboardView.hpp
     src/ui/DashboardView.cpp
     src/ui/AccountsView.hpp
@@ -153,6 +164,8 @@ set(APP_SOURCES
     src/ui/SettingsView.cpp
     src/ui/ImportCsvView.hpp
     src/ui/ImportCsvView.cpp
+    src/ui/StockResearchView.hpp
+    src/ui/StockResearchView.cpp
     src/ui/widgets/DatePicker.hpp
     src/ui/widgets/DatePicker.cpp
     src/ui/widgets/TerminalPanel.hpp
@@ -180,6 +193,7 @@ target_link_libraries(InvestorCommandCenter PRIVATE
     dwmapi
     imm32
     comdlg32
+    winhttp
 )
 
 target_compile_definitions(InvestorCommandCenter PRIVATE

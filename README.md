@@ -4,7 +4,7 @@ Investor Command Center is a personal Windows desktop investing tracker written 
 
 Subtitle: Long-term progress beats short-term noise.
 
-This app does not connect to brokerage accounts, does not sync to the cloud, does not call stock price APIs, and does not provide financial advice or buy/sell recommendations.
+This app does not connect to brokerage accounts, does not sync to the cloud, and does not provide financial advice or buy/sell recommendations. Stock Research can fetch informational Yahoo Finance data only when explicitly requested; CSV import remains the primary portfolio update workflow.
 
 ## Project Intent
 
@@ -18,7 +18,7 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 
 - Native Win32 desktop shell using Dear ImGui with a DirectX 11 renderer
 - Trading-terminal inspired desktop shell with compact top menu navigation, account information column, and modular workspace panels
-- Top menu access for Dashboard, Accounts, Holdings, Transactions, Dividends, Goals, Watchlist, Reports, Import CSV, and Settings
+- Top menu access for Dashboard, Accounts, Holdings, Transactions, Dividends, Goals, Watchlist, Stock Research, Reports, Import CSV, and Settings
 - Active page shown in the workspace header and account information rail
 - Dashboard performance panels based on local accounts, holdings, transactions, dividends, and portfolio snapshots
 - Customizable Dashboard layout with local reorder, hide/show, and reset controls
@@ -31,6 +31,8 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 - Dividend create, edit, delete, and search workflow with month, year, and lifetime totals
 - Goal create, edit, delete, and search workflow with progress bars and optional linked account value tracking
 - Watchlist create, edit, delete, and search workflow with priority badges
+- Research menu with a Stock Research page backed by a Yahoo Finance market data provider abstraction
+- Local market quote cache for user-requested research lookups
 - Reusable calendar picker controls for transaction, dividend, and goal date entry
 - Holdings CSV import with local file selection, column mapping, preview, validation, repeated upsert imports, and import summaries
 - Import batch tracking for local CSV import metadata
@@ -69,6 +71,8 @@ Date fields use compact calendar picker controls and are stored in SQLite as `YY
 Goals can use either a manually entered current amount or a linked account value. Linked goal progress is calculated at runtime from the selected account's local calculated balance: active holdings market value plus account cash balance. This is a tracking convenience only and is not financial advice.
 
 Capital gains allocation rules are user-defined Settings records. For a Sell transaction with a positive realized gain, the Transactions page can show an allocation plan based on those saved percentages. This is a display/calculation helper only; it does not move money, create transfers, provide tax advice, or provide financial advice.
+
+Stock Research is informational only. The Research menu can fetch a quote for a ticker from Yahoo Finance, display available quote/metric fields, and cache the latest fetched result locally for convenience. Research data may be delayed, unavailable, rate-limited, or incomplete. It does not update dashboard holding prices unless a future explicit workflow is added.
 
 ## Build Requirements
 
@@ -155,13 +159,16 @@ See `docs/Privacy-And-Local-Data.md` for the full data-safety guidance.
 
 CSV imports are local-only. Do not store real brokerage CSV files in the repository. See `docs/CSV-Import.md`.
 
+Research quote cache records are stored locally in SQLite and are not brokerage-verified records. They should not be treated as authoritative account data.
+
 ## License
 
 Investor Command Center is released under the MIT License. See `LICENSE`.
 
 ## Current Limitations
 
-- Prices are manual fields; there are no market data APIs.
+- Dashboard and holding prices remain local/manual unless updated through CSV import or direct user entry; Stock Research does not automatically update portfolio prices.
+- Yahoo Finance research endpoints are unofficial/public-facing and may fail, rate-limit, or change.
 - Reports is a placeholder section.
 - CSV export buttons are placeholders.
 - CSV import currently targets holdings only; transaction CSV import is planned.

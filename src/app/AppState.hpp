@@ -9,6 +9,7 @@
 #include "models/ImportBatch.hpp"
 #include "models/DashboardWidget.hpp"
 #include "models/DashboardChartSetting.hpp"
+#include "models/MarketQuote.hpp"
 #include "models/PortfolioSnapshot.hpp"
 #include "models/Transaction.hpp"
 #include "models/WatchlistItem.hpp"
@@ -26,6 +27,7 @@ enum class AppSection {
     Goals,
     Watchlist,
     ImportCsv,
+    StockResearch,
     Reports,
     Settings
 };
@@ -48,6 +50,7 @@ public:
     std::vector<ImportBatch> importBatches;
     std::vector<DashboardWidget> dashboardWidgets;
     std::vector<DashboardChartSetting> dashboardChartSettings;
+    std::vector<MarketQuote> marketQuoteCache;
     std::vector<CapitalGainAllocationRule> capitalGainAllocationRules;
     std::string themeKey = "dark_command_center";
     std::string statusMessage;
@@ -58,4 +61,4 @@ public:
 };
 
 const char* sectionTitle(AppSection section);
-const std::array<SectionInfo, 10>& allSections();
+const std::array<SectionInfo, 11>& allSections();

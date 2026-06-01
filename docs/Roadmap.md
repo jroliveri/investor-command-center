@@ -21,6 +21,8 @@
 - Dashboard chart panels with local data selector, time range, chart type controls, and persisted chart preferences
 - Trading-terminal inspired shell with top menu navigation, account information column, compact panels, and light terminal theme
 - All main app sections reachable from the top menu bar without side navigation
+- Research menu with first-pass Stock Research using a Yahoo Finance provider abstraction
+- Local quote cache for user-requested research lookups
 - Portfolio snapshots
 - Buy/sell transaction foundation using average cost basis
 - Reusable calendar picker controls for editable date fields
@@ -42,6 +44,8 @@
 - Import history view
 - Full transaction reconciliation for edited/deleted buy and sell activity
 - Contribution-adjusted performance calculations
+- Historical price charting in Stock Research
+- Optional explicit workflow to apply researched prices to local holdings
 
 ## Later
 
@@ -50,12 +54,14 @@
 - Optional exportable reports
 - FIFO/LIFO and tax-lot cost basis options
 - Deeper realized/unrealized gain reports
+- Additional market data providers behind the provider abstraction
 
 ## Not Planned For This Private MVP
 
 - Brokerage integrations
 - Cloud sync
 - Login
-- Stock price APIs
+- Automatic brokerage price sync
+- Trading recommendations
 - Buy/sell recommendations
 - Financial advice

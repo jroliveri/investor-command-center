@@ -49,12 +49,15 @@ bool App::initialize()
     dividendRepository_ = std::make_unique<DividendRepository>(database_);
     goalRepository_ = std::make_unique<GoalRepository>(database_);
     watchlistRepository_ = std::make_unique<WatchlistRepository>(database_);
+    marketQuoteCacheRepository_ = std::make_unique<MarketQuoteCacheRepository>(database_);
     portfolioSnapshotRepository_ = std::make_unique<PortfolioSnapshotRepository>(database_);
     dashboardLayoutRepository_ = std::make_unique<DashboardLayoutRepository>(database_);
     dashboardChartSettingsRepository_ = std::make_unique<DashboardChartSettingsRepository>(database_);
     appSettingsRepository_ = std::make_unique<AppSettingsRepository>(database_);
     capitalGainAllocationRepository_ = std::make_unique<CapitalGainAllocationRepository>(database_);
     csvImportService_ = std::make_unique<CsvImportService>(database_, *holdingRepository_, *importBatchRepository_, *portfolioSnapshotRepository_);
+    yahooFinanceProvider_ = std::make_unique<YahooFinanceProvider>();
+    marketDataService_ = std::make_unique<MarketDataService>(*yahooFinanceProvider_, *marketQuoteCacheRepository_);
 
     std::string layoutError;
     if (!dashboardLayoutRepository_->ensureDefaults(layoutError)) {
@@ -244,6 +247,12 @@ void App::createManualSnapshot(bool replaceExisting)
     state_.setStatus("Manual portfolio snapshot saved.");
 }
 
+void App::refreshSelectedResearchSymbol()
+{
+    navigateTo(AppSection::StockResearch);
+    stockResearchView_.refreshCurrent(*marketDataService_, state_);
+}
+
 void App::renderTopMenuBar()
 {
     if (!ImGui::BeginMainMenuBar()) {
@@ -271,6 +280,7 @@ void App::renderTopMenuBar()
         menuSectionItem(AppSection::Dividends, "Dividends");
         menuSectionItem(AppSection::Goals, "Goals");
         menuSectionItem(AppSection::Watchlist, "Watchlist");
+        menuSectionItem(AppSection::StockResearch, "Stock Research");
         menuSectionItem(AppSection::Reports, "Reports");
         menuSectionItem(AppSection::Settings, "Settings");
         ImGui::EndMenu();
@@ -325,6 +335,24 @@ void App::renderTopMenuBar()
         ImGui::BeginDisabled();
         ImGui::MenuItem("Backup");
         ImGui::EndDisabled();
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Research")) {
+        menuSectionItem(AppSection::StockResearch, "Stock Research");
+        if (ImGui::MenuItem("Refresh Selected Symbol")) {
+            refreshSelectedResearchSymbol();
+        }
+        ImGui::BeginDisabled();
+        ImGui::MenuItem("Refresh Dashboard Prices");
+        ImGui::EndDisabled();
+        if (ImGui::MenuItem("Research Settings")) {
+            navigateTo(AppSection::Settings);
+            state_.setStatus("Research settings are shown in Settings. Dashboard price refresh remains manual/off.");
+        }
+        if (ImGui::MenuItem("Data Source / Disclaimer")) {
+            showResearchDisclaimerPopup_ = true;
+        }
         ImGui::EndMenu();
     }
 
@@ -481,6 +509,9 @@ void App::renderCurrentSection()
     case AppSection::ImportCsv:
         importCsvView_.render(state_, *csvImportService_, reload);
         break;
+    case AppSection::StockResearch:
+        stockResearchView_.render(state_, *marketDataService_, *watchlistRepository_, reload);
+        break;
     case AppSection::Reports:
         renderPlaceholder("Reports", "Reports will summarize local records without advice or recommendations.");
         break;
@@ -515,10 +546,28 @@ void App::renderAppPopups()
     if (ImGui::BeginPopupModal("Privacy And Local Data", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("Privacy / Local Data");
         ImGui::Separator();
-        ImGui::TextWrapped("Investor Command Center stores personal investing data in a local SQLite database. It does not connect to brokerage accounts, cloud services, or stock price APIs.");
+        ImGui::TextWrapped("Investor Command Center stores personal investing data in a local SQLite database. It does not connect to brokerage accounts or cloud services. Stock Research can fetch informational Yahoo Finance data only when explicitly requested.");
         ImGui::Spacing();
         ImGui::TextColored(UiTheme::Amber, "Do not commit databases, CSV files, exports, backups, or logs.");
         ImGui::TextColored(UiTheme::MutedText, "This app is for personal tracking and does not provide financial advice.");
+        if (ImGui::Button("Close", ImVec2(100.0f, 0.0f))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    if (showResearchDisclaimerPopup_) {
+        ImGui::OpenPopup("Research Data Source");
+        showResearchDisclaimerPopup_ = false;
+    }
+    if (ImGui::BeginPopupModal("Research Data Source", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Research Data Source");
+        ImGui::Separator();
+        ImGui::TextWrapped("Stock Research uses Yahoo Finance as the first informational market data source. Yahoo Finance endpoints may be delayed, unavailable, rate-limited, or changed without notice.");
+        ImGui::Spacing();
+        ImGui::TextWrapped("Research data is fetched only when explicitly requested. It does not update dashboard holdings prices, replace CSV imports, connect to brokerage accounts, or provide financial advice.");
+        ImGui::Spacing();
+        ImGui::TextColored(UiTheme::Amber, "CSV import remains the primary portfolio update workflow.");
         if (ImGui::Button("Close", ImVec2(100.0f, 0.0f))) {
             ImGui::CloseCurrentPopup();
         }

@@ -395,7 +395,44 @@ CREATE TABLE IF NOT EXISTS dashboard_chart_settings (
 );
 )sql";
 
-    return executeMigration(database, 14, "create_dashboard_chart_settings", dashboardChartSettingsMigration, error);
+    if (!executeMigration(database, 14, "create_dashboard_chart_settings", dashboardChartSettingsMigration, error)) {
+        return false;
+    }
+
+    const char* marketQuoteCacheMigration = R"sql(
+CREATE TABLE IF NOT EXISTS market_quote_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL UNIQUE,
+    provider TEXT NOT NULL,
+    company_name TEXT,
+    current_price REAL,
+    previous_close REAL,
+    open_price REAL,
+    day_high REAL,
+    day_low REAL,
+    fifty_two_week_high REAL,
+    fifty_two_week_low REAL,
+    market_cap REAL,
+    volume REAL,
+    average_volume REAL,
+    pe_ratio REAL,
+    eps REAL,
+    dividend_yield REAL,
+    beta REAL,
+    currency TEXT,
+    exchange_name TEXT,
+    quote_time TEXT,
+    fetched_at TEXT NOT NULL,
+    raw_status TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_market_quote_cache_provider_symbol
+    ON market_quote_cache(provider, symbol);
+)sql";
+
+    return executeMigration(database, 15, "create_market_quote_cache", marketQuoteCacheMigration, error);
 }
 
 }

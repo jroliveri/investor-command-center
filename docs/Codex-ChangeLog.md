@@ -1,5 +1,65 @@
 # Codex Change Log
 
+## 2026-06-01 Research Menu And Yahoo Finance Foundation
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Product-Brief.md`
+- `docs/Release-Notes-Guide.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/app/AppState.cpp`
+- `src/db/Migrations.cpp`
+- `src/models/MarketQuote.hpp`
+- `src/net/HttpClient.hpp`
+- `src/net/HttpClient.cpp`
+- `src/repositories/MarketQuoteCacheRepository.hpp`
+- `src/repositories/MarketQuoteCacheRepository.cpp`
+- `src/services/MarketDataProvider.hpp`
+- `src/services/MarketDataProvider.cpp`
+- `src/services/MarketDataService.hpp`
+- `src/services/MarketDataService.cpp`
+- `src/services/YahooFinanceProvider.hpp`
+- `src/services/YahooFinanceProvider.cpp`
+- `src/ui/SettingsView.cpp`
+- `src/ui/StockResearchView.hpp`
+- `src/ui/StockResearchView.cpp`
+
+### Behavior Added
+
+- Added a top-level `Research` menu with Stock Research, Refresh Selected Symbol, a disabled dashboard price refresh placeholder, Research Settings, and Data Source / Disclaimer.
+- Added a Stock Research page with ticker input, fetch action, data source label, last fetched timestamp, quote summary, key metrics, history placeholder, and local watchlist shortcut.
+- Added a `MarketDataProvider` abstraction plus `MarketDataService` so UI code does not call Yahoo Finance directly.
+- Added a Windows-first WinHTTP client for explicit HTTPS research requests.
+- Added `YahooFinanceProvider` as the first market data provider, with a quote endpoint attempt and chart metadata fallback when the public quote endpoint is rejected or rate-limited.
+- Added `market_quote_cache` migration and repository for locally cached, user-requested quote metadata.
+- Added cached quote fallback messaging when online fetch fails but a local cached quote exists.
+- Added Research Settings copy in Settings, keeping dashboard price refresh off/manual-only for this pass.
+- Kept CSV import as the primary portfolio update workflow; Stock Research does not update holdings, dashboard prices, or account calculations.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Confirmed Yahoo Finance quote endpoint can reject unauthenticated requests and the chart endpoint can return metadata, which the provider uses as fallback.
+- Ran a temporary market research smoke test for Yahoo Finance provider fallback, quote cache persistence, and invalid-symbol error handling.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, CSV/import/export/backup/log folders, `.vs`, `out`, `build`, object files, and `CMakeUserPresets.json` are not staged.
+
+### Known Issues
+
+- Yahoo Finance public endpoints are unofficial and may reject, rate-limit, or change without notice.
+- Historical price charting is still a placeholder.
+- Stock Research quote data is informational only and does not update local holdings prices.
+- Interactive desktop click-through should still be performed with local test symbols.
+
 ## 2026-06-01 Accounts Goals Watchlist Row Actions
 
 ### Changed Files

@@ -69,6 +69,7 @@ Investor Command Center stores personal investing data locally. Do not include r
 - No cloud sync
 - No financial advice
 - Prices and records are manually managed unless otherwise noted
+- Research data, when present, is informational only
 ```
 
 ## Personal-Use Disclaimer
@@ -152,6 +153,7 @@ Investor Command Center stores personal investing data locally. Do not include r
 
 - No brokerage integration.
 - No cloud sync.
-- No stock price APIs.
+- No automatic portfolio price sync.
+- Stock Research data is informational only.
 - No financial advice.
 - Holdings CSV import is supported first; transaction CSV import is future work.
