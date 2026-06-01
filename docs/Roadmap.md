@@ -23,6 +23,7 @@
 - All main app sections reachable from the top menu bar without side navigation
 - Research menu with first-pass Stock Research using a Yahoo Finance provider abstraction
 - Local quote cache for user-requested research lookups
+- Polished Stock Research quote panels with live/fallback/cached/error status labels
 - Manual dashboard current-price refresh using market data as a display-only overlay
 - Portfolio snapshots
 - Buy/sell transaction foundation using average cost basis

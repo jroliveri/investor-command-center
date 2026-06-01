@@ -1,5 +1,50 @@
 # Codex Change Log
 
+## 2026-06-01 Stock Research UI Polish
+
+### Changed Files
+
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/db/Migrations.cpp`
+- `src/models/MarketQuote.hpp`
+- `src/repositories/MarketQuoteCacheRepository.cpp`
+- `src/services/YahooFinanceProvider.cpp`
+- `src/ui/StockResearchView.hpp`
+- `src/ui/StockResearchView.cpp`
+
+### Behavior Added
+
+- Redesigned the Stock Research page with a compact ticker toolbar and polished 2x2 terminal panel layout.
+- Added visible toolbar actions for Search / Fetch, Add to Watchlist, Refresh, and Clear.
+- Uppercased ticker input as the user types.
+- Added a research status strip with provider, last fetched time, quote time, and Live/Cached/Fallback/Error status badge.
+- Added warning-style messaging when cached or fallback data is shown because live quote data was unavailable or limited.
+- Made Current Price prominent in the Quote Summary panel.
+- Added price change dollar and price change percent fields when Yahoo Finance returns them.
+- Added clean `N/A` formatting for unavailable quote metrics.
+- Added compact large-number formatting for market cap, volume, and average volume.
+- Improved the Price / History placeholder copy while keeping historical range buttons disabled.
+- Improved Notes / Watchlist messaging so it is clear the action only updates the local watchlist and does not create trades, alerts, recommendations, or brokerage actions.
+- Added `price_change` and `price_change_percent` to the local market quote cache through a safe migration.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran the temporary market research provider/cache smoke test.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, CSV/import/export/backup/log folders, `.vs`, `out`, `build`, object files, and `CMakeUserPresets.json` are not staged.
+
+### Known Issues
+
+- Historical charting remains a placeholder.
+- Yahoo Finance public endpoints can be delayed, unavailable, rate-limited, incomplete, or changed without notice.
+- Interactive desktop click-through should still be performed with local test symbols.
+
 ## 2026-06-01 Dashboard Current Price Refresh Foundation
 
 ### Changed Files

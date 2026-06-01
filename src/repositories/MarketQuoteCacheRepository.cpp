@@ -55,26 +55,28 @@ MarketQuote readQuote(sqlite3_stmt* statement)
     quote.provider = textColumn(statement, 2);
     quote.companyName = textColumn(statement, 3);
     quote.currentPrice = optionalDoubleColumn(statement, 4);
-    quote.previousClose = optionalDoubleColumn(statement, 5);
-    quote.openPrice = optionalDoubleColumn(statement, 6);
-    quote.dayHigh = optionalDoubleColumn(statement, 7);
-    quote.dayLow = optionalDoubleColumn(statement, 8);
-    quote.fiftyTwoWeekHigh = optionalDoubleColumn(statement, 9);
-    quote.fiftyTwoWeekLow = optionalDoubleColumn(statement, 10);
-    quote.marketCap = optionalDoubleColumn(statement, 11);
-    quote.volume = optionalDoubleColumn(statement, 12);
-    quote.averageVolume = optionalDoubleColumn(statement, 13);
-    quote.peRatio = optionalDoubleColumn(statement, 14);
-    quote.eps = optionalDoubleColumn(statement, 15);
-    quote.dividendYield = optionalDoubleColumn(statement, 16);
-    quote.beta = optionalDoubleColumn(statement, 17);
-    quote.currency = textColumn(statement, 18);
-    quote.exchangeName = textColumn(statement, 19);
-    quote.quoteTime = textColumn(statement, 20);
-    quote.fetchedAt = textColumn(statement, 21);
-    quote.rawStatus = textColumn(statement, 22);
-    quote.createdAt = textColumn(statement, 23);
-    quote.updatedAt = textColumn(statement, 24);
+    quote.priceChangeDollar = optionalDoubleColumn(statement, 5);
+    quote.priceChangePercent = optionalDoubleColumn(statement, 6);
+    quote.previousClose = optionalDoubleColumn(statement, 7);
+    quote.openPrice = optionalDoubleColumn(statement, 8);
+    quote.dayHigh = optionalDoubleColumn(statement, 9);
+    quote.dayLow = optionalDoubleColumn(statement, 10);
+    quote.fiftyTwoWeekHigh = optionalDoubleColumn(statement, 11);
+    quote.fiftyTwoWeekLow = optionalDoubleColumn(statement, 12);
+    quote.marketCap = optionalDoubleColumn(statement, 13);
+    quote.volume = optionalDoubleColumn(statement, 14);
+    quote.averageVolume = optionalDoubleColumn(statement, 15);
+    quote.peRatio = optionalDoubleColumn(statement, 16);
+    quote.eps = optionalDoubleColumn(statement, 17);
+    quote.dividendYield = optionalDoubleColumn(statement, 18);
+    quote.beta = optionalDoubleColumn(statement, 19);
+    quote.currency = textColumn(statement, 20);
+    quote.exchangeName = textColumn(statement, 21);
+    quote.quoteTime = textColumn(statement, 22);
+    quote.fetchedAt = textColumn(statement, 23);
+    quote.rawStatus = textColumn(statement, 24);
+    quote.createdAt = textColumn(statement, 25);
+    quote.updatedAt = textColumn(statement, 26);
     return quote;
 }
 
@@ -95,7 +97,7 @@ std::optional<MarketQuote> MarketQuoteCacheRepository::findBySymbol(const std::s
 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
-            "SELECT id, symbol, provider, company_name, current_price, previous_close, open_price, day_high, day_low, "
+            "SELECT id, symbol, provider, company_name, current_price, price_change, price_change_percent, previous_close, open_price, day_high, day_low, "
             "fifty_two_week_high, fifty_two_week_low, market_cap, volume, average_volume, pe_ratio, eps, "
             "dividend_yield, beta, currency, exchange_name, quote_time, fetched_at, raw_status, created_at, updated_at "
             "FROM market_quote_cache WHERE symbol = ? LIMIT 1;",
@@ -132,12 +134,13 @@ bool MarketQuoteCacheRepository::upsert(const MarketQuote& quote, std::string& e
 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
-            "INSERT INTO market_quote_cache(symbol, provider, company_name, current_price, previous_close, open_price, "
+            "INSERT INTO market_quote_cache(symbol, provider, company_name, current_price, price_change, price_change_percent, previous_close, open_price, "
             "day_high, day_low, fifty_two_week_high, fifty_two_week_low, market_cap, volume, average_volume, pe_ratio, "
             "eps, dividend_yield, beta, currency, exchange_name, quote_time, fetched_at, raw_status, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(symbol) DO UPDATE SET "
             "provider = excluded.provider, company_name = excluded.company_name, current_price = excluded.current_price, "
+            "price_change = excluded.price_change, price_change_percent = excluded.price_change_percent, "
             "previous_close = excluded.previous_close, open_price = excluded.open_price, day_high = excluded.day_high, "
             "day_low = excluded.day_low, fifty_two_week_high = excluded.fifty_two_week_high, "
             "fifty_two_week_low = excluded.fifty_two_week_low, market_cap = excluded.market_cap, volume = excluded.volume, "
@@ -154,26 +157,28 @@ bool MarketQuoteCacheRepository::upsert(const MarketQuote& quote, std::string& e
     sqlite3_bind_text(statement, 2, quote.provider.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(statement, 3, quote.companyName.c_str(), -1, SQLITE_TRANSIENT);
     bindOptionalDouble(statement, 4, quote.currentPrice);
-    bindOptionalDouble(statement, 5, quote.previousClose);
-    bindOptionalDouble(statement, 6, quote.openPrice);
-    bindOptionalDouble(statement, 7, quote.dayHigh);
-    bindOptionalDouble(statement, 8, quote.dayLow);
-    bindOptionalDouble(statement, 9, quote.fiftyTwoWeekHigh);
-    bindOptionalDouble(statement, 10, quote.fiftyTwoWeekLow);
-    bindOptionalDouble(statement, 11, quote.marketCap);
-    bindOptionalDouble(statement, 12, quote.volume);
-    bindOptionalDouble(statement, 13, quote.averageVolume);
-    bindOptionalDouble(statement, 14, quote.peRatio);
-    bindOptionalDouble(statement, 15, quote.eps);
-    bindOptionalDouble(statement, 16, quote.dividendYield);
-    bindOptionalDouble(statement, 17, quote.beta);
-    sqlite3_bind_text(statement, 18, quote.currency.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 19, quote.exchangeName.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 20, quote.quoteTime.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 21, quote.fetchedAt.empty() ? timestamp.c_str() : quote.fetchedAt.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 22, quote.rawStatus.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 23, timestamp.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 24, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    bindOptionalDouble(statement, 5, quote.priceChangeDollar);
+    bindOptionalDouble(statement, 6, quote.priceChangePercent);
+    bindOptionalDouble(statement, 7, quote.previousClose);
+    bindOptionalDouble(statement, 8, quote.openPrice);
+    bindOptionalDouble(statement, 9, quote.dayHigh);
+    bindOptionalDouble(statement, 10, quote.dayLow);
+    bindOptionalDouble(statement, 11, quote.fiftyTwoWeekHigh);
+    bindOptionalDouble(statement, 12, quote.fiftyTwoWeekLow);
+    bindOptionalDouble(statement, 13, quote.marketCap);
+    bindOptionalDouble(statement, 14, quote.volume);
+    bindOptionalDouble(statement, 15, quote.averageVolume);
+    bindOptionalDouble(statement, 16, quote.peRatio);
+    bindOptionalDouble(statement, 17, quote.eps);
+    bindOptionalDouble(statement, 18, quote.dividendYield);
+    bindOptionalDouble(statement, 19, quote.beta);
+    sqlite3_bind_text(statement, 20, quote.currency.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 21, quote.exchangeName.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 22, quote.quoteTime.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 23, quote.fetchedAt.empty() ? timestamp.c_str() : quote.fetchedAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 24, quote.rawStatus.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 25, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 26, timestamp.c_str(), -1, SQLITE_TRANSIENT);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());

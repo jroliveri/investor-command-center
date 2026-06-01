@@ -259,6 +259,8 @@ MarketQuote quoteFromQuoteObject(const std::string& object, const std::string& f
     }
     quote.companyName = firstAvailableString(object, { "longName", "shortName", "displayName" });
     quote.currentPrice = firstAvailableNumber(object, { "regularMarketPrice" });
+    quote.priceChangeDollar = firstAvailableNumber(object, { "regularMarketChange" });
+    quote.priceChangePercent = firstAvailableNumber(object, { "regularMarketChangePercent" });
     quote.previousClose = firstAvailableNumber(object, { "regularMarketPreviousClose", "previousClose" });
     quote.openPrice = firstAvailableNumber(object, { "regularMarketOpen", "open" });
     quote.dayHigh = firstAvailableNumber(object, { "regularMarketDayHigh", "dayHigh" });

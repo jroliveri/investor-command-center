@@ -10,6 +10,8 @@ struct MarketQuote {
     std::string provider = "Yahoo Finance";
     std::string companyName;
     std::optional<double> currentPrice;
+    std::optional<double> priceChangeDollar;
+    std::optional<double> priceChangePercent;
     std::optional<double> previousClose;
     std::optional<double> openPrice;
     std::optional<double> dayHigh;

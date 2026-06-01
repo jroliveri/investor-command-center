@@ -33,6 +33,7 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 - Watchlist create, edit, delete, and search workflow with priority badges
 - Research menu with a Stock Research page backed by a Yahoo Finance market data provider abstraction
 - Local market quote cache for user-requested research lookups
+- Polished Stock Research panels with quote summary, key metrics, fallback/cache status, and watchlist shortcut
 - Manual Dashboard current-price refresh that uses market data quotes as a session-only display overlay
 - Reusable calendar picker controls for transaction, dividend, and goal date entry
 - Holdings CSV import with local file selection, column mapping, preview, validation, repeated upsert imports, and import summaries
@@ -73,7 +74,7 @@ Goals can use either a manually entered current amount or a linked account value
 
 Capital gains allocation rules are user-defined Settings records. For a Sell transaction with a positive realized gain, the Transactions page can show an allocation plan based on those saved percentages. This is a display/calculation helper only; it does not move money, create transfers, provide tax advice, or provide financial advice.
 
-Stock Research is informational only. The Research menu can fetch a quote for a ticker from Yahoo Finance, display available quote/metric fields, and cache the latest fetched result locally for convenience. Research data may be delayed, unavailable, rate-limited, or incomplete. The Stock Research page itself does not update local holdings.
+Stock Research is informational only. The Research menu can fetch a quote for a ticker from Yahoo Finance, display available quote/metric fields, clearly label live/fallback/cached/error status, and cache the latest fetched result locally for convenience. Research data may be delayed, unavailable, rate-limited, or incomplete. The Stock Research page itself does not update local holdings.
 
 Dashboard current-price refresh is optional and manual. It collects active holding tickers, fetches current quote prices through the market data provider, and recalculates dashboard display values using a session-only overlay. It does not change shares, cost basis, imported holdings, transactions, or snapshots. Cost basis remains local data from manual entry, transactions, or CSV import.
 

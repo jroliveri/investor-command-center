@@ -432,7 +432,16 @@ CREATE INDEX IF NOT EXISTS idx_market_quote_cache_provider_symbol
     ON market_quote_cache(provider, symbol);
 )sql";
 
-    return executeMigration(database, 15, "create_market_quote_cache", marketQuoteCacheMigration, error);
+    if (!executeMigration(database, 15, "create_market_quote_cache", marketQuoteCacheMigration, error)) {
+        return false;
+    }
+
+    const char* marketQuoteChangeMigration = R"sql(
+ALTER TABLE market_quote_cache ADD COLUMN price_change REAL;
+ALTER TABLE market_quote_cache ADD COLUMN price_change_percent REAL;
+)sql";
+
+    return executeMigration(database, 16, "add_market_quote_change_fields", marketQuoteChangeMigration, error);
 }
 
 }

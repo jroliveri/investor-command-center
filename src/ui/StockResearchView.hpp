@@ -20,6 +20,10 @@ public:
 
 private:
     void fetchSymbol(MarketDataService& marketDataService, AppState& state);
+    void clearResult(AppState& state);
+    bool addCurrentQuoteToWatchlist(AppState& state, WatchlistRepository& watchlistRepository, const std::function<void()>& reloadData);
+    void renderToolbar(AppState& state, MarketDataService& marketDataService, WatchlistRepository& watchlistRepository, const std::function<void()>& reloadData);
+    void renderStatusStrip(const MarketDataService& marketDataService);
     void renderQuoteSummary();
     void renderMetrics();
     void renderHistoryPlaceholder();

@@ -253,6 +253,8 @@ CREATE TABLE IF NOT EXISTS market_quote_cache (
     provider TEXT NOT NULL,
     company_name TEXT,
     current_price REAL,
+    price_change REAL,
+    price_change_percent REAL,
     previous_close REAL,
     open_price REAL,
     day_high REAL,
@@ -279,6 +281,8 @@ CREATE TABLE IF NOT EXISTS market_quote_cache (
 Market quote cache records store the latest user-requested Stock Research quote by symbol. The first provider is Yahoo Finance. Cached quotes are convenience metadata only; they are not brokerage-verified account records and do not update holdings, account balances, dashboard totals, or CSV-imported data.
 
 If an online research fetch fails and a cached quote exists, the app may show the cached quote with a warning. Missing Yahoo Finance fields are displayed as `N/A`.
+
+`price_change` and `price_change_percent` are optional display fields used by the Stock Research quote summary when Yahoo Finance returns them. If unavailable, the UI displays `N/A` instead of treating the data as broken.
 
 ## app_settings
 
