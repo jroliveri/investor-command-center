@@ -12,6 +12,11 @@ bool isActiveHolding(const Holding& holding)
     return holding.status.empty() || holding.status == "Active";
 }
 
+bool isActiveAccount(const Account& account)
+{
+    return account.status.empty() || account.status == "Active";
+}
+
 const Account* findAccount(const std::vector<Account>& accounts, int accountId)
 {
     for (const Account& account : accounts) {
@@ -65,16 +70,22 @@ PortfolioSummary calculateSummary(const std::vector<Account>& accounts, const st
     PortfolioSummary summary;
 
     for (const Account& account : accounts) {
+        if (!isActiveAccount(account)) {
+            continue;
+        }
         const AccountMetrics accountMetrics = calculateAccount(account, holdings);
         summary.accountBalance += accountMetrics.calculatedBalance;
         summary.cashBalance += account.cashBalance;
-        if (account.status == "Active") {
-            ++summary.activeAccounts;
-        }
+        ++summary.activeAccounts;
     }
 
     for (const Holding& holding : holdings) {
         if (!isActiveHolding(holding)) {
+            continue;
+        }
+
+        const Account* account = findAccount(accounts, holding.accountId);
+        if (account == nullptr || !isActiveAccount(*account)) {
             continue;
         }
 

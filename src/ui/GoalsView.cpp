@@ -20,6 +20,17 @@ namespace {
 
 constexpr const char* GoalEditorPopup = "Goal Editor";
 constexpr const char* DeleteGoalPopup = "Delete Goal";
+constexpr const char* NewGoalEditorPopup = "Goal Editor###goal_edit_popup_new";
+
+std::string goalEditorPopupId(int goalId)
+{
+    return "Goal Editor###goal_edit_popup_" + std::to_string(goalId);
+}
+
+std::string goalDeletePopupId(int goalId)
+{
+    return "Delete Goal###goal_delete_popup_" + std::to_string(goalId);
+}
 
 std::string lowerCopy(std::string value)
 {
@@ -94,7 +105,7 @@ void GoalsView::render(AppState& state, GoalRepository& repository, const std::f
 
     if (ImGui::Button("Add Goal")) {
         openCreate();
-        ImGui::OpenPopup(GoalEditorPopup);
+        openEditorPopup_ = true;
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
@@ -145,24 +156,34 @@ void GoalsView::render(AppState& state, GoalRepository& repository, const std::f
             ImGui::TableNextColumn();
             DatePicker::drawTableDate(goal.targetDate, true);
             ImGui::TableNextColumn();
-            ImGui::PushID(goal.id);
-            if (ImGui::SmallButton("Edit")) {
+            const std::string editButtonId = "Edit##edit_button_" + std::to_string(goal.id);
+            if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(goal);
-                ImGui::OpenPopup(GoalEditorPopup);
+                openEditorPopup_ = true;
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton("Delete")) {
+            const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(goal.id);
+            if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = goal.id;
                 deleteName_ = goal.goalName;
-                ImGui::OpenPopup(DeleteGoalPopup);
+                deletePopupId_ = goalDeletePopupId(goal.id);
+                openDeletePopup_ = true;
             }
-            ImGui::PopID();
         }
 
         ImGui::EndTable();
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No goals match the current search.");
         }
+    }
+
+    if (openEditorPopup_) {
+        ImGui::OpenPopup(editorPopupId_.empty() ? GoalEditorPopup : editorPopupId_.c_str());
+        openEditorPopup_ = false;
+    }
+    if (openDeletePopup_) {
+        ImGui::OpenPopup(deletePopupId_.empty() ? DeleteGoalPopup : deletePopupId_.c_str());
+        openDeletePopup_ = false;
     }
 
     drawEditor(state, repository, reloadData);
@@ -174,6 +195,7 @@ void GoalsView::openCreate()
     draft_ = Goal {};
     draft_.category = "Portfolio";
     editing_ = false;
+    editorPopupId_ = NewGoalEditorPopup;
     formError_.clear();
 }
 
@@ -181,12 +203,14 @@ void GoalsView::openEdit(const Goal& goal)
 {
     draft_ = goal;
     editing_ = true;
+    editorPopupId_ = goalEditorPopupId(goal.id);
     formError_.clear();
 }
 
 void GoalsView::drawEditor(AppState& state, GoalRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(GoalEditorPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = editorPopupId_.empty() ? GoalEditorPopup : editorPopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 
@@ -283,7 +307,8 @@ void GoalsView::drawEditor(AppState& state, GoalRepository& repository, const st
 
 void GoalsView::drawDeleteConfirmation(AppState& state, GoalRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(DeleteGoalPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = deletePopupId_.empty() ? DeleteGoalPopup : deletePopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 

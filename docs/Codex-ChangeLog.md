@@ -1,5 +1,46 @@
 # Codex Change Log
 
+## 2026-06-01 Accounts Goals Watchlist Row Actions
+
+### Changed Files
+
+- `docs/Codex-ChangeLog.md`
+- `src/repositories/AccountRepository.hpp`
+- `src/repositories/AccountRepository.cpp`
+- `src/services/PortfolioCalculator.cpp`
+- `src/ui/AccountsView.hpp`
+- `src/ui/AccountsView.cpp`
+- `src/ui/GoalsView.hpp`
+- `src/ui/GoalsView.cpp`
+- `src/ui/WatchlistView.hpp`
+- `src/ui/WatchlistView.cpp`
+
+### Behavior Added
+
+- Fixed Accounts row actions by using stable per-record Edit/Delete button IDs and record-specific modal IDs.
+- Deferred Accounts edit/delete popup opening until after table row rendering so Dear ImGui row scope no longer swallows the actions.
+- Changed Accounts delete behavior to mark the account `Inactive` instead of hard deleting it.
+- Added an Accounts delete warning when active holdings are assigned to the selected account.
+- Excluded inactive accounts and their holdings from portfolio/dashboard totals.
+- Fixed Goals row actions with stable per-record Edit/Delete button IDs and deferred modal opening.
+- Preserved manual-current-amount and linked-account goal settings while editing.
+- Fixed Watchlist row actions with stable per-record Edit/Delete button IDs and deferred modal opening.
+- Kept Goals and Watchlist delete behavior as hard delete because those tables do not currently have inactive/status fields.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran a temporary SQLite smoke test for Account update, Account soft delete to `Inactive`, inactive-account total exclusion, manual Goal update/delete, linked-account Goal edit preservation, and Watchlist update/delete.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, CSV/import/export/backup/log folders, `.vs`, `out`, `build`, object files, and `CMakeUserPresets.json` are not staged.
+
+### Known Issues
+
+- Goals and Watchlist records still hard-delete because those tables do not currently have inactive/status fields.
+- Interactive desktop click-through should still be performed with local test records.
+
 ## 2026-05-29 Dashboard Chart Controls
 
 ### Changed Files

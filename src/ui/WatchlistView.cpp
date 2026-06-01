@@ -19,6 +19,17 @@ namespace {
 
 constexpr const char* WatchlistEditorPopup = "Watchlist Editor";
 constexpr const char* DeleteWatchlistPopup = "Delete Watchlist Item";
+constexpr const char* NewWatchlistEditorPopup = "Watchlist Editor###watchlist_edit_popup_new";
+
+std::string watchlistEditorPopupId(int itemId)
+{
+    return "Watchlist Editor###watchlist_edit_popup_" + std::to_string(itemId);
+}
+
+std::string watchlistDeletePopupId(int itemId)
+{
+    return "Delete Watchlist Item###watchlist_delete_popup_" + std::to_string(itemId);
+}
 
 std::string lowerCopy(std::string value)
 {
@@ -85,7 +96,7 @@ void WatchlistView::render(AppState& state, WatchlistRepository& repository, con
 
     if (ImGui::Button("Add Watchlist Item")) {
         openCreate();
-        ImGui::OpenPopup(WatchlistEditorPopup);
+        openEditorPopup_ = true;
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
@@ -132,24 +143,34 @@ void WatchlistView::render(AppState& state, WatchlistRepository& repository, con
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", item.reasonWatching.c_str());
             ImGui::TableNextColumn();
-            ImGui::PushID(item.id);
-            if (ImGui::SmallButton("Edit")) {
+            const std::string editButtonId = "Edit##edit_button_" + std::to_string(item.id);
+            if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(item);
-                ImGui::OpenPopup(WatchlistEditorPopup);
+                openEditorPopup_ = true;
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton("Delete")) {
+            const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(item.id);
+            if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = item.id;
                 deleteName_ = item.ticker + " - " + item.assetName;
-                ImGui::OpenPopup(DeleteWatchlistPopup);
+                deletePopupId_ = watchlistDeletePopupId(item.id);
+                openDeletePopup_ = true;
             }
-            ImGui::PopID();
         }
 
         ImGui::EndTable();
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No watchlist items match the current search.");
         }
+    }
+
+    if (openEditorPopup_) {
+        ImGui::OpenPopup(editorPopupId_.empty() ? WatchlistEditorPopup : editorPopupId_.c_str());
+        openEditorPopup_ = false;
+    }
+    if (openDeletePopup_) {
+        ImGui::OpenPopup(deletePopupId_.empty() ? DeleteWatchlistPopup : deletePopupId_.c_str());
+        openDeletePopup_ = false;
     }
 
     drawEditor(state, repository, reloadData);
@@ -162,6 +183,7 @@ void WatchlistView::openCreate()
     draft_.assetType = "Stock";
     draft_.priority = "Medium";
     editing_ = false;
+    editorPopupId_ = NewWatchlistEditorPopup;
     formError_.clear();
 }
 
@@ -169,12 +191,14 @@ void WatchlistView::openEdit(const WatchlistItem& item)
 {
     draft_ = item;
     editing_ = true;
+    editorPopupId_ = watchlistEditorPopupId(item.id);
     formError_.clear();
 }
 
 void WatchlistView::drawEditor(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(WatchlistEditorPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = editorPopupId_.empty() ? WatchlistEditorPopup : editorPopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 
@@ -228,7 +252,8 @@ void WatchlistView::drawEditor(AppState& state, WatchlistRepository& repository,
 
 void WatchlistView::drawDeleteConfirmation(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(DeleteWatchlistPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = deletePopupId_.empty() ? DeleteWatchlistPopup : deletePopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 

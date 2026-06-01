@@ -21,8 +21,13 @@ private:
 
     Account draft_;
     bool editing_ = false;
+    bool openEditorPopup_ = false;
+    bool openDeletePopup_ = false;
     int deleteId_ = 0;
+    int deleteHoldingCount_ = 0;
     std::string deleteName_;
+    std::string editorPopupId_;
+    std::string deletePopupId_;
     std::string formError_;
     std::string searchText_;
 };

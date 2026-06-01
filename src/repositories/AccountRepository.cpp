@@ -152,15 +152,21 @@ bool AccountRepository::update(const Account& account, std::string& error) const
 
 bool AccountRepository::remove(int id, std::string& error) const
 {
-    error.clear();
+    return softDelete(id, error);
+}
 
+bool AccountRepository::softDelete(int id, std::string& error) const
+{
+    error.clear();
     sqlite3_stmt* statement = nullptr;
-    if (!database_.prepare("DELETE FROM accounts WHERE id = ?;", &statement)) {
+    if (!database_.prepare("UPDATE accounts SET status = 'Inactive', updated_at = ? WHERE id = ?;", &statement)) {
         error = database_.lastError();
         return false;
     }
 
-    sqlite3_bind_int(statement, 1, id);
+    const std::string timestamp = Date::nowIso8601();
+    sqlite3_bind_text(statement, 1, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 2, id);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());

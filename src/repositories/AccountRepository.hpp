@@ -16,6 +16,7 @@ public:
     bool create(Account& account, std::string& error) const;
     bool update(const Account& account, std::string& error) const;
     bool remove(int id, std::string& error) const;
+    bool softDelete(int id, std::string& error) const;
 
     static bool validate(const Account& account, std::string& error);
 

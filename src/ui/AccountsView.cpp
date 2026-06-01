@@ -13,11 +13,23 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <string>
 
 namespace {
 
 constexpr const char* AccountEditorPopup = "Account Editor";
 constexpr const char* DeleteAccountPopup = "Delete Account";
+constexpr const char* NewAccountEditorPopup = "Account Editor###account_edit_popup_new";
+
+std::string accountEditorPopupId(int accountId)
+{
+    return "Account Editor###account_edit_popup_" + std::to_string(accountId);
+}
+
+std::string accountDeletePopupId(int accountId)
+{
+    return "Delete Account###account_delete_popup_" + std::to_string(accountId);
+}
 
 std::string lowerCopy(std::string value)
 {
@@ -43,6 +55,13 @@ bool matchesFilter(const Account& account, const std::string& query)
         containsCaseInsensitive(account.institutionName, query) ||
         containsCaseInsensitive(account.status, query) ||
         containsCaseInsensitive(account.notes, query);
+}
+
+int holdingCountForAccount(const AppState& state, int accountId)
+{
+    return static_cast<int>(std::count_if(state.holdings.begin(), state.holdings.end(), [accountId](const Holding& holding) {
+        return holding.accountId == accountId && (holding.status.empty() || holding.status == "Active");
+    }));
 }
 
 template <std::size_t Size>
@@ -71,7 +90,7 @@ void AccountsView::render(AppState& state, AccountRepository& repository, const 
 
     if (ImGui::Button("Add Account")) {
         openCreate();
-        ImGui::OpenPopup(AccountEditorPopup);
+        openEditorPopup_ = true;
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
@@ -119,24 +138,35 @@ void AccountsView::render(AppState& state, AccountRepository& repository, const 
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", account.updatedAt.c_str());
             ImGui::TableNextColumn();
-            ImGui::PushID(account.id);
-            if (ImGui::SmallButton("Edit")) {
+            const std::string editButtonId = "Edit##edit_button_" + std::to_string(account.id);
+            if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(account);
-                ImGui::OpenPopup(AccountEditorPopup);
+                openEditorPopup_ = true;
             }
             ImGui::SameLine();
-            if (ImGui::SmallButton("Delete")) {
+            const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(account.id);
+            if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = account.id;
+                deleteHoldingCount_ = holdingCountForAccount(state, account.id);
                 deleteName_ = account.accountName;
-                ImGui::OpenPopup(DeleteAccountPopup);
+                deletePopupId_ = accountDeletePopupId(account.id);
+                openDeletePopup_ = true;
             }
-            ImGui::PopID();
         }
 
         ImGui::EndTable();
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No accounts match the current search.");
         }
+    }
+
+    if (openEditorPopup_) {
+        ImGui::OpenPopup(editorPopupId_.empty() ? AccountEditorPopup : editorPopupId_.c_str());
+        openEditorPopup_ = false;
+    }
+    if (openDeletePopup_) {
+        ImGui::OpenPopup(deletePopupId_.empty() ? DeleteAccountPopup : deletePopupId_.c_str());
+        openDeletePopup_ = false;
     }
 
     drawEditor(state, repository, reloadData);
@@ -149,6 +179,7 @@ void AccountsView::openCreate()
     draft_.accountType = "Brokerage";
     draft_.status = "Active";
     editing_ = false;
+    editorPopupId_ = NewAccountEditorPopup;
     formError_.clear();
 }
 
@@ -156,12 +187,14 @@ void AccountsView::openEdit(const Account& account)
 {
     draft_ = account;
     editing_ = true;
+    editorPopupId_ = accountEditorPopupId(account.id);
     formError_.clear();
 }
 
 void AccountsView::drawEditor(AppState& state, AccountRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(AccountEditorPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = editorPopupId_.empty() ? AccountEditorPopup : editorPopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 
@@ -182,6 +215,7 @@ void AccountsView::drawEditor(AppState& state, AccountRepository& repository, co
     ImGui::TextColored(UiTheme::MutedText, "Account balance is calculated as holdings market value plus cash balance.");
     drawStringCombo("Status", draft_.status, std::array {
         "Active",
+        "Inactive",
         "Closed",
         "Watch",
     });
@@ -211,22 +245,30 @@ void AccountsView::drawEditor(AppState& state, AccountRepository& repository, co
 
 void AccountsView::drawDeleteConfirmation(AppState& state, AccountRepository& repository, const std::function<void()>& reloadData)
 {
-    if (!ImGui::BeginPopupModal(DeleteAccountPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    const char* popupId = deletePopupId_.empty() ? DeleteAccountPopup : deletePopupId_.c_str();
+    if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 
-    ImGui::Text("Delete account?");
+    ImGui::Text("Deactivate account?");
     ImGui::TextColored(UiTheme::MutedText, "%s", deleteName_.c_str());
-    ImGui::TextColored(UiTheme::Amber, "Holdings must be deleted first.");
+    ImGui::TextWrapped("The account will be marked Inactive. Its holdings stay in the local database and are not deleted.");
+    if (deleteHoldingCount_ > 0) {
+        ImGui::TextColored(UiTheme::Amber, "This account has %d active holding%s. Inactive accounts and their holdings are excluded from dashboard totals.",
+            deleteHoldingCount_,
+            deleteHoldingCount_ == 1 ? "" : "s");
+    } else {
+        ImGui::TextColored(UiTheme::MutedText, "No active holdings are currently assigned to this account.");
+    }
 
-    if (ImGui::Button("Delete", ImVec2(100.0f, 0.0f))) {
+    if (ImGui::Button("Mark Inactive", ImVec2(130.0f, 0.0f))) {
         std::string error;
         if (repository.remove(deleteId_, error)) {
             reloadData();
-            state.setStatus("Account deleted.");
+            state.setStatus("Account marked inactive.");
             ImGui::CloseCurrentPopup();
         } else {
-            state.setStatus("Could not delete account: " + error, true);
+            state.setStatus("Could not deactivate account: " + error, true);
             ImGui::CloseCurrentPopup();
         }
     }
