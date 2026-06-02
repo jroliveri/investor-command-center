@@ -40,6 +40,7 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 - Import batch tracking for local CSV import metadata
 - Portfolio snapshots for local daily/monthly/yearly movement comparisons, created automatically after CSV imports
 - Local SQLite database backup button with configurable backup folder and local reminder settings
+- Configurable SQLite database location with copy/verify/switch-on-restart behavior
 - SQLite database initialization at `data/investor_command_center.db`
 - SQLite migrations for `accounts`, `holdings`, `transactions`, `dividends`, `goals`, `watchlist`, `import_batches`, `portfolio_snapshots`, and `dashboard_widgets`
 - Basic validation and delete confirmation dialogs
@@ -80,6 +81,8 @@ Stock Research is informational only. The Research menu can fetch a quote for a 
 Watchlist price signals are personal saved levels. The Watchlist page and Research menu can explicitly refresh current watchlist prices through the same market data provider used by Stock Research, update local watchlist price metadata, and show `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, or `Check Signals` badges. These signals are not recommendations, trading advice, brokerage actions, or money movement.
 
 Database backups are local-only. Configure a backup folder in Settings, then use `Back Up Now` from Settings or the sidebar database area to create a timestamped SQLite backup file. Backup reminders are stored locally and shown inside the app; there are no OS notifications, cloud backup, or sync features.
+
+The database location can be changed in Settings. The app copies the current SQLite database to the selected folder, verifies the copy, saves the configured `database.path`, and uses the new database on the next launch. The old database is not deleted automatically.
 
 Dashboard current-price refresh is optional and manual. It collects active holding tickers, fetches current quote prices through the market data provider, and recalculates dashboard display values using a session-only overlay. It does not change shares, cost basis, imported holdings, transactions, or snapshots. Cost basis remains local data from manual entry, transactions, or CSV import.
 
@@ -161,6 +164,8 @@ data/investor_command_center.db
 ```
 
 The database file and backup files are intentionally ignored by Git. Do not commit real account balances, holdings, transactions, dividend records, brokerage exports, backup files, logs, spreadsheets, or any other personal financial data.
+
+Database files can be kept outside the repository by changing the database location in Settings. If the active database is inside the repository, the app shows a warning in the sidebar and Settings.
 
 This public repository is for source code and documentation only. Review `git status` before every commit and confirm that local databases, exports, backups, and logs are not staged.
 

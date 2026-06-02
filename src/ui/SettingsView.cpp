@@ -14,6 +14,7 @@
 
 #ifdef _WIN32
 #include <objbase.h>
+#include <shellapi.h>
 #include <shobjidl.h>
 #include <windows.h>
 #endif
@@ -21,6 +22,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -77,7 +79,59 @@ bool saveDatabaseBackupSettings(AppState& state, AppSettingsRepository& settings
     return true;
 }
 
-std::optional<std::string> chooseBackupFolder(std::string& error)
+std::filesystem::path absolutePath(const std::string& path)
+{
+    std::error_code error;
+    const std::filesystem::path absolute = std::filesystem::absolute(std::filesystem::path(path), error);
+    return error ? std::filesystem::path(path) : absolute.lexically_normal();
+}
+
+bool pathsEquivalent(const std::filesystem::path& left, const std::filesystem::path& right)
+{
+    std::error_code error;
+    if (std::filesystem::equivalent(left, right, error)) {
+        return true;
+    }
+    return absolutePath(left.string()).lexically_normal() == absolutePath(right.string()).lexically_normal();
+}
+
+bool isPathInside(const std::filesystem::path& child, const std::filesystem::path& parent)
+{
+    const std::filesystem::path normalizedChild = absolutePath(child.string()).lexically_normal();
+    const std::filesystem::path normalizedParent = absolutePath(parent.string()).lexically_normal();
+
+    auto childIterator = normalizedChild.begin();
+    auto parentIterator = normalizedParent.begin();
+    for (; parentIterator != normalizedParent.end(); ++parentIterator, ++childIterator) {
+        if (childIterator == normalizedChild.end() || *childIterator != *parentIterator) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool isPathInsideRepository(const std::string& path)
+{
+    std::error_code error;
+    const std::filesystem::path repositoryRoot = std::filesystem::current_path(error);
+    if (error) {
+        return false;
+    }
+    return isPathInside(absolutePath(path), repositoryRoot);
+}
+
+bool isRepositoryRoot(const std::string& path)
+{
+    std::error_code error;
+    const std::filesystem::path repositoryRoot = std::filesystem::current_path(error);
+    if (error) {
+        return false;
+    }
+    return pathsEquivalent(absolutePath(path), repositoryRoot);
+}
+
+std::optional<std::string> chooseFolder(const wchar_t* title, std::string& error)
 {
     error.clear();
 
@@ -102,7 +156,7 @@ std::optional<std::string> chooseBackupFolder(std::string& error)
     DWORD options = 0;
     dialog->GetOptions(&options);
     dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
-    dialog->SetTitle(L"Choose Investor Command Center Backup Folder");
+    dialog->SetTitle(title);
 
     result = dialog->Show(nullptr);
     if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
@@ -158,18 +212,32 @@ std::optional<std::string> chooseBackupFolder(std::string& error)
 #endif
 }
 
+void openFolderInExplorer(const std::string& folder, std::string& error)
+{
+    error.clear();
+
+#ifdef _WIN32
+    const std::filesystem::path path = absolutePath(folder);
+    const HINSTANCE result = ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<intptr_t>(result) <= 32) {
+        error = "Could not open the folder in Windows Explorer.";
+    }
+#else
+    error = "Open folder is only available in the Windows desktop build.";
+#endif
+}
+
 }
 
 void SettingsView::render(AppState& state,
     AppSettingsRepository& settingsRepository,
     CapitalGainAllocationRepository& allocationRepository,
-    const std::string& databasePath,
+    const std::string& activeDatabasePath,
     const char* appVersion,
     const std::function<void()>& backupNow,
+    const std::function<bool(const std::string&, std::string&)>& moveDatabaseToFolder,
     const std::function<void()>& reloadData)
 {
-    const std::string absoluteDatabasePath = std::filesystem::absolute(databasePath).string();
-
     UiTheme::sectionHeading("Settings", "Local storage, privacy, exports, and maintenance reminders.");
 
     const float availableWidth = ImGui::GetContentRegionAvail().x;
@@ -220,13 +288,7 @@ void SettingsView::render(AppState& state,
 
     ImGui::SameLine();
 
-    ImGui::BeginChild("DatabaseLocation", ImVec2(panelWidth, 260.0f), true);
-    ImGui::Text("Database Location");
-    ImGui::Separator();
-    ImGui::TextWrapped("%s", absoluteDatabasePath.c_str());
-    ImGui::Spacing();
-    ImGui::TextColored(UiTheme::MutedText, "The app reads and writes this local database file. Use Database Backup for in-app backups; move the database only while the app is closed.");
-    ImGui::EndChild();
+    renderDatabaseLocation(activeDatabasePath, moveDatabaseToFolder);
 
     ImGui::Spacing();
 
@@ -284,6 +346,104 @@ void SettingsView::render(AppState& state,
     ImGui::EndChild();
 }
 
+void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath, const std::function<bool(const std::string&, std::string&)>& moveDatabaseToFolder)
+{
+    const std::filesystem::path activePath = absolutePath(activeDatabasePath);
+    const std::filesystem::path activeFolder = activePath.has_parent_path() ? activePath.parent_path() : std::filesystem::path {};
+    if (!databaseFolderDraftInitialized_) {
+        databaseFolderDraft_ = activeFolder.string();
+        databaseFolderDraftInitialized_ = true;
+    }
+
+    ImGui::BeginChild("DatabaseLocation", ImVec2(0.0f, 260.0f), true);
+    ImGui::Text("Database Location");
+    ImGui::Separator();
+    ImGui::TextColored(UiTheme::MutedText, "Current database path");
+    ImGui::TextWrapped("%s", activePath.string().c_str());
+    if (isPathInsideRepository(activePath.string())) {
+        ImGui::TextColored(UiTheme::TextWarning, "Database is inside the repository. Consider moving it outside Git.");
+    }
+
+    ImGui::Spacing();
+    ImGui::TextColored(UiTheme::MutedText, "Selected database folder");
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputText("##DatabaseFolderPath", &databaseFolderDraft_);
+    if (isRepositoryRoot(databaseFolderDraft_)) {
+        ImGui::TextColored(UiTheme::TextWarning, "The repository root cannot be used as the database folder.");
+    } else if (isPathInsideRepository(databaseFolderDraft_)) {
+        ImGui::TextColored(UiTheme::TextWarning, "Selected folder is inside the repository. Personal databases should stay outside Git.");
+    }
+
+    if (ImGui::Button("Choose Database Folder", ImVec2(190.0f, 0.0f))) {
+        std::string error;
+        const std::optional<std::string> folder = chooseFolder(L"Choose Investor Command Center Database Folder", error);
+        if (folder.has_value()) {
+            databaseFolderDraft_ = *folder;
+            databaseLocationMessage_.clear();
+        } else if (!error.empty()) {
+            databaseLocationMessage_ = error;
+            databaseLocationMessageIsError_ = true;
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Move Database Now", ImVec2(170.0f, 0.0f))) {
+        if (databaseFolderDraft_.empty()) {
+            databaseLocationMessage_ = "Choose a database folder before moving the database.";
+            databaseLocationMessageIsError_ = true;
+        } else if (isRepositoryRoot(databaseFolderDraft_)) {
+            databaseLocationMessage_ = "The repository root cannot be used as the database folder.";
+            databaseLocationMessageIsError_ = true;
+        } else {
+            openMoveDatabaseConfirmation_ = true;
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Open Database Folder", ImVec2(180.0f, 0.0f))) {
+        std::string error;
+        openFolderInExplorer(activeFolder.string(), error);
+        if (!error.empty()) {
+            databaseLocationMessage_ = error;
+            databaseLocationMessageIsError_ = true;
+        }
+    }
+
+    if (!databaseLocationMessage_.empty()) {
+        ImGui::TextColored(databaseLocationMessageIsError_ ? UiTheme::Loss : UiTheme::Gain, "%s", databaseLocationMessage_.c_str());
+    }
+    ImGui::TextColored(UiTheme::MutedText, "Moving uses copy, verification, and saved path switching. The old database is not deleted automatically.");
+    ImGui::EndChild();
+
+    if (openMoveDatabaseConfirmation_) {
+        ImGui::OpenPopup("Move Database Location");
+        openMoveDatabaseConfirmation_ = false;
+    }
+
+    if (ImGui::BeginPopupModal("Move Database Location", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Move local database?");
+        ImGui::Separator();
+        ImGui::TextWrapped("This will move your local database to a new folder. The app will use the new location after restart.");
+        ImGui::Spacing();
+        ImGui::TextColored(UiTheme::MutedText, "New folder:");
+        ImGui::TextWrapped("%s", databaseFolderDraft_.c_str());
+        if (isPathInsideRepository(databaseFolderDraft_)) {
+            ImGui::TextColored(UiTheme::TextWarning, "This folder is inside the repository. Personal databases should stay outside Git.");
+        }
+        ImGui::Spacing();
+        if (ImGui::Button("Copy And Switch On Restart", ImVec2(210.0f, 0.0f))) {
+            std::string message;
+            const bool moved = moveDatabaseToFolder(databaseFolderDraft_, message);
+            databaseLocationMessage_ = message;
+            databaseLocationMessageIsError_ = !moved;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void SettingsView::renderDatabaseBackup(AppState& state, AppSettingsRepository& settingsRepository, const std::function<void()>& backupNow)
 {
     ImGui::BeginChild("DatabaseBackup", ImVec2(0.0f, 280.0f), true);
@@ -298,7 +458,7 @@ void SettingsView::renderDatabaseBackup(AppState& state, AppSettingsRepository& 
 
     if (ImGui::Button("Choose Backup Folder", ImVec2(180.0f, 0.0f))) {
         std::string error;
-        const std::optional<std::string> folder = chooseBackupFolder(error);
+        const std::optional<std::string> folder = chooseFolder(L"Choose Investor Command Center Backup Folder", error);
         if (folder.has_value()) {
             state.databaseBackupSettings.backupFolder = *folder;
             if (saveDatabaseBackupSettings(state, settingsRepository, error)) {

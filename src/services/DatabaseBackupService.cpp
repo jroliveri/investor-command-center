@@ -121,47 +121,128 @@ DatabaseBackupResult DatabaseBackupService::createBackup(Database& database, con
         return result;
     }
 
-    std::filesystem::create_directories(folder, filesystemError);
-    if (filesystemError) {
-        result.error = "Could not create backup folder: " + filesystemError.message();
-        return result;
-    }
-
     const std::filesystem::path backupPath = uniqueBackupPath(folder, result.backedUpAt);
-
-    sqlite3* destination = nullptr;
-    if (sqlite3_open(backupPath.string().c_str(), &destination) != SQLITE_OK) {
-        result.error = destination == nullptr || sqlite3_errmsg(destination) == nullptr
-            ? "Could not create backup database file."
-            : sqlite3_errmsg(destination);
-        if (destination != nullptr) {
-            sqlite3_close(destination);
-        }
-        return result;
-    }
-
-    sqlite3_backup* backup = sqlite3_backup_init(destination, "main", database.handle(), "main");
-    if (backup == nullptr) {
-        result.error = sqlite3_errmsg(destination);
-        sqlite3_close(destination);
-        std::filesystem::remove(backupPath, filesystemError);
-        return result;
-    }
-
-    const int stepResult = sqlite3_backup_step(backup, -1);
-    const int finishResult = sqlite3_backup_finish(backup);
-    const int destinationError = sqlite3_errcode(destination);
-    sqlite3_close(destination);
-
-    if (stepResult != SQLITE_DONE || finishResult != SQLITE_OK || destinationError != SQLITE_OK) {
-        result.error = "SQLite backup failed.";
-        std::filesystem::remove(backupPath, filesystemError);
+    std::string error;
+    if (!copyDatabaseToFile(database, backupPath.string(), false, error)) {
+        result.error = error;
         return result;
     }
 
     result.success = true;
     result.backupPath = backupPath.string();
     return result;
+}
+
+bool DatabaseBackupService::copyDatabaseToFile(Database& database, const std::string& destinationPath, bool overwriteExisting, std::string& error)
+{
+    error.clear();
+
+    if (database.handle() == nullptr) {
+        error = "SQLite database is not open.";
+        return false;
+    }
+
+    const std::filesystem::path path(destinationPath);
+    if (path.empty()) {
+        error = "Destination database path is required.";
+        return false;
+    }
+
+    std::error_code filesystemError;
+    if (path.has_parent_path()) {
+        std::filesystem::create_directories(path.parent_path(), filesystemError);
+        if (filesystemError) {
+            error = "Could not create destination folder: " + filesystemError.message();
+            return false;
+        }
+    }
+
+    if (std::filesystem::exists(path) && !overwriteExisting) {
+        error = "Destination database file already exists.";
+        return false;
+    }
+
+    if (overwriteExisting) {
+        std::filesystem::remove(path, filesystemError);
+        if (filesystemError) {
+            error = "Could not replace existing destination database: " + filesystemError.message();
+            return false;
+        }
+    }
+
+    sqlite3* destination = nullptr;
+    if (sqlite3_open(path.string().c_str(), &destination) != SQLITE_OK) {
+        error = destination == nullptr || sqlite3_errmsg(destination) == nullptr
+            ? "Could not create destination database file."
+            : sqlite3_errmsg(destination);
+        if (destination != nullptr) {
+            sqlite3_close(destination);
+        }
+        return false;
+    }
+
+    sqlite3_backup* backup = sqlite3_backup_init(destination, "main", database.handle(), "main");
+    if (backup == nullptr) {
+        error = sqlite3_errmsg(destination);
+        sqlite3_close(destination);
+        std::filesystem::remove(path, filesystemError);
+        return false;
+    }
+
+    const int stepResult = sqlite3_backup_step(backup, -1);
+    const int finishResult = sqlite3_backup_finish(backup);
+    sqlite3_close(destination);
+
+    if (stepResult != SQLITE_DONE || finishResult != SQLITE_OK) {
+        error = "SQLite database copy failed.";
+        std::filesystem::remove(path, filesystemError);
+        return false;
+    }
+
+    if (!verifyDatabaseFile(path.string(), error)) {
+        std::filesystem::remove(path, filesystemError);
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseBackupService::verifyDatabaseFile(const std::string& databasePath, std::string& error)
+{
+    error.clear();
+
+    sqlite3* database = nullptr;
+    if (sqlite3_open_v2(databasePath.c_str(), &database, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+        error = database == nullptr || sqlite3_errmsg(database) == nullptr
+            ? "Could not open copied database for verification."
+            : sqlite3_errmsg(database);
+        if (database != nullptr) {
+            sqlite3_close(database);
+        }
+        return false;
+    }
+
+    sqlite3_stmt* statement = nullptr;
+    if (sqlite3_prepare_v2(database, "PRAGMA quick_check;", -1, &statement, nullptr) != SQLITE_OK) {
+        error = sqlite3_errmsg(database);
+        sqlite3_close(database);
+        return false;
+    }
+
+    const int result = sqlite3_step(statement);
+    bool verified = false;
+    if (result == SQLITE_ROW) {
+        const unsigned char* text = sqlite3_column_text(statement, 0);
+        verified = text != nullptr && std::string(reinterpret_cast<const char*>(text)) == "ok";
+    }
+
+    if (!verified) {
+        error = "Copied database did not pass SQLite quick_check.";
+    }
+
+    sqlite3_finalize(statement);
+    sqlite3_close(database);
+    return verified;
 }
 
 bool DatabaseBackupService::isReminderDue(const DatabaseBackupSettings& settings, const std::string& today)

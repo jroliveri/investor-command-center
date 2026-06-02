@@ -28,6 +28,8 @@ data/investor_command_center.db
 
 That database file is intentionally ignored by Git. It may contain account names, balances, holdings, transaction history, dividends, goals, watchlist notes, and other personal investing information.
 
+Users can change the database location in Settings to store the SQLite database outside the repository or program folder. Moving the database uses copy, verification, and saved-path switching. The old database is not deleted automatically.
+
 The repository also ignores imports, exports, backups, logs, spreadsheets, and common brokerage export formats, including CSV, TSV, Excel, OFX, QFX, and QIF files.
 
 ## Local Backups

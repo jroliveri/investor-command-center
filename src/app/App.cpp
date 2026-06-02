@@ -30,6 +30,7 @@ constexpr const char* BackupFolderSettingKey = "database.backup_folder";
 constexpr const char* BackupReminderEnabledSettingKey = "database.backup_reminder_enabled";
 constexpr const char* BackupReminderFrequencySettingKey = "database.backup_reminder_frequency";
 constexpr const char* LastBackupAtSettingKey = "database.last_backup_at";
+constexpr const char* DatabasePathSettingKey = "database.path";
 
 void compactMetric(const char* label, const std::string& value, ImVec4 color)
 {
@@ -72,11 +73,61 @@ const Account* accountForHolding(const std::vector<Account>& accounts, int accou
     return nullptr;
 }
 
-std::string absoluteDatabasePath()
+std::filesystem::path absolutePath(const std::string& path)
 {
     std::error_code error;
-    const std::filesystem::path path = std::filesystem::absolute(DatabasePath, error);
-    return error ? std::string(DatabasePath) : path.string();
+    const std::filesystem::path absolute = std::filesystem::absolute(std::filesystem::path(path), error);
+    return error ? std::filesystem::path(path) : absolute.lexically_normal();
+}
+
+std::string absolutePathString(const std::string& path)
+{
+    return absolutePath(path).string();
+}
+
+bool pathsEquivalent(const std::filesystem::path& left, const std::filesystem::path& right)
+{
+    std::error_code error;
+    if (std::filesystem::equivalent(left, right, error)) {
+        return true;
+    }
+    return absolutePath(left.string()).lexically_normal() == absolutePath(right.string()).lexically_normal();
+}
+
+bool isPathInside(const std::filesystem::path& child, const std::filesystem::path& parent)
+{
+    const std::filesystem::path normalizedChild = absolutePath(child.string()).lexically_normal();
+    const std::filesystem::path normalizedParent = absolutePath(parent.string()).lexically_normal();
+
+    auto childIterator = normalizedChild.begin();
+    auto parentIterator = normalizedParent.begin();
+    for (; parentIterator != normalizedParent.end(); ++parentIterator, ++childIterator) {
+        if (childIterator == normalizedChild.end() || *childIterator != *parentIterator) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool isPathInsideRepository(const std::string& path)
+{
+    std::error_code error;
+    const std::filesystem::path repositoryRoot = std::filesystem::current_path(error);
+    if (error) {
+        return false;
+    }
+    return isPathInside(absolutePath(path), repositoryRoot);
+}
+
+bool isRepositoryRoot(const std::string& path)
+{
+    std::error_code error;
+    const std::filesystem::path repositoryRoot = std::filesystem::current_path(error);
+    if (error) {
+        return false;
+    }
+    return pathsEquivalent(absolutePath(path), repositoryRoot);
 }
 
 ImVec4 sidebarSignalColor(const std::string& status)
@@ -108,14 +159,7 @@ const char* sidebarSignalLabel(const std::string& status)
 
 bool App::initialize()
 {
-    if (!database_.open(DatabasePath)) {
-        startupError_ = database_.lastError();
-        return false;
-    }
-
-    std::string migrationError;
-    if (!Migrations::run(database_, migrationError)) {
-        startupError_ = migrationError;
+    if (!openStartupDatabase()) {
         return false;
     }
 
@@ -156,8 +200,96 @@ bool App::initialize()
     }
 
     reloadData();
+    if (!startupDatabaseWarning_.empty()) {
+        state_.setStatus(startupDatabaseWarning_, true);
+    }
 
     return true;
+}
+
+bool App::openStartupDatabase()
+{
+    std::string error;
+    if (!openDatabaseAtPath(DatabasePath, error)) {
+        startupError_ = error;
+        return false;
+    }
+
+    AppSettingsRepository bootstrapSettings(database_);
+    std::string settingsError;
+    const std::string configuredPath = bootstrapSettings.getString(DatabasePathSettingKey, "", settingsError);
+    if (!settingsError.empty()) {
+        startupDatabaseWarning_ = "Could not read configured database path. Using the default local database.";
+        return true;
+    }
+
+    if (configuredPath.empty()) {
+        return true;
+    }
+
+    const std::filesystem::path configuredAbsolutePath = absolutePath(configuredPath);
+    const std::filesystem::path activeAbsolutePath = absolutePath(activeDatabasePath_);
+    if (pathsEquivalent(configuredAbsolutePath, activeAbsolutePath)) {
+        activeDatabasePath_ = activeAbsolutePath.string();
+        return true;
+    }
+
+    std::error_code filesystemError;
+    if (!std::filesystem::exists(configuredAbsolutePath, filesystemError) || filesystemError) {
+        startupDatabaseWarning_ = "Configured database path was not found. Using the default local database.";
+        return true;
+    }
+
+    database_.close();
+    if (openDatabaseAtPath(configuredAbsolutePath.string(), error)) {
+        return true;
+    }
+
+    startupDatabaseWarning_ = "Configured database could not be opened. Using the default local database. " + error;
+    database_.close();
+    if (!openDatabaseAtPath(DatabasePath, error)) {
+        startupError_ = error;
+        return false;
+    }
+    return true;
+}
+
+bool App::openDatabaseAtPath(const std::string& databasePath, std::string& error)
+{
+    error.clear();
+    if (!database_.open(databasePath)) {
+        error = database_.lastError();
+        return false;
+    }
+
+    std::string migrationError;
+    if (!Migrations::run(database_, migrationError)) {
+        error = migrationError;
+        return false;
+    }
+
+    activeDatabasePath_ = absolutePathString(databasePath);
+    return true;
+}
+
+bool App::writeDatabasePathSettingToFile(const std::string& databasePath, const std::string& configuredPath, std::string& error)
+{
+    error.clear();
+
+    Database targetDatabase;
+    if (!targetDatabase.open(databasePath)) {
+        error = targetDatabase.lastError();
+        return false;
+    }
+
+    std::string migrationError;
+    if (!Migrations::run(targetDatabase, migrationError)) {
+        error = migrationError;
+        return false;
+    }
+
+    AppSettingsRepository targetSettings(targetDatabase);
+    return targetSettings.setString(DatabasePathSettingKey, configuredPath, error);
 }
 
 void App::render()
@@ -474,6 +606,65 @@ void App::backupDatabaseNow()
     state_.setStatus("Database backup created: " + result.backupPath);
 }
 
+bool App::moveDatabaseToFolder(const std::string& folder, std::string& message)
+{
+    message.clear();
+
+    if (folder.empty()) {
+        message = "Choose a database folder before moving the database.";
+        return false;
+    }
+
+    const std::filesystem::path targetFolder = absolutePath(folder);
+    if (isRepositoryRoot(targetFolder.string())) {
+        message = "The repository root cannot be used as the database folder.";
+        return false;
+    }
+
+    const std::filesystem::path activePath = absolutePath(activeDatabasePath_);
+    const std::string fileName = activePath.filename().empty() ? "investor_command_center.db" : activePath.filename().string();
+    const std::filesystem::path destinationPath = (targetFolder / fileName).lexically_normal();
+
+    if (pathsEquivalent(destinationPath, activePath)) {
+        message = "The selected folder is already the active database folder.";
+        return false;
+    }
+
+    std::error_code filesystemError;
+    if (std::filesystem::exists(destinationPath, filesystemError)) {
+        message = "A database file already exists in the selected folder. Choose another folder to avoid overwriting local data.";
+        return false;
+    }
+
+    std::string error;
+    if (!DatabaseBackupService::copyDatabaseToFile(database_, destinationPath.string(), false, error)) {
+        message = "Could not copy database to the selected folder: " + error;
+        return false;
+    }
+
+    if (!writeDatabasePathSettingToFile(destinationPath.string(), destinationPath.string(), error)) {
+        message = "Database was copied, but the new database path setting could not be written to the copied database: " + error;
+        return false;
+    }
+
+    const std::filesystem::path defaultPath = absolutePath(DatabasePath);
+    if (!pathsEquivalent(activePath, defaultPath)) {
+        if (!writeDatabasePathSettingToFile(defaultPath.string(), destinationPath.string(), error)) {
+            message = "Database was copied, but the default startup pointer could not be updated: " + error;
+            return false;
+        }
+    }
+
+    if (!appSettingsRepository_->setString(DatabasePathSettingKey, destinationPath.string(), error)) {
+        message = "Database was copied, but the current database path setting could not be saved: " + error;
+        return false;
+    }
+
+    message = "Database copied and verified. Restart Investor Command Center to use: " + destinationPath.string();
+    state_.setStatus(message);
+    return true;
+}
+
 void App::renderTopMenuBar()
 {
     if (!ImGui::BeginMainMenuBar()) {
@@ -748,7 +939,10 @@ void App::renderSidebarFooter()
         ImGui::TextColored(UiTheme::TextWarning, "Set folder in Settings");
     }
     ImGui::TextColored(UiTheme::TextMuted, "Current Database Path");
-    ImGui::TextWrapped("%s", absoluteDatabasePath().c_str());
+    ImGui::TextWrapped("%s", activeDatabasePath_.c_str());
+    if (isPathInsideRepository(activeDatabasePath_)) {
+        ImGui::TextColored(UiTheme::TextWarning, "Database is inside the repository. Consider moving it outside Git.");
+    }
     ImGui::EndChild();
 }
 
@@ -793,9 +987,12 @@ void App::renderCurrentSection()
         renderPlaceholder("Reports", "Reports will summarize local records without advice or recommendations.");
         break;
     case AppSection::Settings:
-        settingsView_.render(state_, *appSettingsRepository_, *capitalGainAllocationRepository_, DatabasePath, AppVersion, [this]() {
+        settingsView_.render(state_, *appSettingsRepository_, *capitalGainAllocationRepository_, activeDatabasePath_, AppVersion, [this]() {
             backupDatabaseNow();
         },
+            [this](const std::string& folder, std::string& message) {
+                return moveDatabaseToFolder(folder, message);
+            },
             reload);
         break;
     }

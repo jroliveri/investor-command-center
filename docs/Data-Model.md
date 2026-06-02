@@ -308,8 +308,13 @@ Database backup settings are also stored in `app_settings`:
 - `database.backup_reminder_enabled`
 - `database.backup_reminder_frequency`
 - `database.last_backup_at`
+- `database.path`
 
 Backups are created locally from the current SQLite database into the configured folder. Backup reminder settings only affect in-app reminder text; they do not create OS notifications, cloud sync, or automatic brokerage connections.
+
+`database.path` stores the configured SQLite database file path. On startup, the app opens the default local database as a bootstrap pointer, reads `database.path` when present, then opens the configured database if the file exists and can be migrated. If the configured database is missing or invalid, the app falls back to the default local database and shows a warning.
+
+Changing the database location uses copy, SQLite verification, and saved-path switching. The old database file is not deleted automatically.
 
 ## capital_gain_allocation_rules
 
@@ -438,6 +443,7 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Dashboard chart preferences are loaded from `dashboard_chart_settings` and only affect chart display mode, range, and chart type.
 - Theme preference is loaded from `app_settings` and only affects local UI styling.
 - Database backup preferences are loaded from `app_settings` and only affect local backup UI/reminder behavior.
+- Configured database path is loaded from `app_settings` at startup and affects which local SQLite file is opened.
 - Capital gain allocation rules are loaded from `capital_gain_allocation_rules` and only affect the local transaction allocation helper.
 - Market quote cache records are used by Stock Research and explicit Watchlist price refreshes only; they do not affect portfolio calculations.
 - Dividend totals are calculated in C++ from `dividends.date_received` using `YYYY-MM` and `YYYY` prefixes.

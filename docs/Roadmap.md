@@ -33,6 +33,7 @@
 - User-defined capital gains allocation helper for Sell transactions
 - User-defined Watchlist buy/sell price signals with explicit Yahoo Finance refresh and local signal badges
 - Local SQLite database backups with configurable folder, Back Up Now button, and local reminder settings
+- Configurable local SQLite database location with copy/verify/switch-on-restart safety behavior
 
 ## Next
 

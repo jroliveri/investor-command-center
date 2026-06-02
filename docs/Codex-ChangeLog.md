@@ -1,5 +1,44 @@
 # Codex Change Log
 
+## 2026-06-02 Database Location Settings
+
+### Changed Files
+
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Privacy-And-Local-Data.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/services/DatabaseBackupService.hpp`
+- `src/services/DatabaseBackupService.cpp`
+- `src/ui/SettingsView.hpp`
+- `src/ui/SettingsView.cpp`
+
+### Behavior Added
+
+- Added startup support for a configured SQLite database path stored as `database.path`.
+- Added fallback behavior: if the configured database path is missing or invalid, the app uses the default local database and shows a warning.
+- Added a Settings `Database Location` section with current database path, selected folder path, Choose Database Folder, Move Database Now, and Open Database Folder.
+- Added confirmation before moving the database location.
+- Implemented copy + SQLite verification + saved-path switching for database relocation.
+- Kept the old database file intact; it is not deleted automatically.
+- Added repository-folder warnings in Settings and the sidebar database info area.
+- Updated the sidebar database info to show the current active database path instead of the hardcoded default path.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, CSV/import/export/backup/log folders, `.vs`, `out`, `build`, object files, and `CMakeUserPresets.json` are not staged.
+
+### Known Issues
+
+- Manual desktop click-through is still recommended for folder selection, move confirmation, restart behavior, and repository-folder warning display.
+
 ## 2026-06-02 Local Database Backup
 
 ### Changed Files
