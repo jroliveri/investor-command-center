@@ -38,8 +38,10 @@ Watchlist mapWatchlist(sqlite3_stmt* statement)
     watchlist.description = textColumn(statement, 2);
     watchlist.sortOrder = sqlite3_column_int(statement, 3);
     watchlist.isActive = sqlite3_column_int(statement, 4) != 0;
-    watchlist.createdAt = textColumn(statement, 5);
-    watchlist.updatedAt = textColumn(statement, 6);
+    watchlist.showInSidebar = sqlite3_column_int(statement, 5) != 0;
+    watchlist.sidebarSlot = sqlite3_column_int(statement, 6);
+    watchlist.createdAt = textColumn(statement, 7);
+    watchlist.updatedAt = textColumn(statement, 8);
     return watchlist;
 }
 
@@ -100,9 +102,9 @@ std::vector<Watchlist> WatchlistRepository::listWatchlists(bool includeInactive,
 
     sqlite3_stmt* statement = nullptr;
     const char* sql = includeInactive
-        ? "SELECT id, name, description, sort_order, is_active, created_at, updated_at "
+        ? "SELECT id, name, description, sort_order, is_active, show_in_sidebar, sidebar_slot, created_at, updated_at "
           "FROM watchlists ORDER BY is_active DESC, sort_order, id;"
-        : "SELECT id, name, description, sort_order, is_active, created_at, updated_at "
+        : "SELECT id, name, description, sort_order, is_active, show_in_sidebar, sidebar_slot, created_at, updated_at "
           "FROM watchlists WHERE is_active = 1 ORDER BY sort_order, id;";
     if (!database_.prepare(sql, &statement)) {
         error = database_.lastError();
@@ -127,11 +129,15 @@ bool WatchlistRepository::createWatchlist(Watchlist& watchlist, std::string& err
     const std::string timestamp = Date::nowIso8601();
     watchlist.createdAt = timestamp;
     watchlist.updatedAt = timestamp;
+    if (!watchlist.isActive || !watchlist.showInSidebar || watchlist.sidebarSlot < 1 || watchlist.sidebarSlot > 2) {
+        watchlist.showInSidebar = false;
+        watchlist.sidebarSlot = 0;
+    }
 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
-            "INSERT INTO watchlists(name, description, sort_order, is_active, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?);",
+            "INSERT INTO watchlists(name, description, sort_order, is_active, show_in_sidebar, sidebar_slot, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
             &statement)) {
         error = database_.lastError();
         return false;
@@ -141,8 +147,10 @@ bool WatchlistRepository::createWatchlist(Watchlist& watchlist, std::string& err
     sqlite3_bind_text(statement, 2, watchlist.description.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(statement, 3, watchlist.sortOrder);
     sqlite3_bind_int(statement, 4, watchlist.isActive ? 1 : 0);
-    sqlite3_bind_text(statement, 5, watchlist.createdAt.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 6, watchlist.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 5, watchlist.showInSidebar ? 1 : 0);
+    sqlite3_bind_int(statement, 6, watchlist.sidebarSlot);
+    sqlite3_bind_text(statement, 7, watchlist.createdAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 8, watchlist.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());
@@ -152,6 +160,26 @@ bool WatchlistRepository::createWatchlist(Watchlist& watchlist, std::string& err
 
     sqlite3_finalize(statement);
     watchlist.id = static_cast<int>(database_.lastInsertRowId());
+    if (watchlist.showInSidebar) {
+        sqlite3_stmt* clearStatement = nullptr;
+        if (!database_.prepare(
+                "UPDATE watchlists SET show_in_sidebar = 0, sidebar_slot = 0, updated_at = ? "
+                "WHERE id <> ? AND sidebar_slot = ?;",
+                &clearStatement)) {
+            error = database_.lastError();
+            return false;
+        }
+
+        sqlite3_bind_text(clearStatement, 1, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(clearStatement, 2, watchlist.id);
+        sqlite3_bind_int(clearStatement, 3, watchlist.sidebarSlot);
+        if (sqlite3_step(clearStatement) != SQLITE_DONE) {
+            error = sqlite3_errmsg(database_.handle());
+            sqlite3_finalize(clearStatement);
+            return false;
+        }
+        sqlite3_finalize(clearStatement);
+    }
     return true;
 }
 
@@ -166,22 +194,31 @@ bool WatchlistRepository::updateWatchlist(const Watchlist& watchlist, std::strin
         return false;
     }
 
+    Watchlist normalized = watchlist;
+    if (!normalized.isActive || !normalized.showInSidebar || normalized.sidebarSlot < 1 || normalized.sidebarSlot > 2) {
+        normalized.showInSidebar = false;
+        normalized.sidebarSlot = 0;
+    }
+
     const std::string timestamp = Date::nowIso8601();
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
-            "UPDATE watchlists SET name = ?, description = ?, sort_order = ?, is_active = ?, updated_at = ? "
+            "UPDATE watchlists SET name = ?, description = ?, sort_order = ?, is_active = ?, "
+            "show_in_sidebar = ?, sidebar_slot = ?, updated_at = ? "
             "WHERE id = ?;",
             &statement)) {
         error = database_.lastError();
         return false;
     }
 
-    sqlite3_bind_text(statement, 1, watchlist.name.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 2, watchlist.description.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(statement, 3, watchlist.sortOrder);
-    sqlite3_bind_int(statement, 4, watchlist.isActive ? 1 : 0);
-    sqlite3_bind_text(statement, 5, timestamp.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(statement, 6, watchlist.id);
+    sqlite3_bind_text(statement, 1, normalized.name.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 2, normalized.description.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 3, normalized.sortOrder);
+    sqlite3_bind_int(statement, 4, normalized.isActive ? 1 : 0);
+    sqlite3_bind_int(statement, 5, normalized.showInSidebar ? 1 : 0);
+    sqlite3_bind_int(statement, 6, normalized.sidebarSlot);
+    sqlite3_bind_text(statement, 7, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 8, normalized.id);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());
@@ -190,6 +227,26 @@ bool WatchlistRepository::updateWatchlist(const Watchlist& watchlist, std::strin
     }
 
     sqlite3_finalize(statement);
+    if (normalized.showInSidebar) {
+        sqlite3_stmt* clearStatement = nullptr;
+        if (!database_.prepare(
+                "UPDATE watchlists SET show_in_sidebar = 0, sidebar_slot = 0, updated_at = ? "
+                "WHERE id <> ? AND sidebar_slot = ?;",
+                &clearStatement)) {
+            error = database_.lastError();
+            return false;
+        }
+
+        sqlite3_bind_text(clearStatement, 1, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(clearStatement, 2, normalized.id);
+        sqlite3_bind_int(clearStatement, 3, normalized.sidebarSlot);
+        if (sqlite3_step(clearStatement) != SQLITE_DONE) {
+            error = sqlite3_errmsg(database_.handle());
+            sqlite3_finalize(clearStatement);
+            return false;
+        }
+        sqlite3_finalize(clearStatement);
+    }
     return true;
 }
 
@@ -202,7 +259,7 @@ bool WatchlistRepository::deactivateWatchlist(int id, std::string& error) const
     }
 
     sqlite3_stmt* statement = nullptr;
-    if (!database_.prepare("UPDATE watchlists SET is_active = 0, updated_at = ? WHERE id = ?;", &statement)) {
+    if (!database_.prepare("UPDATE watchlists SET is_active = 0, show_in_sidebar = 0, sidebar_slot = 0, updated_at = ? WHERE id = ?;", &statement)) {
         error = database_.lastError();
         return false;
     }
@@ -516,6 +573,11 @@ bool WatchlistRepository::validateWatchlist(const Watchlist& watchlist, std::str
     error.clear();
     if (watchlist.name.empty() || isBlank(watchlist.name)) {
         error = "Watchlist name is required.";
+        return false;
+    }
+
+    if (watchlist.showInSidebar && (watchlist.sidebarSlot < 1 || watchlist.sidebarSlot > 2)) {
+        error = "Sidebar slot must be Sidebar Watchlist 1 or Sidebar Watchlist 2.";
         return false;
     }
 

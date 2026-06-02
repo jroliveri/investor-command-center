@@ -27,7 +27,7 @@ private:
     void openEdit(const WatchlistItem& item);
     void drawEditor(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData);
     void drawDeleteConfirmation(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData);
-    void refreshPrices(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, const std::vector<WatchlistItem>& items, const std::function<void()>& reloadData);
+    void refreshPrices(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, const std::vector<WatchlistItem>& items, const std::string& watchlistName, const std::function<void()>& reloadData);
     void drawPriorityBadge(const std::string& priority) const;
     void drawSignalBadge(const WatchlistItem& item);
     void drawSignalNoticePopup();

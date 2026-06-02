@@ -33,6 +33,7 @@
 - User-defined capital gains allocation helper for Sell transactions
 - User-defined Watchlist buy/sell price signals with explicit Yahoo Finance refresh and local signal badges
 - Existing watchlist items migrate into a default `Main Watchlist`
+- Sidebar Watchlist 1 and 2 assignment controls for active watchlists
 - Local SQLite database backups with configurable folder, Back Up Now button, and local reminder settings
 - Configurable local SQLite database location with copy/verify/switch-on-restart safety behavior
 
@@ -55,7 +56,7 @@
 - Optional explicit workflow to persist refreshed prices to local holdings after confirmation
 - Optional explicit workflow to create snapshots from refreshed dashboard prices
 - Optional watchlist signal history and notification-style review panel
-- Optional sidebar watchlist assignment controls
+- Optional richer sidebar watchlist presets and display density controls
 
 ## Later
 

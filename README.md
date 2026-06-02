@@ -30,7 +30,7 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 - Capital gains allocation helper for Sell transactions, driven by local user-defined percentages in Settings
 - Dividend create, edit, delete, and search workflow with month, year, and lifetime totals
 - Goal create, edit, delete, and search workflow with progress bars and optional linked account value tracking
-- Multiple named watchlists with manager controls, selected-list item CRUD, search, and user-defined buy/sell price signals
+- Multiple named watchlists with manager controls, sidebar assignment, selected-list item CRUD, search, and user-defined buy/sell price signals
 - Research menu with a Stock Research page backed by a Yahoo Finance market data provider abstraction
 - Local market quote cache for user-requested research lookups
 - Polished Stock Research panels with quote summary, key metrics, fallback/cache status, and watchlist shortcut
@@ -80,7 +80,9 @@ Stock Research is informational only. The Research menu can fetch a quote for a 
 
 Watchlists can be organized into named local groups. Existing watchlist items migrate into `Main Watchlist`, and new items belong to the selected active watchlist on the Watchlist page. Deactivating a watchlist hides the list and its items from normal views without deleting the item records.
 
-Watchlist price signals are personal saved levels. The Watchlist page and Research menu can explicitly refresh current watchlist prices through the same market data provider used by Stock Research, update local watchlist price metadata, and show `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, or `Check Signals` badges. These signals are not recommendations, trading advice, brokerage actions, or money movement.
+Two active watchlists can be assigned to the morning sidebar as Sidebar Watchlist 1 and Sidebar Watchlist 2. The sidebar uses the assigned watchlist names as section titles and shows up to 10 rows from each selected watchlist. Sidebar assignment is stored locally in SQLite and only affects display.
+
+Watchlist price signals are personal saved levels. The Watchlist page can refresh either the selected watchlist or all active watchlists, and the Research menu can explicitly refresh watchlist prices through the same market data provider used by Stock Research. Refreshes update local watchlist price metadata and show `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, or `Check Signals` badges. These signals are not recommendations, trading advice, brokerage actions, or money movement.
 
 Database backups are local-only. Configure a backup folder in Settings, then use `Back Up Now` from Settings or the sidebar database area to create a timestamped SQLite backup file. Backup reminders are stored locally and shown inside the app; there are no OS notifications, cloud backup, or sync features.
 

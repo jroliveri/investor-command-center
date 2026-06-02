@@ -188,6 +188,28 @@ std::string watchlistDisplayName(const std::vector<Watchlist>& watchlists, int w
     return watchlist == nullptr ? "Choose Watchlist" : watchlist->name;
 }
 
+const char* sidebarSlotLabel(const Watchlist& watchlist)
+{
+    if (!watchlist.isActive || !watchlist.showInSidebar || watchlist.sidebarSlot <= 0) {
+        return "Not shown";
+    }
+    if (watchlist.sidebarSlot == 1) {
+        return "Sidebar Watchlist 1";
+    }
+    if (watchlist.sidebarSlot == 2) {
+        return "Sidebar Watchlist 2";
+    }
+    return "Not shown";
+}
+
+bool updateSidebarSlot(WatchlistRepository& repository, const Watchlist& watchlist, int slot, std::string& error)
+{
+    Watchlist updated = watchlist;
+    updated.showInSidebar = slot > 0 && watchlist.isActive;
+    updated.sidebarSlot = updated.showInSidebar ? slot : 0;
+    return repository.updateWatchlist(updated, error);
+}
+
 }
 
 void WatchlistView::render(AppState& state,
@@ -254,10 +276,11 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
     }
 
     ImGui::Spacing();
-    if (ImGui::BeginTable("WatchlistManagerTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp)) {
+    if (ImGui::BeginTable("WatchlistManagerTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 180.0f);
         ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 76.0f);
+        ImGui::TableSetupColumn("Sidebar", ImGuiTableColumnFlags_WidthFixed, 178.0f);
         ImGui::TableSetupColumn("Items", ImGuiTableColumnFlags_WidthFixed, 58.0f);
         ImGui::TableSetupColumn("Order", ImGuiTableColumnFlags_WidthFixed, 98.0f);
         ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 104.0f);
@@ -280,6 +303,41 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
             ImGui::TextWrapped("%s", watchlist.description.empty() ? "N/A" : watchlist.description.c_str());
             ImGui::TableNextColumn();
             ImGui::TextColored(watchlist.isActive ? UiTheme::TextSuccess : UiTheme::TextMuted, "%s", watchlist.isActive ? "Active" : "Inactive");
+            ImGui::TableNextColumn();
+            if (!watchlist.isActive) {
+                ImGui::TextColored(UiTheme::TextMuted, "Not shown");
+            } else if (ImGui::BeginCombo("##SidebarSlot", sidebarSlotLabel(watchlist))) {
+                struct SidebarOption {
+                    int slot;
+                    const char* label;
+                };
+                constexpr std::array<SidebarOption, 3> options {{
+                    { 0, "Not shown" },
+                    { 1, "Sidebar Watchlist 1" },
+                    { 2, "Sidebar Watchlist 2" },
+                }};
+
+                const int currentSlot = watchlist.showInSidebar ? watchlist.sidebarSlot : 0;
+                for (const SidebarOption& option : options) {
+                    const bool selected = currentSlot == option.slot;
+                    if (ImGui::Selectable(option.label, selected)) {
+                        std::string error;
+                        const std::string statusMessage = option.slot == 0
+                            ? watchlist.name + " removed from sidebar."
+                            : std::string(option.label) + " now shows " + watchlist.name + ". Any previous assignment for that slot was cleared.";
+                        if (updateSidebarSlot(repository, watchlist, option.slot, error)) {
+                            reloadData();
+                            state.setStatus(statusMessage);
+                        } else {
+                            state.setStatus("Could not update sidebar assignment: " + error, true);
+                        }
+                    }
+                    if (selected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
             ImGui::TableNextColumn();
             if (countError.empty()) {
                 ImGui::Text("%d", itemCount);
@@ -409,8 +467,12 @@ void WatchlistView::drawWatchlistItems(AppState& state,
         openEditorPopup_ = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Refresh This Watchlist", ImVec2(170.0f, 0.0f))) {
-        refreshPrices(state, repository, marketDataService, selectedItems, reloadData);
+    if (ImGui::Button("Refresh Selected Watchlist", ImVec2(194.0f, 0.0f))) {
+        refreshPrices(state, repository, marketDataService, selectedItems, selectedName, reloadData);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Refresh All Watchlists", ImVec2(180.0f, 0.0f))) {
+        refreshPrices(state, repository, marketDataService, state.watchlist, "All Watchlists", reloadData);
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
@@ -753,6 +815,7 @@ void WatchlistView::refreshPrices(AppState& state,
     WatchlistRepository& repository,
     MarketDataService& marketDataService,
     const std::vector<WatchlistItem>& items,
+    const std::string& watchlistName,
     const std::function<void()>& reloadData)
 {
     std::string error;
@@ -761,10 +824,11 @@ void WatchlistView::refreshPrices(AppState& state,
     state.watchlistPriceRefreshStatus = refreshStatus;
 
     if (refreshStatus.refreshedSymbols > 0) {
-        state.setStatus("Watchlist prices refreshed: " + std::to_string(refreshStatus.refreshedSymbols) + " updated, " +
-            std::to_string(refreshStatus.failedSymbols) + " failed.");
+        state.setStatus(watchlistName + " refreshed: " + std::to_string(refreshStatus.refreshedSymbols) + " updated, " +
+            std::to_string(refreshStatus.failedSymbols) + " failed. Last refresh: " + refreshStatus.lastRefreshedAt + ". Source: " +
+            (refreshStatus.cachedSymbols > 0 ? "Cached " : "") + refreshStatus.provider + ".");
     } else {
-        state.setStatus(error.empty() ? "Watchlist price refresh did not update any symbols." : error, true);
+        state.setStatus(error.empty() ? watchlistName + " refresh did not update any symbols." : error, true);
     }
 }
 

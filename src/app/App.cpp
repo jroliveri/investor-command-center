@@ -155,6 +155,27 @@ const char* sidebarSignalLabel(const std::string& status)
     return status.c_str();
 }
 
+const Watchlist* sidebarWatchlistForSlot(const AppState& state, int sidebarSlot)
+{
+    for (const Watchlist& watchlist : state.watchlists) {
+        if (watchlist.isActive && watchlist.showInSidebar && watchlist.sidebarSlot == sidebarSlot) {
+            return &watchlist;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<WatchlistItem> sidebarWatchlistItems(const AppState& state, int watchlistId)
+{
+    std::vector<WatchlistItem> items;
+    for (const WatchlistItem& item : state.watchlist) {
+        if (item.watchlistId == watchlistId) {
+            items.push_back(item);
+        }
+    }
+    return items;
+}
+
 }
 
 bool App::initialize()
@@ -582,8 +603,9 @@ void App::refreshWatchlistPrices()
     navigateTo(AppSection::Watchlist);
 
     if (refreshStatus.refreshedSymbols > 0) {
-        state_.setStatus("Watchlist prices refreshed: " + std::to_string(refreshStatus.refreshedSymbols) + " updated, " +
-            std::to_string(refreshStatus.failedSymbols) + " failed.");
+        state_.setStatus("All watchlists refreshed: " + std::to_string(refreshStatus.refreshedSymbols) + " updated, " +
+            std::to_string(refreshStatus.failedSymbols) + " failed. Last refresh: " + refreshStatus.lastRefreshedAt + ". Source: " +
+            (refreshStatus.cachedSymbols > 0 ? "Cached " : "") + refreshStatus.provider + ".");
     } else {
         state_.setStatus(error.empty() ? "Watchlist price refresh did not update any symbols." : error, true);
     }
@@ -809,9 +831,9 @@ void App::renderAccountColumn()
     ImGui::Spacing();
     renderAccountsPanel();
     ImGui::Spacing();
-    renderWatchlistPanel("Watchlist 1", 0);
+    renderWatchlistPanel(1);
     ImGui::Spacing();
-    renderWatchlistPanel("Watchlist 2", 10);
+    renderWatchlistPanel(2);
     ImGui::EndChild();
 
     renderSidebarFooter();
@@ -890,27 +912,36 @@ void App::renderAccountsPanel()
     ImGui::EndChild();
 }
 
-void App::renderWatchlistPanel(const char* title, int startIndex)
+void App::renderWatchlistPanel(int sidebarSlot)
 {
-    const std::string panelId = std::string(title) + "ColumnPanel";
+    const Watchlist* assignedWatchlist = sidebarWatchlistForSlot(state_, sidebarSlot);
+    const std::string fallbackTitle = sidebarSlot == 1 ? "Watchlist 1" : "Watchlist 2";
+    const std::string title = assignedWatchlist == nullptr ? fallbackTitle : assignedWatchlist->name;
+    const std::string panelId = "SidebarWatchlistSlot" + std::to_string(sidebarSlot) + "ColumnPanel";
 
     ImGui::BeginChild(panelId.c_str(), ImVec2(0.0f, 238.0f), true);
-    ImGui::TextColored(UiTheme::Accent, "%s", title);
+    ImGui::TextColored(UiTheme::Accent, "%s", title.c_str());
     ImGui::Separator();
 
-    if (state_.watchlist.empty()) {
-        ImGui::TextColored(UiTheme::MutedText, "No watchlist items.");
-    } else if (startIndex >= static_cast<int>(state_.watchlist.size())) {
-        ImGui::TextColored(UiTheme::MutedText, "No additional watchlist items.");
+    if (assignedWatchlist == nullptr) {
+        ImGui::TextColored(UiTheme::MutedText, "No watchlist selected.");
+        ImGui::TextWrapped("Assign one from the Watchlist Manager.");
+        ImGui::EndChild();
+        return;
+    }
+
+    const std::vector<WatchlistItem> items = sidebarWatchlistItems(state_, assignedWatchlist->id);
+    if (items.empty()) {
+        ImGui::TextColored(UiTheme::MutedText, "No items.");
     } else if (ImGui::BeginTable((panelId + "Table").c_str(), 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 64.0f);
         ImGui::TableSetupColumn("Price", ImGuiTableColumnFlags_WidthFixed, 86.0f);
         ImGui::TableSetupColumn("Signal");
         ImGui::TableHeadersRow();
 
-        const int limit = std::min<int>(startIndex + 10, static_cast<int>(state_.watchlist.size()));
-        for (int index = startIndex; index < limit; ++index) {
-            const WatchlistItem& item = state_.watchlist[static_cast<std::size_t>(index)];
+        const int limit = std::min<int>(10, static_cast<int>(items.size()));
+        for (int index = 0; index < limit; ++index) {
+            const WatchlistItem& item = items[static_cast<std::size_t>(index)];
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::Text("%s", item.ticker.c_str());

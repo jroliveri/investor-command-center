@@ -1,5 +1,44 @@
 # Codex Change Log
 
+## 2026-06-02 Sidebar Watchlist Assignment
+
+### Changed Files
+
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/db/Migrations.cpp`
+- `src/models/Watchlist.hpp`
+- `src/repositories/WatchlistRepository.cpp`
+- `src/ui/WatchlistView.hpp`
+- `src/ui/WatchlistView.cpp`
+
+### Behavior Added
+
+- Added `show_in_sidebar` and `sidebar_slot` fields to `watchlists`.
+- Added migration support for two sidebar watchlist slots.
+- Updated the Watchlist Manager with a Sidebar dropdown: `Not shown`, `Sidebar Watchlist 1`, and `Sidebar Watchlist 2`.
+- Restricted sidebar display to active watchlists.
+- Automatically clears a previous sidebar slot assignment when another active watchlist is assigned to the same slot.
+- Updated the morning sidebar so Watchlist panels are driven by saved watchlist assignments instead of fixed slices of the combined list.
+- Sidebar watchlist panels now use the assigned watchlist name as the section title and show up to 10 rows.
+- Added clear sidebar empty states for unassigned slots and assigned watchlists with no items.
+- Added `Refresh Selected Watchlist` and `Refresh All Watchlists` actions on the Watchlist page.
+- Updated watchlist refresh status messages to include the watchlist scope, refreshed/failed counts, last refresh time, and Yahoo Finance source/cached status.
+
+### Validation
+
+- Built the Debug CMake preset with Visual Studio's bundled CMake executable.
+- Built the Release CMake preset with Visual Studio's bundled CMake executable.
+
+### Known Issues
+
+- Manual desktop click-through is still recommended to confirm sidebar assignment persistence, slot replacement behavior, empty states, and refresh summaries against local watchlist data.
+- Yahoo Finance data remains informational and may be delayed, cached, unavailable, or incomplete.
+
 ## 2026-06-02 Multiple Watchlist Management
 
 ### Changed Files

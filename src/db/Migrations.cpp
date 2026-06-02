@@ -495,7 +495,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlists_active_name_unique
 CREATE INDEX IF NOT EXISTS idx_watchlist_watchlist_id ON watchlist(watchlist_id);
 )sql";
 
-    return executeMigration(database, 18, "create_multiple_watchlists", multipleWatchlistsMigration, error);
+    if (!executeMigration(database, 18, "create_multiple_watchlists", multipleWatchlistsMigration, error)) {
+        return false;
+    }
+
+    const char* watchlistSidebarAssignmentMigration = R"sql(
+ALTER TABLE watchlists ADD COLUMN show_in_sidebar INTEGER DEFAULT 0;
+ALTER TABLE watchlists ADD COLUMN sidebar_slot INTEGER DEFAULT 0;
+
+UPDATE watchlists
+SET show_in_sidebar = 0, sidebar_slot = 0
+WHERE is_active = 0;
+
+CREATE INDEX IF NOT EXISTS idx_watchlists_sidebar_slot
+    ON watchlists(show_in_sidebar, sidebar_slot, is_active);
+)sql";
+
+    return executeMigration(database, 19, "add_watchlist_sidebar_assignment", watchlistSidebarAssignmentMigration, error);
 }
 
 }

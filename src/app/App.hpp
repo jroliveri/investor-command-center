@@ -60,7 +60,7 @@ private:
     void renderAccountColumn();
     void renderAccountInfoPanel();
     void renderAccountsPanel();
-    void renderWatchlistPanel(const char* title, int startIndex);
+    void renderWatchlistPanel(int sidebarSlot);
     void renderSidebarFooter();
     void renderAppPopups();
     void renderCurrentSection();
