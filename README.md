@@ -39,6 +39,7 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 - Holdings CSV import with local file selection, column mapping, preview, validation, repeated upsert imports, and import summaries
 - Import batch tracking for local CSV import metadata
 - Portfolio snapshots for local daily/monthly/yearly movement comparisons, created automatically after CSV imports
+- Local SQLite database backup button with configurable backup folder and local reminder settings
 - SQLite database initialization at `data/investor_command_center.db`
 - SQLite migrations for `accounts`, `holdings`, `transactions`, `dividends`, `goals`, `watchlist`, `import_batches`, `portfolio_snapshots`, and `dashboard_widgets`
 - Basic validation and delete confirmation dialogs
@@ -77,6 +78,8 @@ Capital gains allocation rules are user-defined Settings records. For a Sell tra
 Stock Research is informational only. The Research menu can fetch a quote for a ticker from Yahoo Finance, display available quote/metric fields, clearly label live/fallback/cached/error status, and cache the latest fetched result locally for convenience. Research data may be delayed, unavailable, rate-limited, or incomplete. The Stock Research page itself does not update local holdings.
 
 Watchlist price signals are personal saved levels. The Watchlist page and Research menu can explicitly refresh current watchlist prices through the same market data provider used by Stock Research, update local watchlist price metadata, and show `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, or `Check Signals` badges. These signals are not recommendations, trading advice, brokerage actions, or money movement.
+
+Database backups are local-only. Configure a backup folder in Settings, then use `Back Up Now` from Settings or the sidebar database area to create a timestamped SQLite backup file. Backup reminders are stored locally and shown inside the app; there are no OS notifications, cloud backup, or sync features.
 
 Dashboard current-price refresh is optional and manual. It collects active holding tickers, fetches current quote prices through the market data provider, and recalculates dashboard display values using a session-only overlay. It does not change shares, cost basis, imported holdings, transactions, or snapshots. Cost basis remains local data from manual entry, transactions, or CSV import.
 
@@ -157,7 +160,7 @@ Investor Command Center is local-first. Personal investing records are stored in
 data/investor_command_center.db
 ```
 
-The database file is intentionally ignored by Git. Do not commit real account balances, holdings, transactions, dividend records, brokerage exports, backup files, logs, spreadsheets, or any other personal financial data.
+The database file and backup files are intentionally ignored by Git. Do not commit real account balances, holdings, transactions, dividend records, brokerage exports, backup files, logs, spreadsheets, or any other personal financial data.
 
 This public repository is for source code and documentation only. Review `git status` before every commit and confirm that local databases, exports, backups, and logs are not staged.
 

@@ -51,6 +51,7 @@ private:
     void refreshSelectedResearchSymbol();
     void refreshDashboardPrices();
     void refreshWatchlistPrices();
+    void backupDatabaseNow();
     void renderTopMenuBar();
     void renderAccountColumn();
     void renderAccountInfoPanel();

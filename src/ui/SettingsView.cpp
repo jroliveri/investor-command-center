@@ -4,19 +4,32 @@
 #include "app/AppState.hpp"
 #include "repositories/AppSettingsRepository.hpp"
 #include "repositories/CapitalGainAllocationRepository.hpp"
+#include "services/DatabaseBackupService.hpp"
 #include "ui/UiTheme.hpp"
+#include "util/Date.hpp"
 #include "util/Money.hpp"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
+#ifdef _WIN32
+#include <objbase.h>
+#include <shobjidl.h>
+#include <windows.h>
+#endif
+
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
 #include <filesystem>
+#include <optional>
 #include <string>
 
 namespace {
+
+constexpr const char* BackupFolderSettingKey = "database.backup_folder";
+constexpr const char* BackupReminderEnabledSettingKey = "database.backup_reminder_enabled";
+constexpr const char* BackupReminderFrequencySettingKey = "database.backup_reminder_frequency";
 
 void disabledAction(const char* label, const char* note)
 {
@@ -47,6 +60,104 @@ int nextSortOrder(const std::vector<CapitalGainAllocationRule>& rules)
     return next;
 }
 
+bool saveDatabaseBackupSettings(AppState& state, AppSettingsRepository& settingsRepository, std::string& error)
+{
+    error.clear();
+    state.databaseBackupSettings.reminderFrequency = DatabaseBackupService::normalizeFrequency(state.databaseBackupSettings.reminderFrequency);
+
+    if (!settingsRepository.setString(BackupFolderSettingKey, state.databaseBackupSettings.backupFolder, error)) {
+        return false;
+    }
+    if (!settingsRepository.setString(BackupReminderEnabledSettingKey, state.databaseBackupSettings.reminderEnabled ? "1" : "0", error)) {
+        return false;
+    }
+    if (!settingsRepository.setString(BackupReminderFrequencySettingKey, state.databaseBackupSettings.reminderFrequency, error)) {
+        return false;
+    }
+    return true;
+}
+
+std::optional<std::string> chooseBackupFolder(std::string& error)
+{
+    error.clear();
+
+#ifdef _WIN32
+    const HRESULT initializeResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    const bool shouldUninitialize = SUCCEEDED(initializeResult);
+    if (FAILED(initializeResult) && initializeResult != RPC_E_CHANGED_MODE) {
+        error = "Could not initialize the Windows folder picker.";
+        return std::nullopt;
+    }
+
+    IFileDialog* dialog = nullptr;
+    HRESULT result = CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
+    if (FAILED(result) || dialog == nullptr) {
+        if (shouldUninitialize) {
+            CoUninitialize();
+        }
+        error = "Could not open the Windows folder picker.";
+        return std::nullopt;
+    }
+
+    DWORD options = 0;
+    dialog->GetOptions(&options);
+    dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+    dialog->SetTitle(L"Choose Investor Command Center Backup Folder");
+
+    result = dialog->Show(nullptr);
+    if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+        dialog->Release();
+        if (shouldUninitialize) {
+            CoUninitialize();
+        }
+        return std::nullopt;
+    }
+    if (FAILED(result)) {
+        dialog->Release();
+        if (shouldUninitialize) {
+            CoUninitialize();
+        }
+        error = "Could not choose a backup folder.";
+        return std::nullopt;
+    }
+
+    IShellItem* selectedItem = nullptr;
+    result = dialog->GetResult(&selectedItem);
+    if (FAILED(result) || selectedItem == nullptr) {
+        dialog->Release();
+        if (shouldUninitialize) {
+            CoUninitialize();
+        }
+        error = "Could not read the selected backup folder.";
+        return std::nullopt;
+    }
+
+    PWSTR selectedPath = nullptr;
+    result = selectedItem->GetDisplayName(SIGDN_FILESYSPATH, &selectedPath);
+    if (FAILED(result) || selectedPath == nullptr) {
+        selectedItem->Release();
+        dialog->Release();
+        if (shouldUninitialize) {
+            CoUninitialize();
+        }
+        error = "Could not read the selected backup folder path.";
+        return std::nullopt;
+    }
+
+    const std::filesystem::path folderPath(selectedPath);
+    CoTaskMemFree(selectedPath);
+    selectedItem->Release();
+    dialog->Release();
+    if (shouldUninitialize) {
+        CoUninitialize();
+    }
+    return folderPath.string();
+#else
+    error = "Folder picker is only available in the Windows desktop build.";
+    return std::nullopt;
+#endif
+}
+
 }
 
 void SettingsView::render(AppState& state,
@@ -54,6 +165,7 @@ void SettingsView::render(AppState& state,
     CapitalGainAllocationRepository& allocationRepository,
     const std::string& databasePath,
     const char* appVersion,
+    const std::function<void()>& backupNow,
     const std::function<void()>& reloadData)
 {
     const std::string absoluteDatabasePath = std::filesystem::absolute(databasePath).string();
@@ -113,12 +225,12 @@ void SettingsView::render(AppState& state,
     ImGui::Separator();
     ImGui::TextWrapped("%s", absoluteDatabasePath.c_str());
     ImGui::Spacing();
-    ImGui::TextColored(UiTheme::MutedText, "The app reads and writes this local database file. Move or back it up only while the app is closed.");
+    ImGui::TextColored(UiTheme::MutedText, "The app reads and writes this local database file. Use Database Backup for in-app backups; move the database only while the app is closed.");
     ImGui::EndChild();
 
     ImGui::Spacing();
 
-    ImGui::BeginChild("Privacy", ImVec2(panelWidth, 220.0f), true);
+    ImGui::BeginChild("Privacy", ImVec2(panelWidth, 280.0f), true);
     ImGui::Text("Data Privacy");
     ImGui::Separator();
     ImGui::TextWrapped("Investor Command Center stores records locally and does not connect to brokerage accounts or cloud services. Stock Research fetches informational market data only when explicitly requested.");
@@ -131,14 +243,7 @@ void SettingsView::render(AppState& state,
 
     ImGui::SameLine();
 
-    ImGui::BeginChild("BackupReminder", ImVec2(panelWidth, 220.0f), true);
-    ImGui::Text("Backup Reminder");
-    ImGui::Separator();
-    ImGui::TextWrapped("Make a periodic copy of the SQLite database to a location you control. A monthly backup is a good default for manual personal tracking.");
-    ImGui::Spacing();
-    ImGui::TextColored(UiTheme::Amber, "Suggested cadence: monthly");
-    ImGui::TextColored(UiTheme::MutedText, "Close the app before copying the database file.");
-    ImGui::EndChild();
+    renderDatabaseBackup(state, settingsRepository, backupNow);
 
     ImGui::Spacing();
 
@@ -176,6 +281,98 @@ void SettingsView::render(AppState& state,
     disabledAction("Export Dividends CSV", "Planned local file export");
     disabledAction("Export Goals CSV", "Planned local file export");
     disabledAction("Export Watchlist CSV", "Planned local file export");
+    ImGui::EndChild();
+}
+
+void SettingsView::renderDatabaseBackup(AppState& state, AppSettingsRepository& settingsRepository, const std::function<void()>& backupNow)
+{
+    ImGui::BeginChild("DatabaseBackup", ImVec2(0.0f, 280.0f), true);
+    ImGui::Text("Database Backup");
+    ImGui::Separator();
+    ImGui::TextWrapped("Create a local SQLite database backup in a folder you control. This does not use cloud sync or move the database location.");
+
+    ImGui::Spacing();
+    ImGui::TextColored(UiTheme::MutedText, "Backup folder path");
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputText("##BackupFolderPath", &state.databaseBackupSettings.backupFolder);
+
+    if (ImGui::Button("Choose Backup Folder", ImVec2(180.0f, 0.0f))) {
+        std::string error;
+        const std::optional<std::string> folder = chooseBackupFolder(error);
+        if (folder.has_value()) {
+            state.databaseBackupSettings.backupFolder = *folder;
+            if (saveDatabaseBackupSettings(state, settingsRepository, error)) {
+                backupMessage_ = "Backup folder saved.";
+                backupMessageIsError_ = false;
+                state.setStatus("Backup folder saved locally.");
+            } else {
+                backupMessage_ = error;
+                backupMessageIsError_ = true;
+            }
+        } else if (!error.empty()) {
+            backupMessage_ = error;
+            backupMessageIsError_ = true;
+        }
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Save Backup Settings", ImVec2(180.0f, 0.0f))) {
+        std::string error;
+        if (saveDatabaseBackupSettings(state, settingsRepository, error)) {
+            backupMessage_ = "Backup settings saved.";
+            backupMessageIsError_ = false;
+            state.setStatus("Backup settings saved locally.");
+        } else {
+            backupMessage_ = error;
+            backupMessageIsError_ = true;
+        }
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Back Up Now", ImVec2(120.0f, 0.0f))) {
+        std::string error;
+        if (saveDatabaseBackupSettings(state, settingsRepository, error)) {
+            backupNow();
+            backupMessage_ = "Backup requested.";
+            backupMessageIsError_ = false;
+        } else {
+            backupMessage_ = error;
+            backupMessageIsError_ = true;
+        }
+    }
+
+    ImGui::Spacing();
+    ImGui::Checkbox("Backup reminder enabled", &state.databaseBackupSettings.reminderEnabled);
+    ImGui::SameLine();
+    if (ImGui::BeginCombo("Frequency", state.databaseBackupSettings.reminderFrequency.c_str())) {
+        const char* frequencies[] = { "Daily", "Weekly", "Monthly" };
+        for (const char* frequency : frequencies) {
+            const bool selected = state.databaseBackupSettings.reminderFrequency == frequency;
+            if (ImGui::Selectable(frequency, selected)) {
+                state.databaseBackupSettings.reminderFrequency = frequency;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::TextColored(UiTheme::MutedText, "Last backup");
+    ImGui::SameLine(160.0f);
+    ImGui::Text("%s", state.databaseBackupSettings.lastBackupAt.empty() ? "None" : state.databaseBackupSettings.lastBackupAt.c_str());
+
+    const std::string reminderText = DatabaseBackupService::reminderStatusText(state.databaseBackupSettings, Date::todayIso8601());
+    const bool backupDue = DatabaseBackupService::isReminderDue(state.databaseBackupSettings, Date::todayIso8601());
+    ImGui::TextColored(UiTheme::MutedText, "Reminder status");
+    ImGui::SameLine(160.0f);
+    ImGui::TextColored(backupDue ? UiTheme::Amber : UiTheme::TextSecondary, "%s", reminderText.c_str());
+
+    if (!backupMessage_.empty()) {
+        ImGui::TextColored(backupMessageIsError_ ? UiTheme::Loss : UiTheme::Gain, "%s", backupMessage_.c_str());
+    }
+
+    ImGui::TextColored(UiTheme::MutedText, "Backup files are personal local data and should stay out of GitHub.");
     ImGui::EndChild();
 }
 

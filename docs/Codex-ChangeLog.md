@@ -1,5 +1,49 @@
 # Codex Change Log
 
+## 2026-06-02 Local Database Backup
+
+### Changed Files
+
+- `.gitignore`
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Privacy-And-Local-Data.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/models/DatabaseBackup.hpp`
+- `src/services/DatabaseBackupService.hpp`
+- `src/services/DatabaseBackupService.cpp`
+- `src/ui/SettingsView.hpp`
+- `src/ui/SettingsView.cpp`
+
+### Behavior Added
+
+- Added local SQLite database backup support using the SQLite backup API.
+- Added `Back Up Now` in the sidebar database/version area.
+- Added a `Tools > Back Up Now` menu action.
+- Added a Settings `Database Backup` section with backup folder path, Windows folder picker, Back Up Now, reminder enabled checkbox, frequency selector, last backup timestamp, and due status.
+- Stored backup settings locally in `app_settings` under `database.backup_folder`, `database.backup_reminder_enabled`, `database.backup_reminder_frequency`, and `database.last_backup_at`.
+- Added local reminder due text in the sidebar backup section.
+- Added timestamped backup filenames like `investor_command_center_backup_YYYY-MM-DD_HHMMSS.db`.
+- Expanded `.gitignore` to ignore root-level `*.db`, `*.sqlite`, and `*.sqlite3` backup/database files.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, CSV/import/export/backup/log folders, `.vs`, `out`, `build`, object files, and `CMakeUserPresets.json` are not staged.
+
+### Known Issues
+
+- Manual desktop click-through is still recommended for the Windows folder picker and Back Up Now button.
+- Restore from backup is not implemented yet.
+
 ## 2026-06-02 Morning Snapshot Sidebar
 
 ### Changed Files

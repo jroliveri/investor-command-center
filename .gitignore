@@ -12,6 +12,9 @@ CMakeUserPresets.json
 data/*.db
 data/*.sqlite
 data/*.sqlite3
+*.db
+*.sqlite
+*.sqlite3
 data/*.db-journal
 data/*.sqlite-journal
 data/*.sqlite3-journal

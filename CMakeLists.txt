@@ -88,6 +88,7 @@ set(APP_SOURCES
     src/models/CapitalGainAllocationRule.hpp
     src/models/DashboardChartSetting.hpp
     src/models/DashboardWidget.hpp
+    src/models/DatabaseBackup.hpp
     src/models/Holding.hpp
     src/models/ImportBatch.hpp
     src/models/MarketQuote.hpp
@@ -135,6 +136,8 @@ set(APP_SOURCES
     src/services/PerformanceCalculator.cpp
     src/services/DashboardService.hpp
     src/services/DashboardService.cpp
+    src/services/DatabaseBackupService.hpp
+    src/services/DatabaseBackupService.cpp
     src/services/DashboardLayoutService.hpp
     src/services/DashboardLayoutService.cpp
     src/services/TransactionService.hpp
@@ -196,6 +199,9 @@ target_link_libraries(InvestorCommandCenter PRIVATE
     dwmapi
     imm32
     comdlg32
+    ole32
+    shell32
+    uuid
     winhttp
 )
 

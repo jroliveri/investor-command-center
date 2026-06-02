@@ -30,6 +30,12 @@ That database file is intentionally ignored by Git. It may contain account names
 
 The repository also ignores imports, exports, backups, logs, spreadsheets, and common brokerage export formats, including CSV, TSV, Excel, OFX, QFX, and QIF files.
 
+## Local Backups
+
+The app can create a timestamped local SQLite database backup from the configured backup folder in Settings. Backup files are personal financial data and should remain outside GitHub.
+
+Backup reminders are local app reminders only. They do not upload files, sync to cloud storage, use OS notifications, connect to brokerage accounts, or move the database location.
+
 ## Before Every Commit
 
 Run:

@@ -9,6 +9,7 @@
 #include "models/ImportBatch.hpp"
 #include "models/DashboardWidget.hpp"
 #include "models/DashboardChartSetting.hpp"
+#include "models/DatabaseBackup.hpp"
 #include "models/MarketQuote.hpp"
 #include "models/PortfolioSnapshot.hpp"
 #include "models/Transaction.hpp"
@@ -74,6 +75,7 @@ public:
     std::vector<DashboardPriceOverride> dashboardPriceOverrides;
     DashboardPriceRefreshStatus dashboardPriceRefreshStatus;
     WatchlistPriceRefreshStatus watchlistPriceRefreshStatus;
+    DatabaseBackupSettings databaseBackupSettings;
     std::vector<CapitalGainAllocationRule> capitalGainAllocationRules;
     std::string themeKey = "dark_command_center";
     std::string statusMessage;

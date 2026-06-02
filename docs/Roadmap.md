@@ -32,6 +32,7 @@
 - Goals can use manual current amounts or linked calculated account values
 - User-defined capital gains allocation helper for Sell transactions
 - User-defined Watchlist buy/sell price signals with explicit Yahoo Finance refresh and local signal badges
+- Local SQLite database backups with configurable folder, Back Up Now button, and local reminder settings
 
 ## Next
 
@@ -56,7 +57,7 @@
 ## Later
 
 - Charts with ImPlot
-- Backup and restore workflow
+- Restore workflow for local database backups
 - Optional exportable reports
 - FIFO/LIFO and tax-lot cost basis options
 - Deeper realized/unrealized gain reports

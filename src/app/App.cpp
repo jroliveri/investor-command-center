@@ -3,6 +3,7 @@
 
 #include "db/Migrations.hpp"
 #include "services/DashboardService.hpp"
+#include "services/DatabaseBackupService.hpp"
 #include "services/PortfolioCalculator.hpp"
 #include "services/WatchlistSignalService.hpp"
 #include "ui/UiTheme.hpp"
@@ -25,6 +26,10 @@ constexpr const char* DatabasePath = "data/investor_command_center.db";
 constexpr const char* AppVersion = "0.3.0";
 constexpr float AccountColumnWidth = 340.0f;
 constexpr const char* ThemeSettingKey = "theme";
+constexpr const char* BackupFolderSettingKey = "database.backup_folder";
+constexpr const char* BackupReminderEnabledSettingKey = "database.backup_reminder_enabled";
+constexpr const char* BackupReminderFrequencySettingKey = "database.backup_reminder_frequency";
+constexpr const char* LastBackupAtSettingKey = "database.last_backup_at";
 
 void compactMetric(const char* label, const std::string& value, ImVec4 color)
 {
@@ -269,6 +274,31 @@ void App::reloadData()
     if (!error.empty()) {
         state_.setStatus("Could not load app settings: " + error, true);
     }
+
+    state_.databaseBackupSettings.backupFolder = appSettingsRepository_->getString(BackupFolderSettingKey, "", error);
+    if (!error.empty()) {
+        state_.setStatus("Could not load backup folder setting: " + error, true);
+        error.clear();
+    }
+
+    state_.databaseBackupSettings.reminderEnabled = appSettingsRepository_->getString(BackupReminderEnabledSettingKey, "0", error) == "1";
+    if (!error.empty()) {
+        state_.setStatus("Could not load backup reminder setting: " + error, true);
+        error.clear();
+    }
+
+    state_.databaseBackupSettings.reminderFrequency = DatabaseBackupService::normalizeFrequency(
+        appSettingsRepository_->getString(BackupReminderFrequencySettingKey, "Monthly", error));
+    if (!error.empty()) {
+        state_.setStatus("Could not load backup reminder frequency: " + error, true);
+        error.clear();
+    }
+
+    state_.databaseBackupSettings.lastBackupAt = appSettingsRepository_->getString(LastBackupAtSettingKey, "", error);
+    if (!error.empty()) {
+        state_.setStatus("Could not load last backup timestamp: " + error, true);
+        error.clear();
+    }
 }
 
 void App::navigateTo(AppSection section)
@@ -421,6 +451,29 @@ void App::refreshWatchlistPrices()
     }
 }
 
+void App::backupDatabaseNow()
+{
+    if (state_.databaseBackupSettings.backupFolder.empty()) {
+        state_.setStatus("Choose a backup folder in Settings before creating a database backup.", true);
+        return;
+    }
+
+    const DatabaseBackupResult result = DatabaseBackupService::createBackup(database_, state_.databaseBackupSettings.backupFolder);
+    if (!result.success) {
+        state_.setStatus("Database backup failed: " + result.error, true);
+        return;
+    }
+
+    std::string error;
+    if (!appSettingsRepository_->setString(LastBackupAtSettingKey, result.backedUpAt, error)) {
+        state_.setStatus("Database backup created, but last backup time could not be saved: " + error, true);
+        return;
+    }
+
+    reloadData();
+    state_.setStatus("Database backup created: " + result.backupPath);
+}
+
 void App::renderTopMenuBar()
 {
     if (!ImGui::BeginMainMenuBar()) {
@@ -499,6 +552,9 @@ void App::renderTopMenuBar()
         if (ImGui::MenuItem("Refresh Current Prices")) {
             refreshDashboardPrices();
         }
+        if (ImGui::MenuItem("Back Up Now")) {
+            backupDatabaseNow();
+        }
         if (ImGui::MenuItem("Capital Gains Allocation Settings")) {
             navigateTo(AppSection::Settings);
             state_.setStatus("Capital gains allocation rules are managed in Settings.");
@@ -506,9 +562,6 @@ void App::renderTopMenuBar()
         if (ImGui::MenuItem("Data Privacy / Local Data")) {
             showPrivacyPopup_ = true;
         }
-        ImGui::BeginDisabled();
-        ImGui::MenuItem("Backup");
-        ImGui::EndDisabled();
         ImGui::EndMenu();
     }
 
@@ -551,7 +604,7 @@ void App::renderTopMenuBar()
 
 void App::renderAccountColumn()
 {
-    constexpr float FooterHeight = 132.0f;
+    constexpr float FooterHeight = 210.0f;
 
     ImGui::BeginChild("MorningSnapshotSidebar", ImVec2(AccountColumnWidth, 0.0f), true);
     ImGui::BeginChild("MorningSnapshotSections", ImVec2(0.0f, -FooterHeight), false);
@@ -684,6 +737,16 @@ void App::renderSidebarFooter()
     ImGui::Separator();
     compactMetric("App Version", AppVersion, UiTheme::TextSecondary);
     compactMetric("SQLite Status", database_.handle() == nullptr ? "Disconnected" : "Connected", database_.handle() == nullptr ? UiTheme::TextDanger : UiTheme::TextSuccess);
+    const std::string reminderText = DatabaseBackupService::reminderStatusText(state_.databaseBackupSettings, Date::todayIso8601());
+    const bool backupDue = DatabaseBackupService::isReminderDue(state_.databaseBackupSettings, Date::todayIso8601());
+    compactMetric("Backup", reminderText, backupDue ? UiTheme::Amber : UiTheme::TextMuted);
+    if (ImGui::Button("Back Up Now", ImVec2(120.0f, 0.0f))) {
+        backupDatabaseNow();
+    }
+    if (state_.databaseBackupSettings.backupFolder.empty()) {
+        ImGui::SameLine();
+        ImGui::TextColored(UiTheme::TextWarning, "Set folder in Settings");
+    }
     ImGui::TextColored(UiTheme::TextMuted, "Current Database Path");
     ImGui::TextWrapped("%s", absoluteDatabasePath().c_str());
     ImGui::EndChild();
@@ -730,7 +793,10 @@ void App::renderCurrentSection()
         renderPlaceholder("Reports", "Reports will summarize local records without advice or recommendations.");
         break;
     case AppSection::Settings:
-        settingsView_.render(state_, *appSettingsRepository_, *capitalGainAllocationRepository_, DatabasePath, AppVersion, reload);
+        settingsView_.render(state_, *appSettingsRepository_, *capitalGainAllocationRepository_, DatabasePath, AppVersion, [this]() {
+            backupDatabaseNow();
+        },
+            reload);
         break;
     }
 }

@@ -295,12 +295,21 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 ```
 
-App settings store local UI preferences only. The current first setting is `theme`, with supported values:
+App settings store local UI and maintenance preferences only. The current theme setting is `theme`, with supported values:
 
 - `dark_command_center`
 - `light_trading_terminal`
 
 Theme preferences are local display settings and do not affect calculations or stored investing records.
+
+Database backup settings are also stored in `app_settings`:
+
+- `database.backup_folder`
+- `database.backup_reminder_enabled`
+- `database.backup_reminder_frequency`
+- `database.last_backup_at`
+
+Backups are created locally from the current SQLite database into the configured folder. Backup reminder settings only affect in-app reminder text; they do not create OS notifications, cloud sync, or automatic brokerage connections.
 
 ## capital_gain_allocation_rules
 
@@ -428,6 +437,7 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Dashboard layout preferences are loaded from `dashboard_widgets` and only affect display order/visibility.
 - Dashboard chart preferences are loaded from `dashboard_chart_settings` and only affect chart display mode, range, and chart type.
 - Theme preference is loaded from `app_settings` and only affects local UI styling.
+- Database backup preferences are loaded from `app_settings` and only affect local backup UI/reminder behavior.
 - Capital gain allocation rules are loaded from `capital_gain_allocation_rules` and only affect the local transaction allocation helper.
 - Market quote cache records are used by Stock Research and explicit Watchlist price refreshes only; they do not affect portfolio calculations.
 - Dividend totals are calculated in C++ from `dividends.date_received` using `YYYY-MM` and `YYYY` prefixes.

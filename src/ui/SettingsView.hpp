@@ -17,11 +17,15 @@ public:
         CapitalGainAllocationRepository& allocationRepository,
         const std::string& databasePath,
         const char* appVersion,
+        const std::function<void()>& backupNow,
         const std::function<void()>& reloadData);
 
 private:
+    void renderDatabaseBackup(AppState& state, AppSettingsRepository& settingsRepository, const std::function<void()>& backupNow);
     void renderCapitalGainAllocation(AppState& state, CapitalGainAllocationRepository& allocationRepository, const std::function<void()>& reloadData);
 
     std::string allocationMessage_;
     bool allocationMessageIsError_ = false;
+    std::string backupMessage_;
+    bool backupMessageIsError_ = false;
 };
