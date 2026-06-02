@@ -55,7 +55,8 @@ private:
     void renderAccountColumn();
     void renderAccountInfoPanel();
     void renderAccountsPanel();
-    void renderWatchlistPanel();
+    void renderWatchlistPanel(const char* title, int startIndex);
+    void renderSidebarFooter();
     void renderAppPopups();
     void renderCurrentSection();
     void renderPlaceholder(const char* title, const char* note);

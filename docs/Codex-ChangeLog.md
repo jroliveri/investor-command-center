@@ -1,5 +1,38 @@
 # Codex Change Log
 
+## 2026-06-02 Morning Snapshot Sidebar
+
+### Changed Files
+
+- `README.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+
+### Behavior Added
+
+- Redesigned the left sidebar as a morning snapshot panel instead of a navigation/status area.
+- Removed the program name, version label, current page display, and top-menu navigation hint from the top of the sidebar.
+- Kept top menu navigation as the primary navigation path.
+- Updated Account Information to show total portfolio value, holdings value, cash balance, unrealized gain/loss, realized gain/loss, daily movement when available, last CSV import, and last price refresh when available.
+- Updated the Accounts sidebar panel to show account name, calculated account value, cash balance, and status.
+- Split the compact watchlist sidebar into `Watchlist 1` for rows 1-10 and `Watchlist 2` for rows 11-20.
+- Added compact watchlist signal labels using the existing watchlist signal calculation logic.
+- Moved app version, SQLite connection status, and current database path into a visually separated bottom sidebar footer.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, CSV/import/export/backup/log folders, `.vs`, `out`, `build`, object files, and `CMakeUserPresets.json` are not staged.
+
+### Known Issues
+
+- Manual desktop launch/click-through is still recommended to confirm final sidebar spacing on the target monitor and DPI.
+
 ## 2026-06-01 Watchlist Price Signals
 
 ### Changed Files

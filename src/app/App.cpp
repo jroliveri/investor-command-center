@@ -13,7 +13,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <set>
+#include <string>
+#include <system_error>
 #include <vector>
 
 namespace {
@@ -62,6 +65,38 @@ const Account* accountForHolding(const std::vector<Account>& accounts, int accou
         }
     }
     return nullptr;
+}
+
+std::string absoluteDatabasePath()
+{
+    std::error_code error;
+    const std::filesystem::path path = std::filesystem::absolute(DatabasePath, error);
+    return error ? std::string(DatabasePath) : path.string();
+}
+
+ImVec4 sidebarSignalColor(const std::string& status)
+{
+    if (status == "Buy Signal") {
+        return UiTheme::Gain;
+    }
+    if (status == "Sell Signal") {
+        return UiTheme::Loss;
+    }
+    if (status == "Check Signals") {
+        return UiTheme::Amber;
+    }
+    if (status == "No Price") {
+        return UiTheme::TextMuted;
+    }
+    return UiTheme::TextSecondary;
+}
+
+const char* sidebarSignalLabel(const std::string& status)
+{
+    if (status == "No Signal") {
+        return "Watch";
+    }
+    return status.c_str();
 }
 
 }
@@ -516,23 +551,20 @@ void App::renderTopMenuBar()
 
 void App::renderAccountColumn()
 {
-    ImGui::BeginChild("AccountColumn", ImVec2(AccountColumnWidth, 0.0f), true);
-    ImGui::SetWindowFontScale(1.08f);
-    ImGui::Text("Investor Command Center");
-    ImGui::SetWindowFontScale(1.0f);
-    ImGui::TextColored(UiTheme::MutedText, "Portfolio terminal - v%s", AppVersion);
-    ImGui::TextColored(UiTheme::Accent, "Current page: %s", sectionTitle(state_.currentSection));
-    ImGui::Separator();
-    ImGui::TextColored(UiTheme::MutedText, "Use the top menu bar for navigation.");
-    ImGui::Spacing();
-    renderAccountInfoPanel();
-    renderAccountsPanel();
-    renderWatchlistPanel();
+    constexpr float FooterHeight = 132.0f;
 
-    ImGui::Separator();
-    ImGui::TextColored(UiTheme::MutedText, "SQLite");
-    ImGui::TextColored(UiTheme::MutedText, "%s", DatabasePath);
-    ImGui::TextColored(UiTheme::Amber, "Local data. Back up monthly.");
+    ImGui::BeginChild("MorningSnapshotSidebar", ImVec2(AccountColumnWidth, 0.0f), true);
+    ImGui::BeginChild("MorningSnapshotSections", ImVec2(0.0f, -FooterHeight), false);
+    renderAccountInfoPanel();
+    ImGui::Spacing();
+    renderAccountsPanel();
+    ImGui::Spacing();
+    renderWatchlistPanel("Watchlist 1", 0);
+    ImGui::Spacing();
+    renderWatchlistPanel("Watchlist 2", 10);
+    ImGui::EndChild();
+
+    renderSidebarFooter();
     ImGui::EndChild();
 }
 
@@ -540,34 +572,53 @@ void App::renderAccountInfoPanel()
 {
     const std::string today = Date::todayIso8601();
     const DashboardData data = DashboardService::build(state_, today, Date::currentMonthPrefix(), Date::currentYearPrefix());
-    const PortfolioSnapshot* latestSnapshot = DashboardService::latestSnapshot(state_);
     const ImportBatch* latestImport = DashboardService::latestImportBatch(state_);
 
-    ImGui::BeginChild("AccountInfoPanel", ImVec2(0.0f, 210.0f), true);
-    ImGui::TextColored(UiTheme::Accent, "Account Info");
+    std::string latestPriceRefreshAt;
+    std::string latestPriceRefresh = "None";
+    if (state_.dashboardPriceRefreshStatus.hasRun && !state_.dashboardPriceRefreshStatus.lastRefreshedAt.empty()) {
+        latestPriceRefreshAt = state_.dashboardPriceRefreshStatus.lastRefreshedAt;
+        latestPriceRefresh = state_.dashboardPriceRefreshStatus.lastRefreshedAt + " (Dashboard)";
+    }
+    if (state_.watchlistPriceRefreshStatus.hasRun && !state_.watchlistPriceRefreshStatus.lastRefreshedAt.empty() &&
+        (latestPriceRefreshAt.empty() || state_.watchlistPriceRefreshStatus.lastRefreshedAt > latestPriceRefreshAt)) {
+        latestPriceRefreshAt = state_.watchlistPriceRefreshStatus.lastRefreshedAt;
+        latestPriceRefresh = state_.watchlistPriceRefreshStatus.lastRefreshedAt + " (Watchlist)";
+    }
+    for (const WatchlistItem& item : state_.watchlist) {
+        if (!item.lastPriceRefreshAt.empty() && (latestPriceRefreshAt.empty() || item.lastPriceRefreshAt > latestPriceRefreshAt)) {
+            latestPriceRefreshAt = item.lastPriceRefreshAt;
+            latestPriceRefresh = item.lastPriceRefreshAt + " (Watchlist)";
+        }
+    }
+
+    ImGui::BeginChild("AccountInfoPanel", ImVec2(0.0f, 254.0f), true);
+    ImGui::TextColored(UiTheme::Accent, "Account Information");
     ImGui::Separator();
-    compactMetric("Total Portfolio", Money::format(data.portfolio.accountBalance), UiTheme::Gain);
+    compactMetric("Total Portfolio Value", Money::format(data.portfolio.accountBalance), UiTheme::Gain);
     compactMetric("Holdings Value", Money::format(data.portfolio.holdingsMarketValue), UiTheme::Gain);
     compactMetric("Cash Balance", Money::format(data.portfolio.cashBalance), UiTheme::Amber);
     compactMetric("Unrealized G/L", Money::format(data.portfolio.gainLossDollar), UiTheme::moneyColor(data.portfolio.gainLossDollar));
-    compactMetric("Realized G/L YTD", Money::format(data.realizedGains.thisYear), UiTheme::moneyColor(data.realizedGains.thisYear));
+    compactMetric("Realized G/L", Money::format(data.realizedGains.thisYear), UiTheme::moneyColor(data.realizedGains.thisYear));
+    compactMetric("Daily Movement", data.performance.hasDaily ? Money::format(data.performance.daily) : "N/A", data.performance.hasDaily ? UiTheme::moneyColor(data.performance.daily) : UiTheme::TextMuted);
     compactMetric("Last CSV Import", latestImport == nullptr ? "None" : latestImport->importDate, UiTheme::MutedText);
-    compactMetric("Last Snapshot", latestSnapshot == nullptr ? "None" : latestSnapshot->snapshotDate, UiTheme::MutedText);
+    compactMetric("Last Price Refresh", latestPriceRefresh, UiTheme::MutedText);
     ImGui::EndChild();
 }
 
 void App::renderAccountsPanel()
 {
-    ImGui::BeginChild("AccountsColumnPanel", ImVec2(0.0f, 180.0f), true);
+    ImGui::BeginChild("AccountsColumnPanel", ImVec2(0.0f, 196.0f), true);
     ImGui::TextColored(UiTheme::Accent, "Accounts");
     ImGui::Separator();
 
     if (state_.accounts.empty()) {
         ImGui::TextColored(UiTheme::MutedText, "No accounts yet.");
-    } else if (ImGui::BeginTable("AccountColumnTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
+    } else if (ImGui::BeginTable("AccountColumnTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Account");
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 92.0f);
-        ImGui::TableSetupColumn("Cash", ImGuiTableColumnFlags_WidthFixed, 78.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 84.0f);
+        ImGui::TableSetupColumn("Cash", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+        ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 58.0f);
         ImGui::TableHeadersRow();
 
         const std::vector<Holding> holdings = DashboardService::holdingsWithDashboardPrices(state_);
@@ -580,6 +631,8 @@ void App::renderAccountsPanel()
             ImGui::Text("%s", Money::format(metrics.calculatedBalance).c_str());
             ImGui::TableNextColumn();
             ImGui::TextColored(account.status == "Active" ? UiTheme::Amber : UiTheme::MutedText, "%s", Money::format(account.cashBalance).c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextColored(isActiveAccount(account) ? UiTheme::TextSuccess : UiTheme::TextMuted, "%s", account.status.empty() ? "Active" : account.status.c_str());
         }
         ImGui::EndTable();
     }
@@ -587,36 +640,26 @@ void App::renderAccountsPanel()
     ImGui::EndChild();
 }
 
-void App::renderWatchlistPanel()
+void App::renderWatchlistPanel(const char* title, int startIndex)
 {
-    const auto signalColor = [](const std::string& status) {
-        if (status == "Buy Signal") {
-            return UiTheme::Gain;
-        }
-        if (status == "Sell Signal") {
-            return UiTheme::Loss;
-        }
-        if (status == "Check Signals") {
-            return UiTheme::Amber;
-        }
-        return UiTheme::MutedText;
-    };
+    const std::string panelId = std::string(title) + "ColumnPanel";
 
-    ImGui::BeginChild("WatchlistColumnPanel", ImVec2(0.0f, 220.0f), true);
-    ImGui::TextColored(UiTheme::Accent, "Watchlist / Quick Symbols");
+    ImGui::BeginChild(panelId.c_str(), ImVec2(0.0f, 238.0f), true);
+    ImGui::TextColored(UiTheme::Accent, "%s", title);
     ImGui::Separator();
 
     if (state_.watchlist.empty()) {
         ImGui::TextColored(UiTheme::MutedText, "No watchlist items.");
-    } else if (ImGui::BeginTable("WatchlistColumnTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 66.0f);
-        ImGui::TableSetupColumn("Price", ImGuiTableColumnFlags_WidthFixed, 78.0f);
-        ImGui::TableSetupColumn("Signal", ImGuiTableColumnFlags_WidthFixed, 92.0f);
-        ImGui::TableSetupColumn("Priority");
+    } else if (startIndex >= static_cast<int>(state_.watchlist.size())) {
+        ImGui::TextColored(UiTheme::MutedText, "No additional watchlist items.");
+    } else if (ImGui::BeginTable((panelId + "Table").c_str(), 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 64.0f);
+        ImGui::TableSetupColumn("Price", ImGuiTableColumnFlags_WidthFixed, 86.0f);
+        ImGui::TableSetupColumn("Signal");
         ImGui::TableHeadersRow();
 
-        const int limit = std::min<int>(12, static_cast<int>(state_.watchlist.size()));
-        for (int index = 0; index < limit; ++index) {
+        const int limit = std::min<int>(startIndex + 10, static_cast<int>(state_.watchlist.size()));
+        for (int index = startIndex; index < limit; ++index) {
             const WatchlistItem& item = state_.watchlist[static_cast<std::size_t>(index)];
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -626,13 +669,23 @@ void App::renderWatchlistPanel()
             ImGui::Text("%s", currentPrice.c_str());
             ImGui::TableNextColumn();
             const std::string signalStatus = WatchlistSignalService::calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice);
-            ImGui::TextColored(signalColor(signalStatus), "%s", signalStatus.c_str());
-            ImGui::TableNextColumn();
-            ImGui::TextColored(item.priority == "High" ? UiTheme::Amber : UiTheme::MutedText, "%s", item.priority.c_str());
+            ImGui::TextColored(sidebarSignalColor(signalStatus), "%s", sidebarSignalLabel(signalStatus));
         }
         ImGui::EndTable();
     }
 
+    ImGui::EndChild();
+}
+
+void App::renderSidebarFooter()
+{
+    ImGui::BeginChild("SidebarVersionDatabaseInfo", ImVec2(0.0f, 0.0f), true);
+    ImGui::TextColored(UiTheme::Accent, "Version Information / Database Info");
+    ImGui::Separator();
+    compactMetric("App Version", AppVersion, UiTheme::TextSecondary);
+    compactMetric("SQLite Status", database_.handle() == nullptr ? "Disconnected" : "Connected", database_.handle() == nullptr ? UiTheme::TextDanger : UiTheme::TextSuccess);
+    ImGui::TextColored(UiTheme::TextMuted, "Current Database Path");
+    ImGui::TextWrapped("%s", absoluteDatabasePath().c_str());
     ImGui::EndChild();
 }
 

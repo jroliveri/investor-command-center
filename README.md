@@ -17,9 +17,9 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 ## Current App
 
 - Native Win32 desktop shell using Dear ImGui with a DirectX 11 renderer
-- Trading-terminal inspired desktop shell with compact top menu navigation, account information column, and modular workspace panels
+- Trading-terminal inspired desktop shell with compact top menu navigation, morning snapshot sidebar, and modular workspace panels
 - Top menu access for Dashboard, Accounts, Holdings, Transactions, Dividends, Goals, Watchlist, Stock Research, Reports, Import CSV, and Settings
-- Active page shown in the workspace header and account information rail
+- Active page shown in the workspace header while the sidebar focuses on daily account/watchlist context
 - Dashboard performance panels based on local accounts, holdings, transactions, dividends, and portfolio snapshots
 - Customizable Dashboard layout with local reorder, hide/show, and reset controls
 - Controlled Dashboard chart panels for allocation, performance, and income/gains with local data, time-range, and chart-type preferences
@@ -62,7 +62,7 @@ Dashboard layout preferences are stored locally in SQLite. Reordering or hiding 
 
 The Dashboard uses compact terminal-style panels for portfolio review, movement, holdings, recent activity, realized gains, dividends, snapshot history, and allocation views. It remains a personal tracking dashboard and does not provide trading recommendations.
 
-Navigation is handled from the top menu bar. The left rail is an information column for portfolio context, account summaries, and quick watchlist symbols, not a page navigation menu.
+Navigation is handled from the top menu bar. The left rail is a morning snapshot panel for portfolio totals, account summaries, two compact watchlist slices, and local version/database information. It is not a page navigation menu.
 
 Dashboard chart preferences are stored locally in SQLite. The chart panels can switch between common investing views: allocation bars for asset/account/holding allocation, line charts for snapshot-based performance, and monthly bar charts for dividends or realized gains. These charts are for personal review only and do not provide financial advice.
 

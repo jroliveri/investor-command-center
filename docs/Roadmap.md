@@ -21,6 +21,7 @@
 - Dashboard chart panels with local data selector, time range, chart type controls, and persisted chart preferences
 - Trading-terminal inspired shell with top menu navigation, account information column, compact panels, and light terminal theme
 - All main app sections reachable from the top menu bar without side navigation
+- Morning snapshot sidebar with account information, account rows, two watchlist slices, and bottom database/version info
 - Research menu with first-pass Stock Research using a Yahoo Finance provider abstraction
 - Local quote cache for user-requested research lookups
 - Polished Stock Research quote panels with live/fallback/cached/error status labels
