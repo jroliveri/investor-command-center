@@ -30,6 +30,7 @@
 - Reusable calendar picker controls for editable date fields
 - Goals can use manual current amounts or linked calculated account values
 - User-defined capital gains allocation helper for Sell transactions
+- User-defined Watchlist buy/sell price signals with explicit Yahoo Finance refresh and local signal badges
 
 ## Next
 
@@ -49,6 +50,7 @@
 - Historical price charting in Stock Research
 - Optional explicit workflow to persist refreshed prices to local holdings after confirmation
 - Optional explicit workflow to create snapshots from refreshed dashboard prices
+- Optional watchlist signal history and notification-style review panel
 
 ## Later
 

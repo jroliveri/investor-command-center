@@ -4,6 +4,7 @@
 #include "db/Migrations.hpp"
 #include "services/DashboardService.hpp"
 #include "services/PortfolioCalculator.hpp"
+#include "services/WatchlistSignalService.hpp"
 #include "ui/UiTheme.hpp"
 #include "util/Date.hpp"
 #include "util/Money.hpp"
@@ -369,6 +370,22 @@ void App::refreshDashboardPrices()
         std::to_string(state_.dashboardPriceRefreshStatus.failedSymbols) + " failed.");
 }
 
+void App::refreshWatchlistPrices()
+{
+    std::string error;
+    WatchlistPriceRefreshStatus refreshStatus = WatchlistSignalService::refreshPrices(state_.watchlist, *marketDataService_, *watchlistRepository_, error);
+    reloadData();
+    state_.watchlistPriceRefreshStatus = refreshStatus;
+    navigateTo(AppSection::Watchlist);
+
+    if (refreshStatus.refreshedSymbols > 0) {
+        state_.setStatus("Watchlist prices refreshed: " + std::to_string(refreshStatus.refreshedSymbols) + " updated, " +
+            std::to_string(refreshStatus.failedSymbols) + " failed.");
+    } else {
+        state_.setStatus(error.empty() ? "Watchlist price refresh did not update any symbols." : error, true);
+    }
+}
+
 void App::renderTopMenuBar()
 {
     if (!ImGui::BeginMainMenuBar()) {
@@ -468,9 +485,12 @@ void App::renderTopMenuBar()
         if (ImGui::MenuItem("Refresh Dashboard Prices")) {
             refreshDashboardPrices();
         }
+        if (ImGui::MenuItem("Refresh Watchlist Prices")) {
+            refreshWatchlistPrices();
+        }
         if (ImGui::MenuItem("Research Settings")) {
             navigateTo(AppSection::Settings);
-            state_.setStatus("Research settings are shown in Settings. Dashboard price refresh remains manual/off.");
+            state_.setStatus("Research settings are shown in Settings. Price refreshes remain explicit/manual.");
         }
         if (ImGui::MenuItem("Data Source / Disclaimer")) {
             showResearchDisclaimerPopup_ = true;
@@ -569,6 +589,19 @@ void App::renderAccountsPanel()
 
 void App::renderWatchlistPanel()
 {
+    const auto signalColor = [](const std::string& status) {
+        if (status == "Buy Signal") {
+            return UiTheme::Gain;
+        }
+        if (status == "Sell Signal") {
+            return UiTheme::Loss;
+        }
+        if (status == "Check Signals") {
+            return UiTheme::Amber;
+        }
+        return UiTheme::MutedText;
+    };
+
     ImGui::BeginChild("WatchlistColumnPanel", ImVec2(0.0f, 220.0f), true);
     ImGui::TextColored(UiTheme::Accent, "Watchlist / Quick Symbols");
     ImGui::Separator();
@@ -578,7 +611,7 @@ void App::renderWatchlistPanel()
     } else if (ImGui::BeginTable("WatchlistColumnTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 66.0f);
         ImGui::TableSetupColumn("Price", ImGuiTableColumnFlags_WidthFixed, 78.0f);
-        ImGui::TableSetupColumn("Change", ImGuiTableColumnFlags_WidthFixed, 62.0f);
+        ImGui::TableSetupColumn("Signal", ImGuiTableColumnFlags_WidthFixed, 92.0f);
         ImGui::TableSetupColumn("Priority");
         ImGui::TableHeadersRow();
 
@@ -589,9 +622,11 @@ void App::renderWatchlistPanel()
             ImGui::TableNextColumn();
             ImGui::Text("%s", item.ticker.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(item.currentPrice).c_str());
+            const std::string currentPrice = item.currentPrice > 0.0 ? Money::format(item.currentPrice) : "N/A";
+            ImGui::Text("%s", currentPrice.c_str());
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::MutedText, "--");
+            const std::string signalStatus = WatchlistSignalService::calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice);
+            ImGui::TextColored(signalColor(signalStatus), "%s", signalStatus.c_str());
             ImGui::TableNextColumn();
             ImGui::TextColored(item.priority == "High" ? UiTheme::Amber : UiTheme::MutedText, "%s", item.priority.c_str());
         }
@@ -630,7 +665,7 @@ void App::renderCurrentSection()
         goalsView_.render(state_, *goalRepository_, reload);
         break;
     case AppSection::Watchlist:
-        watchlistView_.render(state_, *watchlistRepository_, reload);
+        watchlistView_.render(state_, *watchlistRepository_, *marketDataService_, reload);
         break;
     case AppSection::ImportCsv:
         importCsvView_.render(state_, *csvImportService_, reload);

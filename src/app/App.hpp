@@ -50,6 +50,7 @@ private:
     void createManualSnapshot(bool replaceExisting);
     void refreshSelectedResearchSymbol();
     void refreshDashboardPrices();
+    void refreshWatchlistPrices();
     void renderTopMenuBar();
     void renderAccountColumn();
     void renderAccountInfoPanel();

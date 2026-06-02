@@ -278,7 +278,7 @@ CREATE TABLE IF NOT EXISTS market_quote_cache (
 );
 ```
 
-Market quote cache records store the latest user-requested Stock Research quote by symbol. The first provider is Yahoo Finance. Cached quotes are convenience metadata only; they are not brokerage-verified account records and do not update holdings, account balances, dashboard totals, or CSV-imported data.
+Market quote cache records store the latest user-requested Stock Research or explicit Watchlist price refresh quote by symbol. The first provider is Yahoo Finance. Cached quotes are convenience metadata only; they are not brokerage-verified account records and do not update holdings, account balances, dashboard totals, or CSV-imported data.
 
 If an online research fetch fails and a cached quote exists, the app may show the cached quote with a warning. Missing Yahoo Finance fields are displayed as `N/A`.
 
@@ -380,7 +380,12 @@ CREATE TABLE IF NOT EXISTS watchlist (
     asset_name TEXT NOT NULL,
     asset_type TEXT,
     target_buy_price REAL DEFAULT 0,
+    buy_signal_price REAL DEFAULT 0,
+    sell_signal_price REAL DEFAULT 0,
     current_price REAL DEFAULT 0,
+    last_price_refresh_at TEXT,
+    price_source TEXT,
+    signal_status TEXT DEFAULT 'None',
     reason_watching TEXT,
     risk_notes TEXT,
     priority TEXT DEFAULT 'Medium',
@@ -388,6 +393,20 @@ CREATE TABLE IF NOT EXISTS watchlist (
     updated_at TEXT NOT NULL
 );
 ```
+
+`target_buy_price` remains for backward compatibility. New UI and signal logic use `buy_signal_price` and `sell_signal_price`.
+
+Watchlist signal status is calculated from the locally saved price levels and the refreshed current price:
+
+```text
+Buy Signal = currentPrice <= buySignalPrice, when buySignalPrice > 0
+Sell Signal = currentPrice >= sellSignalPrice, when sellSignalPrice > 0
+Check Signals = both saved levels trigger
+No Price = currentPrice is missing or zero
+No Signal = no saved level is currently triggered
+```
+
+Watchlist price refreshes use `MarketDataService` and the Yahoo Finance provider abstraction already used by Stock Research. Refreshes update only the watchlist record's current price, last refresh timestamp, source label, and calculated signal status. They do not update holdings, transactions, snapshots, brokerage records, or account balances.
 
 ## Holding Calculations
 
@@ -410,12 +429,13 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Dashboard chart preferences are loaded from `dashboard_chart_settings` and only affect chart display mode, range, and chart type.
 - Theme preference is loaded from `app_settings` and only affects local UI styling.
 - Capital gain allocation rules are loaded from `capital_gain_allocation_rules` and only affect the local transaction allocation helper.
-- Market quote cache records are used by Stock Research only and do not affect portfolio calculations.
+- Market quote cache records are used by Stock Research and explicit Watchlist price refreshes only; they do not affect portfolio calculations.
 - Dividend totals are calculated in C++ from `dividends.date_received` using `YYYY-MM` and `YYYY` prefixes.
 - Realized gain/loss totals are calculated from sell transactions.
 - Daily, monthly, and yearly gain/loss are calculated from portfolio snapshots.
 - Goal progress is calculated in C++ from the effective current amount divided by target amount, clamped between `0` and `100`.
 - Watchlist priority counts are calculated in C++ from the `priority` field.
+- Watchlist price signal badges are calculated in C++ from `current_price`, `buy_signal_price`, and `sell_signal_price`.
 - Recent transactions are loaded from `transactions` ordered by `transaction_date DESC, id DESC`.
 
 ## Dashboard Current Price Refresh

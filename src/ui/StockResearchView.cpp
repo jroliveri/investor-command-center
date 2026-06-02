@@ -97,7 +97,7 @@ bool watchlistContains(const AppState& state, const std::string& symbol)
 ImVec4 movementColor(const std::optional<double>& value)
 {
     if (!value.has_value() || std::fabs(*value) < 0.005) {
-        return UiTheme::MutedText;
+        return UiTheme::TextMuted;
     }
     return UiTheme::moneyColor(*value);
 }
@@ -122,15 +122,15 @@ std::string statusLabel(const MarketQuoteResult& result, bool hasResult)
 ImVec4 statusColor(const std::string& status)
 {
     if (status == "Live") {
-        return UiTheme::Gain;
+        return UiTheme::TextSuccess;
     }
     if (status == "Cached" || status == "Fallback") {
-        return UiTheme::Amber;
+        return UiTheme::TextWarning;
     }
     if (status == "Error") {
-        return UiTheme::Loss;
+        return UiTheme::TextDanger;
     }
-    return UiTheme::MutedText;
+    return UiTheme::TextMuted;
 }
 
 void renderStatusBadge(const char* label, ImVec4 color)
@@ -143,18 +143,26 @@ void renderStatusBadge(const char* label, ImVec4 color)
     ImGui::PopStyleColor(4);
 }
 
-void renderResearchMetric(const char* label, const std::string& value, ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f))
+void renderResearchMetric(const char* label, const std::string& value, ImVec4 color)
 {
-    ImGui::TextColored(UiTheme::MutedText, "%s", label);
+    ImGui::TextColored(UiTheme::TextSecondary, "%s", label);
     ImGui::SameLine(175.0f);
+    if (value == "N/A") {
+        color = UiTheme::TextMuted;
+    }
     ImGui::TextColored(color, "%s", value.c_str());
+}
+
+void renderResearchMetric(const char* label, const std::string& value)
+{
+    renderResearchMetric(label, value, UiTheme::TextPrimary);
 }
 
 void renderCurrentPriceHero(const MarketQuote& quote)
 {
-    ImGui::TextColored(UiTheme::MutedText, "Current Price");
+    ImGui::TextColored(UiTheme::TextSecondary, "Current Price");
     ImGui::SetWindowFontScale(1.55f);
-    ImGui::TextColored(quote.currentPrice.has_value() ? UiTheme::Gain : UiTheme::MutedText, "%s", optionalMoney(quote.currentPrice).c_str());
+    ImGui::TextColored(quote.currentPrice.has_value() ? UiTheme::TextPrimary : UiTheme::TextMuted, "%s", optionalMoney(quote.currentPrice).c_str());
     ImGui::SetWindowFontScale(1.0f);
 
     const std::string change = optionalMoney(quote.priceChangeDollar);
@@ -169,6 +177,9 @@ void StockResearchView::render(AppState& state,
     WatchlistRepository& watchlistRepository,
     const std::function<void()>& reloadData)
 {
+    ImGui::PushStyleColor(ImGuiCol_Text, UiTheme::TextPrimary);
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, UiTheme::TextMuted);
+
     UiTheme::sectionHeading("Stock Research", "Research data is informational and may be delayed. CSV import remains the portfolio update workflow.");
 
     renderToolbar(state, marketDataService, watchlistRepository, reloadData);
@@ -201,6 +212,8 @@ void StockResearchView::render(AppState& state,
         renderWatchlistAction(state, watchlistRepository, reloadData);
     }
     TerminalPanel::end();
+
+    ImGui::PopStyleColor(2);
 }
 
 void StockResearchView::refreshCurrent(MarketDataService& marketDataService, AppState& state)
@@ -270,7 +283,7 @@ void StockResearchView::renderToolbar(AppState& state, MarketDataService& market
 {
     ImGui::BeginChild("ResearchToolbar", ImVec2(0.0f, 58.0f), true, ImGuiWindowFlags_NoScrollbar);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(UiTheme::MutedText, "Ticker");
+    ImGui::TextColored(UiTheme::TextSecondary, "Ticker");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(150.0f);
     const bool enterPressed = ImGui::InputText("##ResearchTicker", &searchSymbol_, ImGuiInputTextFlags_EnterReturnsTrue);
@@ -310,7 +323,7 @@ void StockResearchView::renderToolbar(AppState& state, MarketDataService& market
     }
 
     ImGui::SameLine();
-    ImGui::TextColored(UiTheme::MutedText, "Data source: %s", marketDataService.providerName());
+    ImGui::TextColored(UiTheme::TextMuted, "Data source: %s", marketDataService.providerName());
     ImGui::EndChild();
 }
 
@@ -320,18 +333,18 @@ void StockResearchView::renderStatusStrip(const MarketDataService& marketDataSer
     ImGui::BeginChild("ResearchStatusStrip", ImVec2(0.0f, 82.0f), true, ImGuiWindowFlags_NoScrollbar);
     renderStatusBadge(status.c_str(), statusColor(status));
     ImGui::SameLine();
-    ImGui::Text("Provider: %s", marketDataService.providerName());
+    ImGui::TextColored(UiTheme::TextPrimary, "Provider: %s", marketDataService.providerName());
     ImGui::SameLine(250.0f);
-    ImGui::Text("Last fetched: %s", hasResult_ && !lastResult_.quote.fetchedAt.empty() ? lastResult_.quote.fetchedAt.c_str() : "N/A");
+    ImGui::TextColored(UiTheme::TextPrimary, "Last fetched: %s", hasResult_ && !lastResult_.quote.fetchedAt.empty() ? lastResult_.quote.fetchedAt.c_str() : "N/A");
     ImGui::SameLine(520.0f);
-    ImGui::Text("Quote time: %s", hasResult_ && !lastResult_.quote.quoteTime.empty() ? lastResult_.quote.quoteTime.c_str() : "N/A");
+    ImGui::TextColored(UiTheme::TextPrimary, "Quote time: %s", hasResult_ && !lastResult_.quote.quoteTime.empty() ? lastResult_.quote.quoteTime.c_str() : "N/A");
 
     if ((status == "Cached" || status == "Fallback") && hasResult_) {
-        ImGui::TextColored(UiTheme::Amber, "Showing cached/fallback data because the live quote request failed or returned limited data.");
+        ImGui::TextColored(UiTheme::TextWarning, "Showing cached/fallback data because the live quote request failed or returned limited data.");
     } else if (status == "Error") {
-        ImGui::TextColored(UiTheme::Loss, "%s", lastResult_.error.empty() ? "No quote data is available for this ticker." : lastResult_.error.c_str());
+        ImGui::TextColored(UiTheme::TextDanger, "%s", lastResult_.error.empty() ? "No quote data is available for this ticker." : lastResult_.error.c_str());
     } else {
-        ImGui::TextColored(UiTheme::MutedText, "Research data is informational only. It does not create trades, alerts, recommendations, or brokerage actions.");
+        ImGui::TextColored(UiTheme::TextMuted, "Research data is informational only. It does not create trades, alerts, recommendations, or brokerage actions.");
     }
     ImGui::EndChild();
 }
@@ -339,7 +352,7 @@ void StockResearchView::renderStatusStrip(const MarketDataService& marketDataSer
 void StockResearchView::renderQuoteSummary()
 {
     if (!hasResult_) {
-        ImGui::TextColored(UiTheme::MutedText, lastResult_.error.empty()
+        ImGui::TextColored(UiTheme::TextMuted, lastResult_.error.empty()
                 ? "Search for a ticker to view a quote summary."
                 : "No quote data is available. Check the ticker or try again later.");
         return;
@@ -363,7 +376,7 @@ void StockResearchView::renderQuoteSummary()
 void StockResearchView::renderMetrics()
 {
     if (!hasResult_) {
-        ImGui::TextColored(UiTheme::MutedText, "Metrics display as N/A when Yahoo Finance does not return them.");
+        ImGui::TextColored(UiTheme::TextMuted, "Metrics display as N/A when Yahoo Finance does not return them.");
         return;
     }
 
@@ -381,7 +394,7 @@ void StockResearchView::renderMetrics()
 
 void StockResearchView::renderHistoryPlaceholder()
 {
-    ImGui::TextColored(UiTheme::Amber, "Historical chart support is planned.");
+    ImGui::TextColored(UiTheme::TextWarning, "Historical chart support is planned.");
     ImGui::TextWrapped("Historical chart support is planned. Current provider abstraction already includes a placeholder for range and interval support.");
     ImGui::Spacing();
     ImGui::BeginDisabled();
@@ -401,21 +414,21 @@ void StockResearchView::renderHistoryPlaceholder()
 void StockResearchView::renderWatchlistAction(AppState& state, WatchlistRepository& watchlistRepository, const std::function<void()>& reloadData)
 {
     if (!hasResult_) {
-        ImGui::TextColored(UiTheme::MutedText, "Fetch a quote before adding a symbol to the watchlist.");
+        ImGui::TextColored(UiTheme::TextMuted, "Fetch a quote before adding a symbol to the watchlist.");
         ImGui::TextWrapped("This panel is for local notes and watchlist context only.");
         return;
     }
 
     const MarketQuote& quote = lastResult_.quote;
     const bool alreadyWatching = watchlistContains(state, quote.symbol);
-    ImGui::Text("Symbol: %s", quote.symbol.c_str());
-    ImGui::Text("Watchlist: ");
+    ImGui::TextColored(UiTheme::TextPrimary, "Symbol: %s", quote.symbol.c_str());
+    ImGui::TextColored(UiTheme::TextSecondary, "Watchlist: ");
     ImGui::SameLine();
-    UiTheme::badge(alreadyWatching ? "Already watching" : "Not watching", alreadyWatching ? UiTheme::Gain : UiTheme::MutedText);
+    UiTheme::badge(alreadyWatching ? "Already watching" : "Not watching", alreadyWatching ? UiTheme::TextSuccess : UiTheme::TextMuted);
     ImGui::Spacing();
 
     if (alreadyWatching) {
-        ImGui::TextColored(UiTheme::MutedText, "%s is already on the local watchlist.", quote.symbol.c_str());
+        ImGui::TextColored(UiTheme::TextMuted, "%s is already on the local watchlist.", quote.symbol.c_str());
     } else if (ImGui::Button("Add to Watchlist", ImVec2(150.0f, 0.0f))) {
         addCurrentQuoteToWatchlist(state, watchlistRepository, reloadData);
     }

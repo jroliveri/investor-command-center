@@ -96,6 +96,7 @@ set(APP_SOURCES
     src/models/Dividend.hpp
     src/models/Goal.hpp
     src/models/WatchlistItem.hpp
+    src/models/WatchlistPriceRefresh.hpp
     src/net/HttpClient.hpp
     src/net/HttpClient.cpp
     src/repositories/AccountRepository.hpp
@@ -144,6 +145,8 @@ set(APP_SOURCES
     src/services/MarketDataProvider.cpp
     src/services/MarketDataService.hpp
     src/services/MarketDataService.cpp
+    src/services/WatchlistSignalService.hpp
+    src/services/WatchlistSignalService.cpp
     src/services/YahooFinanceProvider.hpp
     src/services/YahooFinanceProvider.cpp
     src/ui/DashboardView.hpp

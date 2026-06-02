@@ -44,7 +44,8 @@ std::vector<WatchlistItem> WatchlistRepository::listAll(std::string& error) cons
 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
-            "SELECT id, ticker, asset_name, asset_type, target_buy_price, current_price, reason_watching, "
+            "SELECT id, ticker, asset_name, asset_type, target_buy_price, buy_signal_price, sell_signal_price, "
+            "current_price, last_price_refresh_at, price_source, signal_status, reason_watching, "
             "risk_notes, priority, created_at, updated_at "
             "FROM watchlist ORDER BY "
             "CASE priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 WHEN 'Low' THEN 2 ELSE 3 END, "
@@ -61,12 +62,23 @@ std::vector<WatchlistItem> WatchlistRepository::listAll(std::string& error) cons
         item.assetName = textColumn(statement, 2);
         item.assetType = textColumn(statement, 3);
         item.targetBuyPrice = sqlite3_column_double(statement, 4);
-        item.currentPrice = sqlite3_column_double(statement, 5);
-        item.reasonWatching = textColumn(statement, 6);
-        item.riskNotes = textColumn(statement, 7);
-        item.priority = textColumn(statement, 8);
-        item.createdAt = textColumn(statement, 9);
-        item.updatedAt = textColumn(statement, 10);
+        item.buySignalPrice = sqlite3_column_double(statement, 5);
+        item.sellSignalPrice = sqlite3_column_double(statement, 6);
+        item.currentPrice = sqlite3_column_double(statement, 7);
+        item.lastPriceRefreshAt = textColumn(statement, 8);
+        item.priceSource = textColumn(statement, 9);
+        item.signalStatus = textColumn(statement, 10);
+        item.reasonWatching = textColumn(statement, 11);
+        item.riskNotes = textColumn(statement, 12);
+        item.priority = textColumn(statement, 13);
+        item.createdAt = textColumn(statement, 14);
+        item.updatedAt = textColumn(statement, 15);
+        if (item.buySignalPrice <= 0.0 && item.targetBuyPrice > 0.0) {
+            item.buySignalPrice = item.targetBuyPrice;
+        }
+        if (item.signalStatus.empty()) {
+            item.signalStatus = "None";
+        }
         items.push_back(item);
     }
 
@@ -78,6 +90,13 @@ bool WatchlistRepository::create(WatchlistItem& item, std::string& error) const
 {
     error.clear();
     normalizeTicker(item.ticker);
+    if (item.buySignalPrice <= 0.0 && item.targetBuyPrice > 0.0) {
+        item.buySignalPrice = item.targetBuyPrice;
+    }
+    item.targetBuyPrice = item.buySignalPrice;
+    if (item.signalStatus.empty()) {
+        item.signalStatus = "None";
+    }
     if (!validate(item, error)) {
         return false;
     }
@@ -88,9 +107,10 @@ bool WatchlistRepository::create(WatchlistItem& item, std::string& error) const
 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
-            "INSERT INTO watchlist(ticker, asset_name, asset_type, target_buy_price, current_price, reason_watching, "
-            "risk_notes, priority, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            "INSERT INTO watchlist(ticker, asset_name, asset_type, target_buy_price, buy_signal_price, sell_signal_price, "
+            "current_price, last_price_refresh_at, price_source, signal_status, reason_watching, risk_notes, priority, "
+            "created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
             &statement)) {
         error = database_.lastError();
         return false;
@@ -100,12 +120,17 @@ bool WatchlistRepository::create(WatchlistItem& item, std::string& error) const
     sqlite3_bind_text(statement, 2, item.assetName.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(statement, 3, item.assetType.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_double(statement, 4, item.targetBuyPrice);
-    sqlite3_bind_double(statement, 5, item.currentPrice);
-    sqlite3_bind_text(statement, 6, item.reasonWatching.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 7, item.riskNotes.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 8, item.priority.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 9, item.createdAt.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 10, item.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(statement, 5, item.buySignalPrice);
+    sqlite3_bind_double(statement, 6, item.sellSignalPrice);
+    sqlite3_bind_double(statement, 7, item.currentPrice);
+    sqlite3_bind_text(statement, 8, item.lastPriceRefreshAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 9, item.priceSource.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 10, item.signalStatus.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 11, item.reasonWatching.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 12, item.riskNotes.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 13, item.priority.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 14, item.createdAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 15, item.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());
@@ -128,6 +153,13 @@ bool WatchlistRepository::update(const WatchlistItem& item, std::string& error) 
 
     WatchlistItem normalized = item;
     normalizeTicker(normalized.ticker);
+    if (normalized.buySignalPrice <= 0.0 && normalized.targetBuyPrice > 0.0) {
+        normalized.buySignalPrice = normalized.targetBuyPrice;
+    }
+    normalized.targetBuyPrice = normalized.buySignalPrice;
+    if (normalized.signalStatus.empty()) {
+        normalized.signalStatus = "None";
+    }
     if (!validate(normalized, error)) {
         return false;
     }
@@ -137,7 +169,8 @@ bool WatchlistRepository::update(const WatchlistItem& item, std::string& error) 
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
             "UPDATE watchlist SET ticker = ?, asset_name = ?, asset_type = ?, target_buy_price = ?, "
-            "current_price = ?, reason_watching = ?, risk_notes = ?, priority = ?, updated_at = ? "
+            "buy_signal_price = ?, sell_signal_price = ?, current_price = ?, last_price_refresh_at = ?, "
+            "price_source = ?, signal_status = ?, reason_watching = ?, risk_notes = ?, priority = ?, updated_at = ? "
             "WHERE id = ?;",
             &statement)) {
         error = database_.lastError();
@@ -148,12 +181,17 @@ bool WatchlistRepository::update(const WatchlistItem& item, std::string& error) 
     sqlite3_bind_text(statement, 2, normalized.assetName.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(statement, 3, normalized.assetType.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_double(statement, 4, normalized.targetBuyPrice);
-    sqlite3_bind_double(statement, 5, normalized.currentPrice);
-    sqlite3_bind_text(statement, 6, normalized.reasonWatching.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 7, normalized.riskNotes.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 8, normalized.priority.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 9, timestamp.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(statement, 10, normalized.id);
+    sqlite3_bind_double(statement, 5, normalized.buySignalPrice);
+    sqlite3_bind_double(statement, 6, normalized.sellSignalPrice);
+    sqlite3_bind_double(statement, 7, normalized.currentPrice);
+    sqlite3_bind_text(statement, 8, normalized.lastPriceRefreshAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 9, normalized.priceSource.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 10, normalized.signalStatus.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 11, normalized.reasonWatching.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 12, normalized.riskNotes.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 13, normalized.priority.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 14, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 15, normalized.id);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());
@@ -205,8 +243,8 @@ bool WatchlistRepository::validate(const WatchlistItem& item, std::string& error
         return false;
     }
 
-    if (item.targetBuyPrice < 0.0 || item.currentPrice < 0.0) {
-        error = "Target buy price and current price cannot be negative.";
+    if (item.targetBuyPrice < 0.0 || item.buySignalPrice < 0.0 || item.sellSignalPrice < 0.0 || item.currentPrice < 0.0) {
+        error = "Signal prices and current price cannot be negative.";
         return false;
     }
 

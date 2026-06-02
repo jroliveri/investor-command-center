@@ -19,6 +19,12 @@ extern ImVec4 CardBackground;
 extern ImVec4 PanelBackground;
 extern ImVec4 PanelHeader;
 extern ImVec4 Accent;
+extern ImVec4 TextPrimary;
+extern ImVec4 TextSecondary;
+extern ImVec4 TextMuted;
+extern ImVec4 TextWarning;
+extern ImVec4 TextSuccess;
+extern ImVec4 TextDanger;
 
 ThemeMode themeFromKey(const std::string& key);
 std::string themeKey(ThemeMode theme);

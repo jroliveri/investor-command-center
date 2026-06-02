@@ -27,7 +27,7 @@ void end()
 
 void metricCell(const char* label, const char* value, ImVec4 accent)
 {
-    ImGui::TextColored(UiTheme::MutedText, "%s", label);
+    ImGui::TextColored(UiTheme::TextSecondary, "%s", label);
     ImGui::TextColored(accent, "%s", value);
 }
 

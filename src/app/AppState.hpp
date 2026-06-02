@@ -13,6 +13,7 @@
 #include "models/PortfolioSnapshot.hpp"
 #include "models/Transaction.hpp"
 #include "models/WatchlistItem.hpp"
+#include "models/WatchlistPriceRefresh.hpp"
 
 #include <array>
 #include <string>
@@ -72,6 +73,7 @@ public:
     std::vector<MarketQuote> marketQuoteCache;
     std::vector<DashboardPriceOverride> dashboardPriceOverrides;
     DashboardPriceRefreshStatus dashboardPriceRefreshStatus;
+    WatchlistPriceRefreshStatus watchlistPriceRefreshStatus;
     std::vector<CapitalGainAllocationRule> capitalGainAllocationRules;
     std::string themeKey = "dark_command_center";
     std::string statusMessage;

@@ -13,6 +13,12 @@ ImVec4 CardBackground = ImVec4(0.105f, 0.115f, 0.115f, 1.0f);
 ImVec4 PanelBackground = ImVec4(0.085f, 0.095f, 0.092f, 1.0f);
 ImVec4 PanelHeader = ImVec4(0.14f, 0.17f, 0.16f, 1.0f);
 ImVec4 Accent = ImVec4(0.32f, 0.50f, 0.86f, 1.0f);
+ImVec4 TextPrimary = ImVec4(0.90f, 0.93f, 0.91f, 1.0f);
+ImVec4 TextSecondary = ImVec4(0.74f, 0.78f, 0.76f, 1.0f);
+ImVec4 TextMuted = ImVec4(0.62f, 0.66f, 0.64f, 1.0f);
+ImVec4 TextWarning = ImVec4(0.93f, 0.68f, 0.30f, 1.0f);
+ImVec4 TextSuccess = ImVec4(0.40f, 0.78f, 0.55f, 1.0f);
+ImVec4 TextDanger = ImVec4(0.86f, 0.36f, 0.36f, 1.0f);
 
 namespace {
 
@@ -32,6 +38,12 @@ void setPalette(ThemeMode theme)
         PanelBackground = ImVec4(0.92f, 0.93f, 0.93f, 1.0f);
         PanelHeader = ImVec4(0.78f, 0.80f, 0.82f, 1.0f);
         Accent = ImVec4(0.20f, 0.40f, 0.72f, 1.0f);
+        TextPrimary = ImVec4(0.08f, 0.09f, 0.10f, 1.0f);
+        TextSecondary = ImVec4(0.22f, 0.25f, 0.27f, 1.0f);
+        TextMuted = ImVec4(0.36f, 0.39f, 0.41f, 1.0f);
+        TextWarning = ImVec4(0.62f, 0.36f, 0.04f, 1.0f);
+        TextSuccess = Gain;
+        TextDanger = Loss;
         Clear = ImVec4(0.84f, 0.85f, 0.86f, 1.0f);
         return;
     }
@@ -44,6 +56,12 @@ void setPalette(ThemeMode theme)
     PanelBackground = ImVec4(0.085f, 0.095f, 0.092f, 1.0f);
     PanelHeader = ImVec4(0.14f, 0.17f, 0.16f, 1.0f);
     Accent = ImVec4(0.32f, 0.50f, 0.86f, 1.0f);
+    TextPrimary = ImVec4(0.90f, 0.93f, 0.91f, 1.0f);
+    TextSecondary = ImVec4(0.74f, 0.78f, 0.76f, 1.0f);
+    TextMuted = ImVec4(0.62f, 0.66f, 0.64f, 1.0f);
+    TextWarning = ImVec4(0.93f, 0.68f, 0.30f, 1.0f);
+    TextSuccess = Gain;
+    TextDanger = Loss;
     Clear = ImVec4(0.055f, 0.060f, 0.060f, 1.0f);
 }
 
@@ -210,9 +228,9 @@ void textMoney(double value, const char* text)
 
 void sectionHeading(const char* title, const char* subtitle)
 {
-    ImGui::Text("%s", title);
+    ImGui::TextColored(TextPrimary, "%s", title);
     if (subtitle != nullptr && subtitle[0] != '\0') {
-        ImGui::TextColored(MutedText, "%s", subtitle);
+        ImGui::TextColored(TextMuted, "%s", subtitle);
     }
     ImGui::Separator();
 }
@@ -221,9 +239,9 @@ void metricCard(const char* title, const char* value, const char* caption, ImVec
 {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, CardBackground);
     ImGui::BeginChild(title, size, true, ImGuiWindowFlags_NoScrollbar);
-    ImGui::TextColored(MutedText, "%s", title);
+    ImGui::TextColored(TextSecondary, "%s", title);
     ImGui::SetWindowFontScale(1.08f);
-    ImGui::Text("%s", value);
+    ImGui::TextColored(TextPrimary, "%s", value);
     ImGui::SetWindowFontScale(1.0f);
     ImGui::TextColored(accent, "%s", caption);
     ImGui::EndChild();
@@ -233,8 +251,8 @@ void metricCard(const char* title, const char* value, const char* caption, ImVec
 void emptyState(const char* title, const char* body)
 {
     ImGui::BeginChild(title, ImVec2(0.0f, 108.0f), true);
-    ImGui::TextColored(Amber, "%s", title);
-    ImGui::TextColored(MutedText, "%s", body);
+    ImGui::TextColored(TextWarning, "%s", title);
+    ImGui::TextColored(TextMuted, "%s", body);
     ImGui::EndChild();
 }
 
@@ -242,7 +260,7 @@ void formError(const std::string& message)
 {
     if (!message.empty()) {
         ImGui::Spacing();
-        ImGui::TextColored(Loss, "%s", message.c_str());
+        ImGui::TextColored(TextDanger, "%s", message.c_str());
     }
 }
 

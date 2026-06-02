@@ -441,7 +441,25 @@ ALTER TABLE market_quote_cache ADD COLUMN price_change REAL;
 ALTER TABLE market_quote_cache ADD COLUMN price_change_percent REAL;
 )sql";
 
-    return executeMigration(database, 16, "add_market_quote_change_fields", marketQuoteChangeMigration, error);
+    if (!executeMigration(database, 16, "add_market_quote_change_fields", marketQuoteChangeMigration, error)) {
+        return false;
+    }
+
+    const char* watchlistSignalsMigration = R"sql(
+ALTER TABLE watchlist ADD COLUMN buy_signal_price REAL DEFAULT 0;
+ALTER TABLE watchlist ADD COLUMN sell_signal_price REAL DEFAULT 0;
+ALTER TABLE watchlist ADD COLUMN last_price_refresh_at TEXT;
+ALTER TABLE watchlist ADD COLUMN price_source TEXT;
+ALTER TABLE watchlist ADD COLUMN signal_status TEXT DEFAULT 'None';
+
+UPDATE watchlist
+SET buy_signal_price = COALESCE(NULLIF(target_buy_price, 0), buy_signal_price)
+WHERE buy_signal_price = 0 AND target_buy_price > 0;
+
+CREATE INDEX IF NOT EXISTS idx_watchlist_signal_status ON watchlist(signal_status);
+)sql";
+
+    return executeMigration(database, 17, "add_watchlist_price_signals", watchlistSignalsMigration, error);
 }
 
 }

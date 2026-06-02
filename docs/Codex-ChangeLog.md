@@ -1,5 +1,85 @@
 # Codex Change Log
 
+## 2026-06-01 Watchlist Price Signals
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/db/Migrations.cpp`
+- `src/models/WatchlistItem.hpp`
+- `src/models/WatchlistPriceRefresh.hpp`
+- `src/repositories/WatchlistRepository.cpp`
+- `src/services/WatchlistSignalService.hpp`
+- `src/services/WatchlistSignalService.cpp`
+- `src/ui/WatchlistView.hpp`
+- `src/ui/WatchlistView.cpp`
+
+### Behavior Added
+
+- Added local watchlist buy and sell signal price fields with migration support.
+- Kept `target_buy_price` for backward compatibility while using `buy_signal_price` and `sell_signal_price` for new signal logic.
+- Added a `WatchlistSignalService` to centralize signal status calculation and explicit watchlist quote refreshes.
+- Added `Refresh Watchlist Prices` on the Watchlist page and in the Research menu.
+- Updated watchlist refresh to use `MarketDataService`, store current price, last refresh timestamp, source label, and calculated signal status locally.
+- Added Watchlist table columns for current price, buy signal, sell signal, signal badge, last refresh, source, and actions.
+- Added signal states for `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, and `Check Signals`.
+- Added clickable signal notice pop-ups clarifying that saved signals are not financial advice, trade actions, brokerage actions, or money movement.
+- Added editor validation so buy and sell signal prices cannot be negative, and crossed buy/sell levels are blocked before saving.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, CSV/import/export/backup/log folders, `.vs`, `out`, `build`, object files, and `CMakeUserPresets.json` are not staged.
+
+### Known Issues
+
+- Yahoo Finance data may be delayed, unavailable, rate-limited, incomplete, or changed without notice.
+- Watchlist signal history and desktop notifications are not implemented.
+- Manual visual click-through is still recommended for final Watchlist signal refresh validation with local test data.
+
+## 2026-06-01 Stock Research Light Theme Contrast
+
+### Changed Files
+
+- `docs/Codex-ChangeLog.md`
+- `src/ui/UiTheme.hpp`
+- `src/ui/UiTheme.cpp`
+- `src/ui/StockResearchView.cpp`
+- `src/ui/widgets/TerminalPanel.cpp`
+
+### Behavior Added
+
+- Added semantic theme text colors for primary, secondary, muted, warning, success, and danger text.
+- Added a page-level semantic text color guard around Stock Research content so plain wrapped text inherits readable contrast.
+- Updated Stock Research metric labels, values, helper text, warning text, and status text to use semantic theme colors.
+- Removed the plain white default value color from Stock Research metrics so values remain readable on the Light Trading Terminal theme.
+- Made `N/A` values muted but still readable.
+- Darkened the light-theme warning color so cached/fallback warnings have clear contrast on light panels.
+- Updated shared theme helpers and terminal metric cells to use semantic text colors.
+- Kept green/red usage focused on movement and status accents.
+
+### Validation
+
+- Built the Debug CMake preset.
+- Built the Release CMake preset.
+- Ran `git diff --check`.
+- Confirmed no files are staged.
+- Confirmed local SQLite databases, CSV/import/export/backup/log folders, `.vs`, `out`, `build`, object files, and `CMakeUserPresets.json` are not staged.
+
+### Known Issues
+
+- Manual visual click-through in the running desktop app is still recommended for final light/dark theme inspection.
+
 ## 2026-06-01 Stock Research UI Polish
 
 ### Changed Files

@@ -9,7 +9,12 @@ struct WatchlistItem {
     std::string assetName;
     std::string assetType = "Stock";
     double targetBuyPrice = 0.0;
+    double buySignalPrice = 0.0;
+    double sellSignalPrice = 0.0;
     double currentPrice = 0.0;
+    std::string lastPriceRefreshAt;
+    std::string priceSource;
+    std::string signalStatus = "None";
     std::string reasonWatching;
     std::string riskNotes;
     std::string priority = "Medium";
