@@ -30,7 +30,7 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 - Capital gains allocation helper for Sell transactions, driven by local user-defined percentages in Settings
 - Dividend create, edit, delete, and search workflow with month, year, and lifetime totals
 - Goal create, edit, delete, and search workflow with progress bars and optional linked account value tracking
-- Watchlist create, edit, delete, and search workflow with user-defined buy/sell price signals
+- Multiple named watchlists with manager controls, selected-list item CRUD, search, and user-defined buy/sell price signals
 - Research menu with a Stock Research page backed by a Yahoo Finance market data provider abstraction
 - Local market quote cache for user-requested research lookups
 - Polished Stock Research panels with quote summary, key metrics, fallback/cache status, and watchlist shortcut
@@ -42,7 +42,7 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 - Local SQLite database backup button with configurable backup folder and local reminder settings
 - Configurable SQLite database location with copy/verify/switch-on-restart behavior
 - SQLite database initialization at `data/investor_command_center.db`
-- SQLite migrations for `accounts`, `holdings`, `transactions`, `dividends`, `goals`, `watchlist`, `import_batches`, `portfolio_snapshots`, and `dashboard_widgets`
+- SQLite migrations for `accounts`, `holdings`, `transactions`, `dividends`, `goals`, `watchlists`, `watchlist`, `import_batches`, `portfolio_snapshots`, and `dashboard_widgets`
 - Basic validation and delete confirmation dialogs
 - C++ portfolio calculations for cost basis, market value, and gain/loss
 
@@ -77,6 +77,8 @@ Goals can use either a manually entered current amount or a linked account value
 Capital gains allocation rules are user-defined Settings records. For a Sell transaction with a positive realized gain, the Transactions page can show an allocation plan based on those saved percentages. This is a display/calculation helper only; it does not move money, create transfers, provide tax advice, or provide financial advice.
 
 Stock Research is informational only. The Research menu can fetch a quote for a ticker from Yahoo Finance, display available quote/metric fields, clearly label live/fallback/cached/error status, and cache the latest fetched result locally for convenience. Research data may be delayed, unavailable, rate-limited, or incomplete. The Stock Research page itself does not update local holdings.
+
+Watchlists can be organized into named local groups. Existing watchlist items migrate into `Main Watchlist`, and new items belong to the selected active watchlist on the Watchlist page. Deactivating a watchlist hides the list and its items from normal views without deleting the item records.
 
 Watchlist price signals are personal saved levels. The Watchlist page and Research menu can explicitly refresh current watchlist prices through the same market data provider used by Stock Research, update local watchlist price metadata, and show `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, or `Check Signals` badges. These signals are not recommendations, trading advice, brokerage actions, or money movement.
 

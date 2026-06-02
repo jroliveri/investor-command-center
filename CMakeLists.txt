@@ -96,6 +96,7 @@ set(APP_SOURCES
     src/models/Transaction.hpp
     src/models/Dividend.hpp
     src/models/Goal.hpp
+    src/models/Watchlist.hpp
     src/models/WatchlistItem.hpp
     src/models/WatchlistPriceRefresh.hpp
     src/net/HttpClient.hpp

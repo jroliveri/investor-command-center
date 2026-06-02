@@ -385,11 +385,32 @@ effectiveCurrentAmount = active holdings market value for linked account + linke
 
 If the linked account is missing or invalid, the effective current amount is treated as `0.00` and the UI shows a warning. Linked account goals use local calculated balances only and do not change account balance logic.
 
+## watchlists
+
+Named watchlists organize local watchlist items into user-managed groups.
+
+```sql
+CREATE TABLE IF NOT EXISTS watchlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    sort_order INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
+
+Existing watchlist items are migrated into a default active watchlist named `Main Watchlist`. Active watchlist names are unique when practical. Deactivating a watchlist hides the list and its items from normal watchlist views without deleting the underlying item rows.
+
 ## watchlist
+
+`watchlist` stores the individual ticker rows that belong to named watchlists. The table name remains singular for backward compatibility with the first MVP schema.
 
 ```sql
 CREATE TABLE IF NOT EXISTS watchlist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    watchlist_id INTEGER,
     ticker TEXT NOT NULL,
     asset_name TEXT NOT NULL,
     asset_type TEXT,
@@ -408,6 +429,8 @@ CREATE TABLE IF NOT EXISTS watchlist (
 );
 ```
 
+If `watchlist_id` is missing or unset during migration, the item is assigned to `Main Watchlist`.
+
 `target_buy_price` remains for backward compatibility. New UI and signal logic use `buy_signal_price` and `sell_signal_price`.
 
 Watchlist signal status is calculated from the locally saved price levels and the refreshed current price:
@@ -421,6 +444,8 @@ No Signal = no saved level is currently triggered
 ```
 
 Watchlist price refreshes use `MarketDataService` and the Yahoo Finance provider abstraction already used by Stock Research. Refreshes update only the watchlist record's current price, last refresh timestamp, source label, and calculated signal status. They do not update holdings, transactions, snapshots, brokerage records, or account balances.
+
+Watchlist signals are user-defined tracking levels only. They are not financial advice, trading recommendations, brokerage actions, or money movement.
 
 ## Holding Calculations
 
@@ -446,6 +471,7 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Configured database path is loaded from `app_settings` at startup and affects which local SQLite file is opened.
 - Capital gain allocation rules are loaded from `capital_gain_allocation_rules` and only affect the local transaction allocation helper.
 - Market quote cache records are used by Stock Research and explicit Watchlist price refreshes only; they do not affect portfolio calculations.
+- Watchlist groups affect local organization and visibility only; they do not affect portfolio calculations.
 - Dividend totals are calculated in C++ from `dividends.date_received` using `YYYY-MM` and `YYYY` prefixes.
 - Realized gain/loss totals are calculated from sell transactions.
 - Daily, monthly, and yearly gain/loss are calculated from portfolio snapshots.

@@ -366,6 +366,12 @@ void App::reloadData()
         return;
     }
 
+    state_.watchlists = watchlistRepository_->listWatchlists(true, error);
+    if (!error.empty()) {
+        state_.setStatus("Could not load watchlists: " + error, true);
+        return;
+    }
+
     state_.watchlist = watchlistRepository_->listAll(error);
     if (!error.empty()) {
         state_.setStatus("Could not load watchlist: " + error, true);

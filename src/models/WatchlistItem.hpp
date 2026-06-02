@@ -5,6 +5,7 @@
 
 struct WatchlistItem {
     int id = 0;
+    int watchlistId = 0;
     std::string ticker;
     std::string assetName;
     std::string assetType = "Stock";

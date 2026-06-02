@@ -1,5 +1,47 @@
 # Codex Change Log
 
+## 2026-06-02 Multiple Watchlist Management
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.cpp`
+- `src/app/AppState.hpp`
+- `src/db/Migrations.cpp`
+- `src/models/Watchlist.hpp`
+- `src/models/WatchlistItem.hpp`
+- `src/repositories/WatchlistRepository.hpp`
+- `src/repositories/WatchlistRepository.cpp`
+- `src/ui/WatchlistView.hpp`
+- `src/ui/WatchlistView.cpp`
+
+### Behavior Added
+
+- Added a `watchlists` SQLite table for named local watchlist groups.
+- Added a migration that creates `Main Watchlist` and assigns existing watchlist rows to it.
+- Added `watchlist_id` to watchlist items while preserving existing signal, price refresh, priority, and notes fields.
+- Expanded `WatchlistRepository` with group CRUD, activation/deactivation, item counts, ordering, default-list lookup, and selected-watchlist item loading.
+- Updated app state reloads to load watchlist groups and active-group watchlist items.
+- Redesigned the Watchlist page with a `Watchlist Manager` section and a selected `Watchlist Items` section.
+- Added create, rename, description edit, activate/deactivate, and Move Up/Move Down controls for watchlist groups.
+- Added confirmation before deactivating a watchlist, including the message for lists that contain items.
+- Scoped Watchlist item tables, add/edit/delete actions, search, priority summaries, and price refreshes to the selected active watchlist.
+- Kept watchlist price signals as user-defined tracking levels only; no advice, brokerage sync, cloud sync, or money movement was added.
+
+### Validation
+
+- Built the Debug CMake preset with Visual Studio's bundled CMake executable.
+- Built the Release CMake preset with Visual Studio's bundled CMake executable.
+
+### Known Issues
+
+- Manual desktop click-through is still recommended to confirm group creation, deactivation confirmation, selected-list filtering, and persistence against a local database with existing watchlist records.
+- Sidebar watchlist assignment controls are not implemented in this pass; the sidebar continues to show the first active watchlist items in the existing compact slices.
+
 ## 2026-06-02 Database Location Settings
 
 ### Changed Files

@@ -459,7 +459,43 @@ WHERE buy_signal_price = 0 AND target_buy_price > 0;
 CREATE INDEX IF NOT EXISTS idx_watchlist_signal_status ON watchlist(signal_status);
 )sql";
 
-    return executeMigration(database, 17, "add_watchlist_price_signals", watchlistSignalsMigration, error);
+    if (!executeMigration(database, 17, "add_watchlist_price_signals", watchlistSignalsMigration, error)) {
+        return false;
+    }
+
+    const char* multipleWatchlistsMigration = R"sql(
+CREATE TABLE IF NOT EXISTS watchlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    sort_order INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+INSERT INTO watchlists(name, description, sort_order, is_active, created_at, updated_at)
+SELECT 'Main Watchlist', 'Default watchlist for existing items.', 0, 1, datetime('now'), datetime('now')
+WHERE NOT EXISTS (
+    SELECT 1 FROM watchlists WHERE name = 'Main Watchlist'
+);
+
+ALTER TABLE watchlist ADD COLUMN watchlist_id INTEGER;
+
+UPDATE watchlist
+SET watchlist_id = (
+    SELECT id FROM watchlists WHERE name = 'Main Watchlist' ORDER BY id LIMIT 1
+)
+WHERE watchlist_id IS NULL OR watchlist_id = 0;
+
+CREATE INDEX IF NOT EXISTS idx_watchlists_active_order ON watchlists(is_active, sort_order, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlists_active_name_unique
+    ON watchlists(name COLLATE NOCASE)
+    WHERE is_active = 1;
+CREATE INDEX IF NOT EXISTS idx_watchlist_watchlist_id ON watchlist(watchlist_id);
+)sql";
+
+    return executeMigration(database, 18, "create_multiple_watchlists", multipleWatchlistsMigration, error);
 }
 
 }

@@ -13,6 +13,7 @@
 #include "models/MarketQuote.hpp"
 #include "models/PortfolioSnapshot.hpp"
 #include "models/Transaction.hpp"
+#include "models/Watchlist.hpp"
 #include "models/WatchlistItem.hpp"
 #include "models/WatchlistPriceRefresh.hpp"
 
@@ -66,6 +67,7 @@ public:
     std::vector<Transaction> transactions;
     std::vector<Dividend> dividends;
     std::vector<Goal> goals;
+    std::vector<Watchlist> watchlists;
     std::vector<WatchlistItem> watchlist;
     std::vector<PortfolioSnapshot> portfolioSnapshots;
     std::vector<ImportBatch> importBatches;
