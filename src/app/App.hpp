@@ -15,10 +15,12 @@
 #include "repositories/MarketPriceHistoryRepository.hpp"
 #include "repositories/MarketQuoteCacheRepository.hpp"
 #include "repositories/PortfolioSnapshotRepository.hpp"
+#include "repositories/TechnicalIndicatorCacheRepository.hpp"
 #include "repositories/TransactionRepository.hpp"
 #include "repositories/WatchlistRepository.hpp"
 #include "services/CsvImportService.hpp"
 #include "services/MarketDataService.hpp"
+#include "services/TechnicalIndicatorService.hpp"
 #include "services/TransactionService.hpp"
 #include "services/YahooFinanceProvider.hpp"
 #include "ui/AccountsView.hpp"
@@ -81,6 +83,7 @@ private:
     std::unique_ptr<WatchlistRepository> watchlistRepository_;
     std::unique_ptr<MarketQuoteCacheRepository> marketQuoteCacheRepository_;
     std::unique_ptr<MarketPriceHistoryRepository> marketPriceHistoryRepository_;
+    std::unique_ptr<TechnicalIndicatorCacheRepository> technicalIndicatorCacheRepository_;
     std::unique_ptr<PortfolioSnapshotRepository> portfolioSnapshotRepository_;
     std::unique_ptr<DashboardLayoutRepository> dashboardLayoutRepository_;
     std::unique_ptr<DashboardChartSettingsRepository> dashboardChartSettingsRepository_;
@@ -88,6 +91,7 @@ private:
     std::unique_ptr<CapitalGainAllocationRepository> capitalGainAllocationRepository_;
     std::unique_ptr<YahooFinanceProvider> yahooFinanceProvider_;
     std::unique_ptr<MarketDataService> marketDataService_;
+    std::unique_ptr<TechnicalIndicatorService> technicalIndicatorService_;
     AppState state_;
     DashboardView dashboardView_;
     AccountsView accountsView_;

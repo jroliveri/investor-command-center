@@ -5,6 +5,7 @@
 #include "repositories/WatchlistRepository.hpp"
 #include "services/MarketDataService.hpp"
 #include "services/PortfolioCalculator.hpp"
+#include "services/TechnicalIndicatorService.hpp"
 #include "services/WatchlistSignalService.hpp"
 #include "ui/UiTheme.hpp"
 #include "util/Money.hpp"
@@ -15,6 +16,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -109,6 +112,55 @@ std::string priceOrNotSet(double value)
 std::string currentPriceText(double value)
 {
     return value > 0.0 ? Money::format(value) : "N/A";
+}
+
+std::string optionalNumberText(const std::optional<double>& value, int decimals = 2)
+{
+    return value.has_value() ? Money::formatNumber(*value, decimals) : "N/A";
+}
+
+std::string compactLargeNumber(const std::optional<double>& value)
+{
+    if (!value.has_value()) {
+        return "N/A";
+    }
+
+    const double absoluteValue = std::fabs(*value);
+    double scaled = *value;
+    const char* suffix = "";
+    if (absoluteValue >= 1'000'000'000.0) {
+        scaled = *value / 1'000'000'000.0;
+        suffix = "B";
+    } else if (absoluteValue >= 1'000'000.0) {
+        scaled = *value / 1'000'000.0;
+        suffix = "M";
+    } else if (absoluteValue >= 1'000.0) {
+        scaled = *value / 1'000.0;
+        suffix = "K";
+    }
+
+    return Money::formatNumber(scaled, absoluteValue >= 1'000.0 ? 1 : 0) + suffix;
+}
+
+std::string macdText(const std::optional<TechnicalIndicatorSnapshot>& snapshot)
+{
+    if (!snapshot.has_value() || !snapshot->macdLine.has_value() || !snapshot->macdHistogram.has_value()) {
+        return "N/A";
+    }
+
+    return "MACD " + Money::formatNumber(*snapshot->macdLine, 3) + " / Hist " + Money::formatNumber(*snapshot->macdHistogram, 3);
+}
+
+std::string volumeText(const std::optional<TechnicalIndicatorSnapshot>& snapshot)
+{
+    if (!snapshot.has_value()) {
+        return "N/A";
+    }
+
+    const std::string relative = snapshot->volumeVsAvg20Percent.has_value()
+        ? Money::formatPercent(*snapshot->volumeVsAvg20Percent, true) + " vs 20D Avg"
+        : "N/A vs 20D Avg";
+    return compactLargeNumber(snapshot->latestVolume) + " / " + relative;
 }
 
 ImVec4 signalColor(const std::string& status)
@@ -247,6 +299,7 @@ bool updateSidebarSlot(WatchlistRepository& repository, const Watchlist& watchli
 void WatchlistView::render(AppState& state,
     WatchlistRepository& repository,
     MarketDataService& marketDataService,
+    TechnicalIndicatorService& technicalIndicatorService,
     const std::function<void()>& reloadData)
 {
     ensureSelectedWatchlist(state);
@@ -256,7 +309,7 @@ void WatchlistView::render(AppState& state,
 
     drawWatchlistManager(state, repository, reloadData);
     ImGui::Spacing();
-    drawWatchlistItems(state, repository, marketDataService, reloadData);
+    drawWatchlistItems(state, repository, marketDataService, technicalIndicatorService, reloadData);
 
     if (openWatchlistEditorPopup_) {
         ImGui::OpenPopup(watchlistEditorPopupId_.empty() ? WatchlistGroupEditorPopup : watchlistEditorPopupId_.c_str());
@@ -451,6 +504,7 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
 void WatchlistView::drawWatchlistItems(AppState& state,
     WatchlistRepository& repository,
     MarketDataService& marketDataService,
+    TechnicalIndicatorService& technicalIndicatorService,
     const std::function<void()>& reloadData)
 {
     ImGui::BeginChild("WatchlistItemsPanel", ImVec2(0.0f, 0.0f), true);
@@ -510,12 +564,14 @@ void WatchlistView::drawWatchlistItems(AppState& state,
     ImGui::SetNextItemWidth(300.0f);
     ImGui::InputTextWithHint("##WatchlistSearch", "Search selected watchlist", &searchText_);
     if (ImGui::Button("Refresh History for Selected Watchlist", ImVec2(250.0f, 0.0f))) {
-        refreshHistory(state, marketDataService, selectedItems, selectedName);
+        refreshHistory(state, marketDataService, technicalIndicatorService, selectedItems, selectedName);
     }
     ImGui::SameLine();
     if (ImGui::Button("Refresh History for All Watchlists", ImVec2(226.0f, 0.0f))) {
-        refreshHistory(state, marketDataService, state.watchlist, "All Watchlists");
+        refreshHistory(state, marketDataService, technicalIndicatorService, state.watchlist, "All Watchlists");
     }
+    ImGui::SameLine();
+    ImGui::Checkbox("Show Technicals", &showTechnicals_);
 
     const WatchlistPriceRefreshStatus& refreshStatus = state.watchlistPriceRefreshStatus;
     if (refreshStatus.hasRun) {
@@ -539,7 +595,7 @@ void WatchlistView::drawWatchlistItems(AppState& state,
     int visibleRows = 0;
     if (selectedItems.empty()) {
         UiTheme::emptyState("No items in this watchlist", "Add symbols to this named watchlist when you want to monitor them manually.");
-    } else if (ImGui::BeginTable("WatchlistTable", 10, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
+    } else if (ImGui::BeginTable("WatchlistTable", showTechnicals_ ? 13 : 10, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 76.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 1.3f);
         ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthFixed, 76.0f);
@@ -547,6 +603,11 @@ void WatchlistView::drawWatchlistItems(AppState& state,
         ImGui::TableSetupColumn("Buy Level", ImGuiTableColumnFlags_WidthFixed, 112.0f);
         ImGui::TableSetupColumn("Sell Level", ImGuiTableColumnFlags_WidthFixed, 112.0f);
         ImGui::TableSetupColumn("Signal", ImGuiTableColumnFlags_WidthFixed, 128.0f);
+        if (showTechnicals_) {
+            ImGui::TableSetupColumn("RSI", ImGuiTableColumnFlags_WidthFixed, 82.0f);
+            ImGui::TableSetupColumn("MACD", ImGuiTableColumnFlags_WidthFixed, 184.0f);
+            ImGui::TableSetupColumn("Volume", ImGuiTableColumnFlags_WidthFixed, 178.0f);
+        }
         ImGui::TableSetupColumn("Last Refresh", ImGuiTableColumnFlags_WidthFixed, 166.0f);
         ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthFixed, 144.0f);
         ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 132.0f);
@@ -575,6 +636,22 @@ void WatchlistView::drawWatchlistItems(AppState& state,
             ImGui::TextColored(UiTheme::Loss, "%s", priceOrNotSet(item.sellSignalPrice).c_str());
             ImGui::TableNextColumn();
             drawSignalBadge(item);
+            if (showTechnicals_) {
+                std::string indicatorError;
+                const std::optional<TechnicalIndicatorSnapshot> indicators = technicalIndicatorService.cachedSnapshot(item.ticker, "Yahoo Finance", indicatorError);
+                ImGui::TableNextColumn();
+                ImGui::TextColored(indicators.has_value() && indicators->rsi14.has_value() ? UiTheme::TextPrimary : UiTheme::TextMuted,
+                    "%s",
+                    indicators.has_value() ? optionalNumberText(indicators->rsi14, 1).c_str() : "N/A");
+                ImGui::TableNextColumn();
+                ImGui::TextColored(indicators.has_value() && indicators->macdHistogram.has_value() ? UiTheme::moneyColor(*indicators->macdHistogram) : UiTheme::TextMuted,
+                    "%s",
+                    macdText(indicators).c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextColored(indicators.has_value() && indicators->volumeVsAvg20Percent.has_value() ? UiTheme::moneyColor(*indicators->volumeVsAvg20Percent) : UiTheme::TextMuted,
+                    "%s",
+                    volumeText(indicators).c_str());
+            }
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::TextMuted, "%s", emptyIfBlank(item.lastPriceRefreshAt));
             ImGui::TableNextColumn();
@@ -875,7 +952,11 @@ void WatchlistView::refreshPrices(AppState& state,
     }
 }
 
-void WatchlistView::refreshHistory(AppState& state, MarketDataService& marketDataService, const std::vector<WatchlistItem>& items, const std::string& watchlistName)
+void WatchlistView::refreshHistory(AppState& state,
+    MarketDataService& marketDataService,
+    TechnicalIndicatorService& technicalIndicatorService,
+    const std::vector<WatchlistItem>& items,
+    const std::string& watchlistName)
 {
     std::set<std::string> symbols;
     for (const WatchlistItem& item : items) {
@@ -899,6 +980,7 @@ void WatchlistView::refreshHistory(AppState& state, MarketDataService& marketDat
     int failedSymbols = 0;
     int cachedSymbols = 0;
     int rowsStored = 0;
+    int indicatorsCalculated = 0;
     std::string failedSummary;
     std::string lastRefreshAt;
     for (const std::string& symbol : symbols) {
@@ -911,6 +993,18 @@ void WatchlistView::refreshHistory(AppState& state, MarketDataService& marketDat
             }
             if (!result.fetchedAt.empty()) {
                 lastRefreshAt = result.fetchedAt;
+            }
+            TechnicalIndicatorResult indicatorResult = technicalIndicatorService.calculateAndCache(symbol, result.provider.empty() ? marketDataService.providerName() : result.provider);
+            if (indicatorResult.success) {
+                ++indicatorsCalculated;
+            } else {
+                if (failedSummary.empty()) {
+                    failedSummary = " Failed:";
+                }
+                if (failedSymbols + 1 <= 6) {
+                    failedSummary += failedSummary == " Failed:" ? " " : ", ";
+                    failedSummary += symbol + " indicators";
+                }
             }
         } else {
             ++failedSymbols;
@@ -926,7 +1020,7 @@ void WatchlistView::refreshHistory(AppState& state, MarketDataService& marketDat
 
     std::string message = watchlistName + " history refreshed: " + std::to_string(refreshedSymbols) +
         " symbols refreshed, " + std::to_string(failedSymbols) + " failed, " + std::to_string(rowsStored) +
-        " rows added/updated. Source: " + marketDataService.providerName() + ".";
+        " rows added/updated, " + std::to_string(indicatorsCalculated) + " indicator snapshots calculated. Source: " + marketDataService.providerName() + ".";
     if (!lastRefreshAt.empty()) {
         message += " Last refresh: " + lastRefreshAt + ".";
     }

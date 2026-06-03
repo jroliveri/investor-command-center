@@ -10,15 +10,16 @@
 
 class AppState;
 class MarketDataService;
+class TechnicalIndicatorService;
 class WatchlistRepository;
 
 class WatchlistView {
 public:
-    void render(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, const std::function<void()>& reloadData);
+    void render(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, TechnicalIndicatorService& technicalIndicatorService, const std::function<void()>& reloadData);
 
 private:
     void drawWatchlistManager(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData);
-    void drawWatchlistItems(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, const std::function<void()>& reloadData);
+    void drawWatchlistItems(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, TechnicalIndicatorService& technicalIndicatorService, const std::function<void()>& reloadData);
     void openWatchlistCreate(const AppState& state);
     void openWatchlistEdit(const Watchlist& watchlist);
     void drawWatchlistEditor(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData);
@@ -28,7 +29,7 @@ private:
     void drawEditor(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData);
     void drawDeleteConfirmation(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData);
     void refreshPrices(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, const std::vector<WatchlistItem>& items, const std::string& watchlistName, const std::function<void()>& reloadData);
-    void refreshHistory(AppState& state, MarketDataService& marketDataService, const std::vector<WatchlistItem>& items, const std::string& watchlistName);
+    void refreshHistory(AppState& state, MarketDataService& marketDataService, TechnicalIndicatorService& technicalIndicatorService, const std::vector<WatchlistItem>& items, const std::string& watchlistName);
     void drawPriorityBadge(const std::string& priority) const;
     void drawSignalBadge(const WatchlistItem& item);
     void drawSignalNoticePopup();
@@ -45,6 +46,7 @@ private:
     bool openEditorPopup_ = false;
     bool openDeletePopup_ = false;
     bool openSignalNoticePopup_ = false;
+    bool showTechnicals_ = false;
     int selectedWatchlistId_ = 0;
     int deactivateWatchlistId_ = 0;
     int deactivateWatchlistItemCount_ = 0;

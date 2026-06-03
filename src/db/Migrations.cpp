@@ -562,7 +562,37 @@ CREATE INDEX IF NOT EXISTS idx_market_price_history_symbol_date
     ON market_price_history(symbol, price_date);
 )sql";
 
-    return executeMigration(database, 21, "create_market_price_history", marketPriceHistoryMigration, error);
+    if (!executeMigration(database, 21, "create_market_price_history", marketPriceHistoryMigration, error)) {
+        return false;
+    }
+
+    const char* technicalIndicatorCacheMigration = R"sql(
+CREATE TABLE IF NOT EXISTS technical_indicator_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    provider TEXT NOT NULL DEFAULT 'Yahoo Finance',
+    calculated_for_date TEXT NOT NULL,
+    rsi_14 REAL,
+    macd_line REAL,
+    macd_signal REAL,
+    macd_histogram REAL,
+    latest_volume REAL,
+    avg_volume_20 REAL,
+    avg_volume_50 REAL,
+    volume_vs_avg_20_percent REAL,
+    source_history_rows INTEGER DEFAULT 0,
+    calculated_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_technical_indicator_cache_symbol_provider_date
+    ON technical_indicator_cache(symbol, provider, calculated_for_date);
+CREATE INDEX IF NOT EXISTS idx_technical_indicator_cache_symbol_date
+    ON technical_indicator_cache(symbol, calculated_for_date);
+)sql";
+
+    return executeMigration(database, 22, "create_technical_indicator_cache", technicalIndicatorCacheMigration, error);
 }
 
 }

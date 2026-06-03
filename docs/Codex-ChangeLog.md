@@ -1,5 +1,50 @@
 # Codex Change Log
 
+## 2026-06-03 Technical Indicator Tracking
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/db/Migrations.cpp`
+- `src/models/TechnicalIndicatorSnapshot.hpp`
+- `src/repositories/TechnicalIndicatorCacheRepository.hpp`
+- `src/repositories/TechnicalIndicatorCacheRepository.cpp`
+- `src/services/TechnicalIndicatorService.hpp`
+- `src/services/TechnicalIndicatorService.cpp`
+- `src/ui/StockResearchView.hpp`
+- `src/ui/StockResearchView.cpp`
+- `src/ui/WatchlistView.hpp`
+- `src/ui/WatchlistView.cpp`
+
+### Behavior Added
+
+- Added a `technical_indicator_cache` SQLite table for locally calculated RSI, MACD, and volume snapshots.
+- Added a technical indicator model, repository, and service.
+- Calculated RSI 14 from historical closing prices.
+- Calculated MACD line, signal, and histogram using 12/26/9 EMA settings.
+- Calculated latest volume, 20-day average volume, 50-day average volume, and volume-vs-20-day-average percentage.
+- Recalculated and cached indicators after Stock Research and Watchlist historical data refreshes.
+- Added a Stock Research `Technicals` panel showing RSI, MACD, volume context, data source, history date, and calculation timestamp.
+- Added a Watchlist `Show Technicals` toggle with optional RSI, MACD, and volume columns.
+- Kept user-defined Watchlist `Buy`/`Sell`/`Hold` signal logic unchanged; indicators do not generate recommendations.
+
+### Validation
+
+- Built the Debug CMake preset with Visual Studio's bundled CMake executable.
+- Built the Release CMake preset with Visual Studio's bundled CMake executable.
+
+### Known Issues
+
+- Manual desktop click-through is still recommended to confirm indicator display with real cached Yahoo Finance history and invalid ticker behavior.
+- Technical indicators are first-pass informational context only and do not include chart overlays or alerts.
+- Yahoo Finance data remains informational and may be delayed, cached, unavailable, rate-limited, incomplete, or changed without notice.
+
 ## 2026-06-03 Yahoo Historical Price Cache Foundation
 
 ### Changed Files

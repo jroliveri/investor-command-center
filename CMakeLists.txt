@@ -94,6 +94,7 @@ set(APP_SOURCES
     src/models/MarketPriceHistory.hpp
     src/models/MarketQuote.hpp
     src/models/PortfolioSnapshot.hpp
+    src/models/TechnicalIndicatorSnapshot.hpp
     src/models/Transaction.hpp
     src/models/Dividend.hpp
     src/models/Goal.hpp
@@ -120,6 +121,8 @@ set(APP_SOURCES
     src/repositories/MarketQuoteCacheRepository.cpp
     src/repositories/MarketPriceHistoryRepository.hpp
     src/repositories/MarketPriceHistoryRepository.cpp
+    src/repositories/TechnicalIndicatorCacheRepository.hpp
+    src/repositories/TechnicalIndicatorCacheRepository.cpp
     src/repositories/PortfolioSnapshotRepository.hpp
     src/repositories/PortfolioSnapshotRepository.cpp
     src/repositories/TransactionRepository.hpp
@@ -152,6 +155,8 @@ set(APP_SOURCES
     src/services/MarketDataProvider.cpp
     src/services/MarketDataService.hpp
     src/services/MarketDataService.cpp
+    src/services/TechnicalIndicatorService.hpp
+    src/services/TechnicalIndicatorService.cpp
     src/services/WatchlistSignalService.hpp
     src/services/WatchlistSignalService.cpp
     src/services/YahooFinanceProvider.hpp

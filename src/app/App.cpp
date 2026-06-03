@@ -219,6 +219,7 @@ bool App::initialize()
     watchlistRepository_ = std::make_unique<WatchlistRepository>(database_);
     marketQuoteCacheRepository_ = std::make_unique<MarketQuoteCacheRepository>(database_);
     marketPriceHistoryRepository_ = std::make_unique<MarketPriceHistoryRepository>(database_);
+    technicalIndicatorCacheRepository_ = std::make_unique<TechnicalIndicatorCacheRepository>(database_);
     portfolioSnapshotRepository_ = std::make_unique<PortfolioSnapshotRepository>(database_);
     dashboardLayoutRepository_ = std::make_unique<DashboardLayoutRepository>(database_);
     dashboardChartSettingsRepository_ = std::make_unique<DashboardChartSettingsRepository>(database_);
@@ -227,6 +228,7 @@ bool App::initialize()
     csvImportService_ = std::make_unique<CsvImportService>(database_, *holdingRepository_, *importBatchRepository_, *portfolioSnapshotRepository_);
     yahooFinanceProvider_ = std::make_unique<YahooFinanceProvider>();
     marketDataService_ = std::make_unique<MarketDataService>(*yahooFinanceProvider_, *marketQuoteCacheRepository_, *marketPriceHistoryRepository_);
+    technicalIndicatorService_ = std::make_unique<TechnicalIndicatorService>(*marketPriceHistoryRepository_, *technicalIndicatorCacheRepository_);
 
     std::string layoutError;
     if (!dashboardLayoutRepository_->ensureDefaults(layoutError)) {
@@ -544,7 +546,7 @@ void App::refreshSelectedResearchSymbol()
 void App::refreshSelectedResearchHistory()
 {
     navigateTo(AppSection::StockResearch);
-    stockResearchView_.refreshCurrentHistory(*marketDataService_, state_);
+    stockResearchView_.refreshCurrentHistory(*marketDataService_, *technicalIndicatorService_, state_);
 }
 
 void App::refreshDashboardPrices()
@@ -1047,13 +1049,13 @@ void App::renderCurrentSection()
         goalsView_.render(state_, *goalRepository_, reload);
         break;
     case AppSection::Watchlist:
-        watchlistView_.render(state_, *watchlistRepository_, *marketDataService_, reload);
+        watchlistView_.render(state_, *watchlistRepository_, *marketDataService_, *technicalIndicatorService_, reload);
         break;
     case AppSection::ImportCsv:
         importCsvView_.render(state_, *csvImportService_, reload);
         break;
     case AppSection::StockResearch:
-        stockResearchView_.render(state_, *marketDataService_, *watchlistRepository_, reload);
+        stockResearchView_.render(state_, *marketDataService_, *technicalIndicatorService_, *watchlistRepository_, reload);
         break;
     case AppSection::Reports:
         renderPlaceholder("Reports", "Reports will summarize local records without advice or recommendations.");

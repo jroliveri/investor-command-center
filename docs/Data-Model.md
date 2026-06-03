@@ -313,6 +313,48 @@ Rows are upserted by `symbol + provider + price_date`, so repeated refreshes upd
 
 This table is the foundation for future RSI, MACD, and volume analysis. It does not create trading recommendations, does not change watchlist `Buy`/`Sell`/`Hold` user signals, and does not update holdings, account balances, snapshots, or CSV-imported records.
 
+## technical_indicator_cache
+
+```sql
+CREATE TABLE IF NOT EXISTS technical_indicator_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    provider TEXT NOT NULL DEFAULT 'Yahoo Finance',
+    calculated_for_date TEXT NOT NULL,
+    rsi_14 REAL,
+    macd_line REAL,
+    macd_signal REAL,
+    macd_histogram REAL,
+    latest_volume REAL,
+    avg_volume_20 REAL,
+    avg_volume_50 REAL,
+    volume_vs_avg_20_percent REAL,
+    source_history_rows INTEGER DEFAULT 0,
+    calculated_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_technical_indicator_cache_symbol_provider_date
+    ON technical_indicator_cache(symbol, provider, calculated_for_date);
+```
+
+Technical indicator cache records store locally calculated research snapshots derived from `market_price_history`. Rows are upserted by `symbol + provider + calculated_for_date`, so repeated history refreshes update the indicator snapshot for the latest history date instead of duplicating it.
+
+The first-pass calculations are:
+
+```text
+RSI 14 = Wilder-style RSI using closing prices
+MACD line = EMA(12 closes) - EMA(26 closes)
+MACD signal = EMA(9 MACD line values)
+MACD histogram = MACD line - MACD signal
+20D average volume = average of the latest 20 volume rows
+50D average volume = average of the latest 50 volume rows
+volumeVsAvg20Percent = (latestVolume - avgVolume20) / avgVolume20 * 100
+```
+
+If there are not enough closing-price or volume rows, the app stores `NULL` for that specific indicator and the UI displays `N/A`. Indicator snapshots are informational research context only. They do not change user-defined watchlist signals, do not generate recommendations, do not update holdings, and do not create trades.
+
 ## app_settings
 
 ```sql
@@ -487,6 +529,8 @@ Watchlist price refreshes use `MarketDataService` and the Yahoo Finance provider
 
 Watchlist historical refresh actions use the same provider abstraction to populate `market_price_history` for selected or all active watchlist tickers. Historical rows are informational cache records only and do not change user-defined watchlist signals.
 
+After a successful history refresh, the app recalculates and upserts `technical_indicator_cache` snapshots for the refreshed symbols. The optional Watchlist `Show Technicals` toggle displays cached RSI, MACD, and volume context without changing signal-first sorting.
+
 Watchlist signals are user-defined tracking levels only. They are not financial advice, trading recommendations, brokerage actions, or money movement.
 
 ## Holding Calculations
@@ -514,6 +558,7 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Capital gain allocation rules are loaded from `capital_gain_allocation_rules` and only affect the local transaction allocation helper.
 - Market quote cache records are used by Stock Research and explicit Watchlist price refreshes only; they do not affect portfolio calculations.
 - Market price history cache records are used by Stock Research and explicit Watchlist history refreshes only; they do not affect portfolio calculations.
+- Technical indicator cache records are calculated from market price history and do not affect portfolio calculations or watchlist `Buy`/`Sell`/`Hold` signal logic.
 - Watchlist groups and sidebar assignments affect local organization and visibility only; they do not affect portfolio calculations.
 - Dividend totals are calculated in C++ from `dividends.date_received` using `YYYY-MM` and `YYYY` prefixes.
 - Realized gain/loss totals are calculated from sell transactions.
@@ -555,4 +600,6 @@ Stock Research is informational and currently uses Yahoo Finance as the first ma
 
 Yahoo Finance data may be delayed, unavailable, rate-limited, incomplete, or changed without notice. Research data does not provide financial advice, tax advice, trading recommendations, brokerage sync, or automatic portfolio price updates.
 
-Stock Research can refresh daily historical OHLCV rows for a research symbol and store them in `market_price_history`. RSI, MACD, and volume displays are planned future work; the current historical cache is data foundation only.
+Stock Research can refresh daily historical OHLCV rows for a research symbol and store them in `market_price_history`. After history refresh, the app calculates RSI 14, MACD 12/26/9, latest volume, 20-day average volume, 50-day average volume, and volume-vs-20-day-average values into `technical_indicator_cache`.
+
+Stock Research displays technical indicators as informational context only. They do not provide financial advice, trading recommendations, automated alerts, or changes to watchlist user signals.
