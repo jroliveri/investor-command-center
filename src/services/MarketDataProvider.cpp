@@ -16,11 +16,13 @@ MarketQuoteResult MarketDataProvider::fetchBasicMetrics(const std::string& symbo
     return fetchQuote(symbol);
 }
 
-MarketQuoteResult MarketDataProvider::fetchHistoricalPrices(const std::string& symbol, const std::string& range, const std::string& interval)
+HistoricalPriceResult MarketDataProvider::fetchHistoricalPrices(const std::string& symbol, const std::string& range, const std::string& interval)
 {
-    MarketQuoteResult result;
+    HistoricalPriceResult result;
     result.success = false;
-    result.quote.symbol = symbol;
+    result.symbol = symbol;
+    result.range = range;
+    result.interval = interval;
     result.error = "Historical prices are planned. Requested range " + range + " and interval " + interval + ".";
     return result;
 }

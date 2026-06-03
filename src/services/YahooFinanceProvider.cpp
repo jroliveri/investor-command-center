@@ -11,6 +11,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -109,6 +110,55 @@ std::string objectForKey(const std::string& json, const char* key)
 
     const std::size_t objectStart = json.find('{', keyPos + keyToken.size());
     return findJsonObjectStartingAt(json, objectStart);
+}
+
+std::string findJsonArrayStartingAt(const std::string& json, std::size_t openBracket)
+{
+    if (openBracket == std::string::npos || openBracket >= json.size() || json[openBracket] != '[') {
+        return {};
+    }
+
+    int depth = 0;
+    bool inString = false;
+    bool escaped = false;
+    for (std::size_t index = openBracket; index < json.size(); ++index) {
+        const char character = json[index];
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+            } else if (character == '\\') {
+                escaped = true;
+            } else if (character == '"') {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (character == '"') {
+            inString = true;
+        } else if (character == '[') {
+            ++depth;
+        } else if (character == ']') {
+            --depth;
+            if (depth == 0) {
+                return json.substr(openBracket, index - openBracket + 1);
+            }
+        }
+    }
+
+    return {};
+}
+
+std::string arrayForKey(const std::string& json, const char* key)
+{
+    const std::string keyToken = "\"" + std::string(key) + "\"";
+    const std::size_t keyPos = json.find(keyToken);
+    if (keyPos == std::string::npos) {
+        return {};
+    }
+
+    const std::size_t arrayStart = json.find('[', keyPos + keyToken.size());
+    return findJsonArrayStartingAt(json, arrayStart);
 }
 
 std::optional<std::string> jsonString(const std::string& object, const char* key)
@@ -214,6 +264,42 @@ std::optional<double> jsonNumber(const std::string& object, const char* key)
     return parsed;
 }
 
+std::optional<double> parseNumberToken(const std::string& token)
+{
+    const std::string trimmedToken = trim(token);
+    if (trimmedToken.empty() || trimmedToken == "null") {
+        return std::nullopt;
+    }
+
+    double parsed = 0.0;
+    const auto result = std::from_chars(trimmedToken.data(), trimmedToken.data() + trimmedToken.size(), parsed);
+    if (result.ec != std::errc()) {
+        return std::nullopt;
+    }
+    return parsed;
+}
+
+std::vector<std::optional<double>> jsonNumberArray(const std::string& array)
+{
+    std::vector<std::optional<double>> values;
+    if (array.size() < 2 || array.front() != '[' || array.back() != ']') {
+        return values;
+    }
+
+    std::string token;
+    for (std::size_t index = 1; index + 1 < array.size(); ++index) {
+        const char character = array[index];
+        if (character == ',') {
+            values.push_back(parseNumberToken(token));
+            token.clear();
+        } else {
+            token.push_back(character);
+        }
+    }
+    values.push_back(parseNumberToken(token));
+    return values;
+}
+
 std::string firstAvailableString(const std::string& object, std::initializer_list<const char*> keys)
 {
     for (const char* key : keys) {
@@ -247,6 +333,52 @@ std::string epochSecondsToLocalTime(const std::optional<double>& seconds)
     std::ostringstream stream;
     stream << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S");
     return stream.str();
+}
+
+std::string epochSecondsToUtcDate(const std::optional<double>& seconds)
+{
+    if (!seconds.has_value() || *seconds <= 0.0) {
+        return {};
+    }
+
+    const std::time_t time = static_cast<std::time_t>(*seconds);
+    std::tm utcTime {};
+    gmtime_s(&utcTime, &time);
+
+    std::ostringstream stream;
+    stream << std::put_time(&utcTime, "%Y-%m-%d");
+    return stream.str();
+}
+
+std::optional<double> valueAt(const std::vector<std::optional<double>>& values, std::size_t index)
+{
+    return index < values.size() ? values[index] : std::nullopt;
+}
+
+std::string yahooRange(const std::string& range)
+{
+    if (range == "1M") {
+        return "1mo";
+    }
+    if (range == "3M") {
+        return "3mo";
+    }
+    if (range == "6M") {
+        return "6mo";
+    }
+    if (range == "YTD") {
+        return "ytd";
+    }
+    if (range == "1Y") {
+        return "1y";
+    }
+    if (range == "2Y") {
+        return "2y";
+    }
+    if (range == "5Y") {
+        return "5y";
+    }
+    return {};
 }
 
 MarketQuote quoteFromQuoteObject(const std::string& object, const std::string& fallbackSymbol)
@@ -332,6 +464,92 @@ MarketQuoteResult YahooFinanceProvider::fetchQuote(const std::string& symbol)
         quoteResult.error += " Fallback also failed: " + fallbackResult.error;
     }
     return quoteResult;
+}
+
+HistoricalPriceResult YahooFinanceProvider::fetchHistoricalPrices(const std::string& symbol, const std::string& range, const std::string& interval)
+{
+    HistoricalPriceResult result;
+    result.provider = providerName();
+    result.symbol = normalizeSymbol(symbol);
+    result.range = range;
+    result.interval = interval;
+    result.fetchedAt = Date::nowIso8601();
+
+    if (result.symbol.empty()) {
+        result.error = "Ticker is required.";
+        return result;
+    }
+
+    if (interval != "1d") {
+        result.error = "Only daily historical interval 1d is supported in this first pass.";
+        return result;
+    }
+
+    const std::string mappedRange = yahooRange(range);
+    if (mappedRange.empty()) {
+        result.error = "Unsupported historical range: " + range + ".";
+        return result;
+    }
+
+    const std::string path = "/v8/finance/chart/" + urlEncode(result.symbol) +
+        "?range=" + mappedRange + "&interval=1d&events=history&includeAdjustedClose=true";
+    const HttpResponse response = httpClient_.getHttps(YahooHost, path);
+    if (!response.ok()) {
+        result.error = httpStatusError(response);
+        return result;
+    }
+
+    const std::string resultObject = firstArrayObjectForKey(response.body, "result");
+    if (resultObject.empty()) {
+        result.error = "Yahoo Finance returned no historical chart result for " + result.symbol + ".";
+        return result;
+    }
+
+    const std::vector<std::optional<double>> timestamps = jsonNumberArray(arrayForKey(resultObject, "timestamp"));
+    const std::string quoteObject = firstArrayObjectForKey(resultObject, "quote");
+    if (timestamps.empty() || quoteObject.empty()) {
+        result.error = "Yahoo Finance returned incomplete historical chart data for " + result.symbol + ".";
+        return result;
+    }
+
+    const std::vector<std::optional<double>> openValues = jsonNumberArray(arrayForKey(quoteObject, "open"));
+    const std::vector<std::optional<double>> highValues = jsonNumberArray(arrayForKey(quoteObject, "high"));
+    const std::vector<std::optional<double>> lowValues = jsonNumberArray(arrayForKey(quoteObject, "low"));
+    const std::vector<std::optional<double>> closeValues = jsonNumberArray(arrayForKey(quoteObject, "close"));
+    const std::vector<std::optional<double>> volumeValues = jsonNumberArray(arrayForKey(quoteObject, "volume"));
+
+    const std::string adjustedCloseObject = firstArrayObjectForKey(resultObject, "adjclose");
+    const std::vector<std::optional<double>> adjustedCloseValues = jsonNumberArray(arrayForKey(adjustedCloseObject, "adjclose"));
+
+    for (std::size_t index = 0; index < timestamps.size(); ++index) {
+        const std::string priceDate = epochSecondsToUtcDate(valueAt(timestamps, index));
+        if (priceDate.empty()) {
+            continue;
+        }
+
+        MarketPriceHistoryRow row;
+        row.symbol = result.symbol;
+        row.provider = result.provider;
+        row.priceDate = priceDate;
+        row.openPrice = valueAt(openValues, index);
+        row.highPrice = valueAt(highValues, index);
+        row.lowPrice = valueAt(lowValues, index);
+        row.closePrice = valueAt(closeValues, index);
+        row.adjustedClosePrice = valueAt(adjustedCloseValues, index);
+        row.volume = valueAt(volumeValues, index);
+        row.fetchedAt = result.fetchedAt;
+
+        if (row.openPrice.has_value() || row.highPrice.has_value() || row.lowPrice.has_value() ||
+            row.closePrice.has_value() || row.adjustedClosePrice.has_value() || row.volume.has_value()) {
+            result.rows.push_back(row);
+        }
+    }
+
+    result.success = !result.rows.empty();
+    if (!result.success) {
+        result.error = "Yahoo Finance returned no daily OHLCV rows for " + result.symbol + ".";
+    }
+    return result;
 }
 
 MarketQuoteResult YahooFinanceProvider::fetchQuoteEndpoint(const std::string& symbol)

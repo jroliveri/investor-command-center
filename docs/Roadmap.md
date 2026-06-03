@@ -24,6 +24,7 @@
 - Morning snapshot sidebar with account information, account rows, two watchlist slices, and bottom database/version info
 - Research menu with first-pass Stock Research using a Yahoo Finance provider abstraction
 - Local quote cache for user-requested research lookups
+- Local Yahoo Finance daily OHLCV history cache for future RSI, MACD, and volume tracking
 - Polished Stock Research quote panels with live/fallback/cached/error status labels
 - Manual dashboard current-price refresh using market data as a display-only overlay
 - Portfolio snapshots
@@ -54,6 +55,7 @@
 - Full transaction reconciliation for edited/deleted buy and sell activity
 - Contribution-adjusted performance calculations
 - Historical price charting in Stock Research
+- RSI, MACD, and volume displays based on cached daily OHLCV data
 - Optional explicit workflow to persist refreshed prices to local holdings after confirmation
 - Optional explicit workflow to create snapshots from refreshed dashboard prices
 - Optional watchlist signal history and notification-style review panel

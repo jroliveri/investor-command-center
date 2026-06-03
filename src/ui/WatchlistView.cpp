@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -508,6 +509,13 @@ void WatchlistView::drawWatchlistItems(AppState& state,
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
     ImGui::InputTextWithHint("##WatchlistSearch", "Search selected watchlist", &searchText_);
+    if (ImGui::Button("Refresh History for Selected Watchlist", ImVec2(250.0f, 0.0f))) {
+        refreshHistory(state, marketDataService, selectedItems, selectedName);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Refresh History for All Watchlists", ImVec2(226.0f, 0.0f))) {
+        refreshHistory(state, marketDataService, state.watchlist, "All Watchlists");
+    }
 
     const WatchlistPriceRefreshStatus& refreshStatus = state.watchlistPriceRefreshStatus;
     if (refreshStatus.hasRun) {
@@ -521,6 +529,10 @@ void WatchlistView::drawWatchlistItems(AppState& state,
         if (!refreshStatus.warning.empty()) {
             ImGui::TextColored(refreshStatus.failedSymbols > 0 ? UiTheme::TextWarning : UiTheme::TextMuted, "%s", refreshStatus.warning.c_str());
         }
+    }
+    if (!historyRefreshMessage_.empty()) {
+        ImGui::Spacing();
+        ImGui::TextColored(historyRefreshIsError_ ? UiTheme::TextDanger : UiTheme::TextSecondary, "%s", historyRefreshMessage_.c_str());
     }
 
     ImGui::Spacing();
@@ -861,6 +873,70 @@ void WatchlistView::refreshPrices(AppState& state,
     } else {
         state.setStatus(error.empty() ? watchlistName + " refresh did not update any symbols." : error, true);
     }
+}
+
+void WatchlistView::refreshHistory(AppState& state, MarketDataService& marketDataService, const std::vector<WatchlistItem>& items, const std::string& watchlistName)
+{
+    std::set<std::string> symbols;
+    for (const WatchlistItem& item : items) {
+        std::string symbol = item.ticker;
+        std::transform(symbol.begin(), symbol.end(), symbol.begin(), [](unsigned char character) {
+            return static_cast<char>(std::toupper(character));
+        });
+        if (!symbol.empty()) {
+            symbols.insert(symbol);
+        }
+    }
+
+    if (symbols.empty()) {
+        historyRefreshMessage_ = watchlistName + " has no tickers available for historical refresh.";
+        historyRefreshIsError_ = true;
+        state.setStatus(historyRefreshMessage_, true);
+        return;
+    }
+
+    int refreshedSymbols = 0;
+    int failedSymbols = 0;
+    int cachedSymbols = 0;
+    int rowsStored = 0;
+    std::string failedSummary;
+    std::string lastRefreshAt;
+    for (const std::string& symbol : symbols) {
+        HistoricalPriceResult result = marketDataService.fetchHistoricalPrices(symbol, "1Y", "1d");
+        if (result.success) {
+            ++refreshedSymbols;
+            rowsStored += result.rowsStored;
+            if (result.fromCache) {
+                ++cachedSymbols;
+            }
+            if (!result.fetchedAt.empty()) {
+                lastRefreshAt = result.fetchedAt;
+            }
+        } else {
+            ++failedSymbols;
+            if (failedSummary.empty()) {
+                failedSummary = " Failed:";
+            }
+            if (failedSymbols <= 6) {
+                failedSummary += failedSymbols == 1 ? " " : ", ";
+                failedSummary += symbol;
+            }
+        }
+    }
+
+    std::string message = watchlistName + " history refreshed: " + std::to_string(refreshedSymbols) +
+        " symbols refreshed, " + std::to_string(failedSymbols) + " failed, " + std::to_string(rowsStored) +
+        " rows added/updated. Source: " + marketDataService.providerName() + ".";
+    if (!lastRefreshAt.empty()) {
+        message += " Last refresh: " + lastRefreshAt + ".";
+    }
+    if (cachedSymbols > 0) {
+        message += " " + std::to_string(cachedSymbols) + " symbols used cached history.";
+    }
+    message += failedSummary;
+    historyRefreshMessage_ = message;
+    historyRefreshIsError_ = refreshedSymbols == 0 && failedSymbols > 0;
+    state.setStatus(message, historyRefreshIsError_);
 }
 
 void WatchlistView::drawPriorityBadge(const std::string& priority) const

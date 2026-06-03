@@ -1,5 +1,53 @@
 # Codex Change Log
 
+## 2026-06-03 Yahoo Historical Price Cache Foundation
+
+### Changed Files
+
+- `CMakeLists.txt`
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.hpp`
+- `src/app/App.cpp`
+- `src/db/Migrations.cpp`
+- `src/models/MarketPriceHistory.hpp`
+- `src/repositories/MarketPriceHistoryRepository.hpp`
+- `src/repositories/MarketPriceHistoryRepository.cpp`
+- `src/services/MarketDataProvider.hpp`
+- `src/services/MarketDataProvider.cpp`
+- `src/services/MarketDataService.hpp`
+- `src/services/MarketDataService.cpp`
+- `src/services/YahooFinanceProvider.hpp`
+- `src/services/YahooFinanceProvider.cpp`
+- `src/ui/StockResearchView.hpp`
+- `src/ui/StockResearchView.cpp`
+- `src/ui/WatchlistView.hpp`
+- `src/ui/WatchlistView.cpp`
+
+### Behavior Added
+
+- Added a `market_price_history` SQLite cache table for Yahoo Finance daily OHLCV history.
+- Added C++ model and repository support for upserting history rows by `symbol + provider + price_date`.
+- Extended the market data provider abstraction with daily historical price fetching.
+- Implemented Yahoo Finance chart endpoint fetching for supported ranges: `1M`, `3M`, `6M`, `YTD`, `1Y`, `2Y`, and `5Y`.
+- Added cache fallback behavior when online historical fetches fail but local history exists.
+- Added Stock Research controls for refreshing a research symbol's daily OHLCV cache.
+- Added Research menu access for refreshing history for the current research symbol.
+- Added Watchlist page actions to refresh history for the selected watchlist or all active watchlists.
+- Kept RSI, MACD, and volume as future display work; no indicator-based recommendations were added.
+
+### Validation
+
+- Built the Debug CMake preset with Visual Studio's bundled CMake executable.
+- Built the Release CMake preset with Visual Studio's bundled CMake executable.
+
+### Known Issues
+
+- Manual desktop click-through is still recommended to confirm Yahoo Finance availability, invalid ticker handling, and cache fallback behavior against local data.
+- Yahoo Finance data remains informational and may be delayed, cached, unavailable, rate-limited, incomplete, or changed without notice.
+
 ## 2026-06-03 Watchlist Signal Simplification
 
 ### Changed Files

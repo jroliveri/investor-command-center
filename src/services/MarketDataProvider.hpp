@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "models/MarketPriceHistory.hpp"
 #include "models/MarketQuote.hpp"
 
 #include <string>
@@ -14,5 +15,5 @@ public:
     virtual MarketQuoteResult fetchQuote(const std::string& symbol) = 0;
     virtual std::vector<MarketQuoteResult> fetchQuotes(const std::vector<std::string>& symbols);
     virtual MarketQuoteResult fetchBasicMetrics(const std::string& symbol);
-    virtual MarketQuoteResult fetchHistoricalPrices(const std::string& symbol, const std::string& range, const std::string& interval);
+    virtual HistoricalPriceResult fetchHistoricalPrices(const std::string& symbol, const std::string& range, const std::string& interval);
 };

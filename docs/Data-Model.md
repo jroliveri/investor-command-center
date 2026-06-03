@@ -284,6 +284,35 @@ If an online research fetch fails and a cached quote exists, the app may show th
 
 `price_change` and `price_change_percent` are optional display fields used by the Stock Research quote summary when Yahoo Finance returns them. If unavailable, the UI displays `N/A` instead of treating the data as broken.
 
+## market_price_history
+
+```sql
+CREATE TABLE IF NOT EXISTS market_price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    provider TEXT NOT NULL DEFAULT 'Yahoo Finance',
+    price_date TEXT NOT NULL,
+    open_price REAL,
+    high_price REAL,
+    low_price REAL,
+    close_price REAL,
+    adjusted_close_price REAL,
+    volume REAL,
+    fetched_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_market_price_history_symbol_provider_date
+    ON market_price_history(symbol, provider, price_date);
+```
+
+Historical price cache records store daily OHLCV data fetched explicitly from Yahoo Finance through `MarketDataService`. Supported first-pass ranges are `1M`, `3M`, `6M`, `YTD`, `1Y`, `2Y`, and `5Y`; the first supported interval is daily `1d`.
+
+Rows are upserted by `symbol + provider + price_date`, so repeated refreshes update existing cached dates instead of creating duplicates. If an online history refresh fails and cached rows exist, the app can use the cached history with a warning.
+
+This table is the foundation for future RSI, MACD, and volume analysis. It does not create trading recommendations, does not change watchlist `Buy`/`Sell`/`Hold` user signals, and does not update holdings, account balances, snapshots, or CSV-imported records.
+
 ## app_settings
 
 ```sql
@@ -456,6 +485,8 @@ If the current price is missing, the visible signal remains `Hold`. If both save
 
 Watchlist price refreshes use `MarketDataService` and the Yahoo Finance provider abstraction already used by Stock Research. Refreshes update only the watchlist record's current price, last refresh timestamp, source label, and calculated signal status. They do not update holdings, transactions, snapshots, brokerage records, or account balances.
 
+Watchlist historical refresh actions use the same provider abstraction to populate `market_price_history` for selected or all active watchlist tickers. Historical rows are informational cache records only and do not change user-defined watchlist signals.
+
 Watchlist signals are user-defined tracking levels only. They are not financial advice, trading recommendations, brokerage actions, or money movement.
 
 ## Holding Calculations
@@ -482,6 +513,7 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Configured database path is loaded from `app_settings` at startup and affects which local SQLite file is opened.
 - Capital gain allocation rules are loaded from `capital_gain_allocation_rules` and only affect the local transaction allocation helper.
 - Market quote cache records are used by Stock Research and explicit Watchlist price refreshes only; they do not affect portfolio calculations.
+- Market price history cache records are used by Stock Research and explicit Watchlist history refreshes only; they do not affect portfolio calculations.
 - Watchlist groups and sidebar assignments affect local organization and visibility only; they do not affect portfolio calculations.
 - Dividend totals are calculated in C++ from `dividends.date_received` using `YYYY-MM` and `YYYY` prefixes.
 - Realized gain/loss totals are calculated from sell transactions.
@@ -522,3 +554,5 @@ Source CSV files remain local and are not copied into the repository by default.
 Stock Research is informational and currently uses Yahoo Finance as the first market data source behind a provider abstraction. The UI calls `MarketDataService`; network calls are isolated in `YahooFinanceProvider` and `HttpClient`.
 
 Yahoo Finance data may be delayed, unavailable, rate-limited, incomplete, or changed without notice. Research data does not provide financial advice, tax advice, trading recommendations, brokerage sync, or automatic portfolio price updates.
+
+Stock Research can refresh daily historical OHLCV rows for a research symbol and store them in `market_price_history`. RSI, MACD, and volume displays are planned future work; the current historical cache is data foundation only.

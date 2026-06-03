@@ -91,6 +91,7 @@ set(APP_SOURCES
     src/models/DatabaseBackup.hpp
     src/models/Holding.hpp
     src/models/ImportBatch.hpp
+    src/models/MarketPriceHistory.hpp
     src/models/MarketQuote.hpp
     src/models/PortfolioSnapshot.hpp
     src/models/Transaction.hpp
@@ -117,6 +118,8 @@ set(APP_SOURCES
     src/repositories/ImportBatchRepository.cpp
     src/repositories/MarketQuoteCacheRepository.hpp
     src/repositories/MarketQuoteCacheRepository.cpp
+    src/repositories/MarketPriceHistoryRepository.hpp
+    src/repositories/MarketPriceHistoryRepository.cpp
     src/repositories/PortfolioSnapshotRepository.hpp
     src/repositories/PortfolioSnapshotRepository.cpp
     src/repositories/TransactionRepository.hpp

@@ -218,6 +218,7 @@ bool App::initialize()
     goalRepository_ = std::make_unique<GoalRepository>(database_);
     watchlistRepository_ = std::make_unique<WatchlistRepository>(database_);
     marketQuoteCacheRepository_ = std::make_unique<MarketQuoteCacheRepository>(database_);
+    marketPriceHistoryRepository_ = std::make_unique<MarketPriceHistoryRepository>(database_);
     portfolioSnapshotRepository_ = std::make_unique<PortfolioSnapshotRepository>(database_);
     dashboardLayoutRepository_ = std::make_unique<DashboardLayoutRepository>(database_);
     dashboardChartSettingsRepository_ = std::make_unique<DashboardChartSettingsRepository>(database_);
@@ -225,7 +226,7 @@ bool App::initialize()
     capitalGainAllocationRepository_ = std::make_unique<CapitalGainAllocationRepository>(database_);
     csvImportService_ = std::make_unique<CsvImportService>(database_, *holdingRepository_, *importBatchRepository_, *portfolioSnapshotRepository_);
     yahooFinanceProvider_ = std::make_unique<YahooFinanceProvider>();
-    marketDataService_ = std::make_unique<MarketDataService>(*yahooFinanceProvider_, *marketQuoteCacheRepository_);
+    marketDataService_ = std::make_unique<MarketDataService>(*yahooFinanceProvider_, *marketQuoteCacheRepository_, *marketPriceHistoryRepository_);
 
     std::string layoutError;
     if (!dashboardLayoutRepository_->ensureDefaults(layoutError)) {
@@ -540,6 +541,12 @@ void App::refreshSelectedResearchSymbol()
     stockResearchView_.refreshCurrent(*marketDataService_, state_);
 }
 
+void App::refreshSelectedResearchHistory()
+{
+    navigateTo(AppSection::StockResearch);
+    stockResearchView_.refreshCurrentHistory(*marketDataService_, state_);
+}
+
 void App::refreshDashboardPrices()
 {
     std::set<std::string> uniqueTickers;
@@ -813,6 +820,9 @@ void App::renderTopMenuBar()
         menuSectionItem(AppSection::StockResearch, "Stock Research");
         if (ImGui::MenuItem("Refresh Selected Symbol")) {
             refreshSelectedResearchSymbol();
+        }
+        if (ImGui::MenuItem("Refresh History for Research Symbol")) {
+            refreshSelectedResearchHistory();
         }
         if (ImGui::MenuItem("Refresh Dashboard Prices")) {
             refreshDashboardPrices();

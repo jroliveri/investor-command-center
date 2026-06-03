@@ -12,6 +12,7 @@
 #include "repositories/GoalRepository.hpp"
 #include "repositories/HoldingRepository.hpp"
 #include "repositories/ImportBatchRepository.hpp"
+#include "repositories/MarketPriceHistoryRepository.hpp"
 #include "repositories/MarketQuoteCacheRepository.hpp"
 #include "repositories/PortfolioSnapshotRepository.hpp"
 #include "repositories/TransactionRepository.hpp"
@@ -52,6 +53,7 @@ private:
     void requestManualSnapshot();
     void createManualSnapshot(bool replaceExisting);
     void refreshSelectedResearchSymbol();
+    void refreshSelectedResearchHistory();
     void refreshDashboardPrices();
     void refreshWatchlistPrices();
     void backupDatabaseNow();
@@ -78,6 +80,7 @@ private:
     std::unique_ptr<GoalRepository> goalRepository_;
     std::unique_ptr<WatchlistRepository> watchlistRepository_;
     std::unique_ptr<MarketQuoteCacheRepository> marketQuoteCacheRepository_;
+    std::unique_ptr<MarketPriceHistoryRepository> marketPriceHistoryRepository_;
     std::unique_ptr<PortfolioSnapshotRepository> portfolioSnapshotRepository_;
     std::unique_ptr<DashboardLayoutRepository> dashboardLayoutRepository_;
     std::unique_ptr<DashboardChartSettingsRepository> dashboardChartSettingsRepository_;

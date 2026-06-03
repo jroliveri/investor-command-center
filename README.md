@@ -33,6 +33,7 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 - Multiple named watchlists with manager controls, sidebar assignment, selected-list item CRUD, search, and user-defined buy/sell price signals
 - Research menu with a Stock Research page backed by a Yahoo Finance market data provider abstraction
 - Local market quote cache for user-requested research lookups
+- Local Yahoo Finance daily OHLCV history cache for future RSI, MACD, and volume tracking
 - Polished Stock Research panels with quote summary, key metrics, fallback/cache status, and watchlist shortcut
 - Manual Dashboard current-price refresh that uses market data quotes as a session-only display overlay
 - Reusable calendar picker controls for transaction, dividend, and goal date entry
@@ -42,7 +43,7 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 - Local SQLite database backup button with configurable backup folder and local reminder settings
 - Configurable SQLite database location with copy/verify/switch-on-restart behavior
 - SQLite database initialization at `data/investor_command_center.db`
-- SQLite migrations for `accounts`, `holdings`, `transactions`, `dividends`, `goals`, `watchlists`, `watchlist`, `import_batches`, `portfolio_snapshots`, and `dashboard_widgets`
+- SQLite migrations for `accounts`, `holdings`, `transactions`, `dividends`, `goals`, `watchlists`, `watchlist`, `import_batches`, `portfolio_snapshots`, `dashboard_widgets`, `market_quote_cache`, and `market_price_history`
 - Basic validation and delete confirmation dialogs
 - C++ portfolio calculations for cost basis, market value, and gain/loss
 
@@ -76,13 +77,13 @@ Goals can use either a manually entered current amount or a linked account value
 
 Capital gains allocation rules are user-defined Settings records. For a Sell transaction with a positive realized gain, the Transactions page can show an allocation plan based on those saved percentages. This is a display/calculation helper only; it does not move money, create transfers, provide tax advice, or provide financial advice.
 
-Stock Research is informational only. The Research menu can fetch a quote for a ticker from Yahoo Finance, display available quote/metric fields, clearly label live/fallback/cached/error status, and cache the latest fetched result locally for convenience. Research data may be delayed, unavailable, rate-limited, or incomplete. The Stock Research page itself does not update local holdings.
+Stock Research is informational only. The Research menu can fetch a quote for a ticker from Yahoo Finance, display available quote/metric fields, clearly label live/fallback/cached/error status, and cache the latest fetched result locally for convenience. Stock Research can also refresh daily historical OHLCV rows for supported ranges so future RSI, MACD, and volume views have local data. Research data may be delayed, unavailable, rate-limited, or incomplete. The Stock Research page itself does not update local holdings.
 
 Watchlists can be organized into named local groups. Existing watchlist items migrate into `Main Watchlist`, and new items belong to the selected active watchlist on the Watchlist page. Deactivating a watchlist hides the list and its items from normal views without deleting the item records.
 
 Two active watchlists can be assigned to the morning sidebar as Sidebar Watchlist 1 and Sidebar Watchlist 2. The sidebar uses the assigned watchlist names as section titles and shows up to 10 rows from each selected watchlist. Sidebar assignment is stored locally in SQLite and only affects display.
 
-Watchlist price signals are personal saved levels. The Watchlist page can refresh either the selected watchlist or all active watchlists, and the Research menu can explicitly refresh watchlist prices through the same market data provider used by Stock Research. Refreshes update local watchlist price metadata and show simplified `Buy`, `Sell`, or `Hold` user signals. Buy and Sell rows sort above Hold rows on the Watchlist page and in sidebar watchlists. These signals are not recommendations, trading advice, brokerage actions, or money movement.
+Watchlist price signals are personal saved levels. The Watchlist page can refresh either the selected watchlist or all active watchlists, and the Research menu can explicitly refresh watchlist prices through the same market data provider used by Stock Research. The Watchlist page can also refresh daily historical OHLCV cache rows for selected or all active watchlist symbols. Refreshes update local watchlist price metadata and show simplified `Buy`, `Sell`, or `Hold` user signals. Buy and Sell rows sort above Hold rows on the Watchlist page and in sidebar watchlists. These signals are not recommendations, trading advice, brokerage actions, or money movement.
 
 Database backups are local-only. Configure a backup folder in Settings, then use `Back Up Now` from Settings or the sidebar database area to create a timestamped SQLite backup file. Backup reminders are stored locally and shown inside the app; there are no OS notifications, cloud backup, or sync features.
 
@@ -177,7 +178,7 @@ See `docs/Privacy-And-Local-Data.md` for the full data-safety guidance.
 
 CSV imports are local-only. Do not store real brokerage CSV files in the repository. See `docs/CSV-Import.md`.
 
-Research quote cache records are stored locally in SQLite and are not brokerage-verified records. They should not be treated as authoritative account data.
+Research quote and historical OHLCV cache records are stored locally in SQLite and are not brokerage-verified records. They should not be treated as authoritative account data.
 
 ## License
 
@@ -188,6 +189,7 @@ Investor Command Center is released under the MIT License. See `LICENSE`.
 - Dashboard current-price refresh is manual/session-only and does not persist prices back to holdings yet.
 - Holdings table prices remain local/manual unless updated through CSV import or direct user entry.
 - Yahoo Finance research endpoints are unofficial/public-facing and may fail, rate-limit, or change.
+- RSI, MACD, and volume indicator displays are not implemented yet; this pass only stores the daily OHLCV history needed for future work.
 - Reports is a placeholder section.
 - CSV export buttons are placeholders.
 - CSV import currently targets holdings only; transaction CSV import is planned.

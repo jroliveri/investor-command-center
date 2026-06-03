@@ -13,6 +13,7 @@
 #include <imgui_stdlib.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <optional>
@@ -203,12 +204,12 @@ void StockResearchView::render(AppState& state,
 
     ImGui::Spacing();
 
-    if (TerminalPanel::begin("Price / History", ImVec2(panelWidth, 220.0f))) {
-        renderHistoryPlaceholder();
+    if (TerminalPanel::begin("Price / History", ImVec2(panelWidth, 250.0f))) {
+        renderHistoryPanel(marketDataService, state);
     }
     TerminalPanel::end();
     ImGui::SameLine();
-    if (TerminalPanel::begin("Notes / Watchlist", ImVec2(panelWidth, 220.0f))) {
+    if (TerminalPanel::begin("Notes / Watchlist", ImVec2(panelWidth, 250.0f))) {
         renderWatchlistAction(state, watchlistRepository, reloadData);
     }
     TerminalPanel::end();
@@ -226,6 +227,17 @@ void StockResearchView::refreshCurrent(MarketDataService& marketDataService, App
     fetchSymbol(marketDataService, state);
 }
 
+void StockResearchView::refreshCurrentHistory(MarketDataService& marketDataService, AppState& state)
+{
+    const std::string symbol = hasResult_ && !lastResult_.quote.symbol.empty() ? lastResult_.quote.symbol : searchSymbol_;
+    if (trim(symbol).empty()) {
+        state.setStatus("Open Stock Research and enter a ticker before refreshing historical prices.", true);
+        return;
+    }
+
+    fetchHistory(marketDataService, state, historyRange_);
+}
+
 void StockResearchView::fetchSymbol(MarketDataService& marketDataService, AppState& state)
 {
     searchSymbol_ = uppercase(trim(searchSymbol_));
@@ -240,11 +252,40 @@ void StockResearchView::fetchSymbol(MarketDataService& marketDataService, AppSta
     }
 }
 
+void StockResearchView::fetchHistory(MarketDataService& marketDataService, AppState& state, const std::string& range)
+{
+    std::string symbol = hasResult_ && !lastResult_.quote.symbol.empty() ? lastResult_.quote.symbol : searchSymbol_;
+    symbol = uppercase(trim(symbol));
+    if (symbol.empty()) {
+        state.setStatus("Enter a ticker before refreshing historical prices.", true);
+        return;
+    }
+
+    searchSymbol_ = symbol;
+    historyRange_ = range;
+    lastHistoryResult_ = marketDataService.fetchHistoricalPrices(symbol, historyRange_, "1d");
+    historyRequestHasRun_ = true;
+
+    if (lastHistoryResult_.success) {
+        if (lastHistoryResult_.fromCache) {
+            state.setStatus("Historical daily OHLCV loaded from cache for " + lastHistoryResult_.symbol + ": " +
+                std::to_string(lastHistoryResult_.rows.size()) + " rows available. Source: " + lastHistoryResult_.provider + ".");
+        } else {
+            state.setStatus("Historical daily OHLCV refreshed for " + lastHistoryResult_.symbol + ": " +
+                std::to_string(lastHistoryResult_.rowsStored) + " rows added/updated. Source: " + lastHistoryResult_.provider + ".");
+        }
+    } else {
+        state.setStatus("Could not fetch historical prices: " + lastHistoryResult_.error, true);
+    }
+}
+
 void StockResearchView::clearResult(AppState& state)
 {
     searchSymbol_.clear();
     lastResult_ = MarketQuoteResult {};
+    lastHistoryResult_ = HistoricalPriceResult {};
     hasResult_ = false;
+    historyRequestHasRun_ = false;
     state.clearStatus();
 }
 
@@ -392,23 +433,75 @@ void StockResearchView::renderMetrics()
     renderResearchMetric("Beta", optionalNumber(quote.beta));
 }
 
-void StockResearchView::renderHistoryPlaceholder()
+void StockResearchView::renderHistoryPanel(MarketDataService& marketDataService, AppState& state)
 {
-    ImGui::TextColored(UiTheme::TextWarning, "Historical chart support is planned.");
-    ImGui::TextWrapped("Historical chart support is planned. Current provider abstraction already includes a placeholder for range and interval support.");
+    ImGui::TextColored(UiTheme::TextSecondary, "Daily OHLCV Cache");
+    ImGui::TextWrapped("Fetches daily open, high, low, close, adjusted close, and volume for future RSI, MACD, and volume views.");
     ImGui::Spacing();
-    ImGui::BeginDisabled();
-    ImGui::Button("1M", ImVec2(54.0f, 0.0f));
-    ImGui::SameLine();
-    ImGui::Button("3M", ImVec2(54.0f, 0.0f));
-    ImGui::SameLine();
-    ImGui::Button("1Y", ImVec2(54.0f, 0.0f));
-    ImGui::SameLine();
-    ImGui::Button("All", ImVec2(54.0f, 0.0f));
-    ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("Historical price fetching is not implemented yet.");
+
+    const bool hasSymbol = !trim(searchSymbol_).empty() || (hasResult_ && !lastResult_.quote.symbol.empty());
+    if (!hasSymbol) {
+        ImGui::TextColored(UiTheme::TextMuted, "Enter a ticker to fetch historical data.");
     }
+
+    constexpr std::array<const char*, 7> Ranges = { "1M", "3M", "6M", "YTD", "1Y", "2Y", "5Y" };
+    if (!hasSymbol) {
+        ImGui::BeginDisabled();
+    }
+    for (const char* range : Ranges) {
+        ImGui::PushID(range);
+        if (historyRange_ == range) {
+            ImGui::PushStyleColor(ImGuiCol_Button, UiTheme::Accent);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UiTheme::Accent);
+        }
+        if (ImGui::Button(range, ImVec2(54.0f, 0.0f))) {
+            fetchHistory(marketDataService, state, range);
+        }
+        if (historyRange_ == range) {
+            ImGui::PopStyleColor(2);
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+    }
+    if (ImGui::Button("Refresh History", ImVec2(132.0f, 0.0f))) {
+        fetchHistory(marketDataService, state, historyRange_);
+    }
+    if (!hasSymbol) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::Spacing();
+    if (historyRequestHasRun_) {
+        if (lastHistoryResult_.success) {
+            const ImVec4 statusColor = lastHistoryResult_.fromCache ? UiTheme::TextWarning : UiTheme::TextSuccess;
+            ImGui::TextColored(statusColor, "%s history: %zu rows available, %d rows added/updated.",
+                lastHistoryResult_.symbol.c_str(),
+                lastHistoryResult_.rows.size(),
+                lastHistoryResult_.rowsStored);
+            ImGui::TextColored(UiTheme::TextSecondary, "Range: %s  Interval: %s  Source: %s",
+                lastHistoryResult_.range.c_str(),
+                lastHistoryResult_.interval.c_str(),
+                lastHistoryResult_.provider.c_str());
+            ImGui::TextColored(UiTheme::TextSecondary, "Last refresh: %s",
+                lastHistoryResult_.fetchedAt.empty() ? "N/A" : lastHistoryResult_.fetchedAt.c_str());
+            if (!lastHistoryResult_.error.empty()) {
+                ImGui::TextColored(UiTheme::TextWarning, "%s", lastHistoryResult_.error.c_str());
+            }
+        } else {
+            ImGui::TextColored(UiTheme::TextDanger, "%s", lastHistoryResult_.error.empty()
+                    ? "No historical data is available for this ticker."
+                    : lastHistoryResult_.error.c_str());
+        }
+    } else {
+        ImGui::TextColored(UiTheme::TextMuted, "No historical refresh has run for this symbol yet.");
+    }
+
+    ImGui::Separator();
+    ImGui::TextColored(UiTheme::TextMuted, "RSI: Coming soon");
+    ImGui::SameLine(170.0f);
+    ImGui::TextColored(UiTheme::TextMuted, "MACD: Coming soon");
+    ImGui::SameLine(340.0f);
+    ImGui::TextColored(UiTheme::TextMuted, "Volume: Coming soon");
 }
 
 void StockResearchView::renderWatchlistAction(AppState& state, WatchlistRepository& watchlistRepository, const std::function<void()>& reloadData)

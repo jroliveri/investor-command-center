@@ -535,7 +535,34 @@ WHERE signal_status IS NULL
    OR signal_status = 'Check Signals';
 )sql";
 
-    return executeMigration(database, 20, "simplify_watchlist_signal_status", watchlistSignalSimplificationMigration, error);
+    if (!executeMigration(database, 20, "simplify_watchlist_signal_status", watchlistSignalSimplificationMigration, error)) {
+        return false;
+    }
+
+    const char* marketPriceHistoryMigration = R"sql(
+CREATE TABLE IF NOT EXISTS market_price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    provider TEXT NOT NULL DEFAULT 'Yahoo Finance',
+    price_date TEXT NOT NULL,
+    open_price REAL,
+    high_price REAL,
+    low_price REAL,
+    close_price REAL,
+    adjusted_close_price REAL,
+    volume REAL,
+    fetched_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_market_price_history_symbol_provider_date
+    ON market_price_history(symbol, provider, price_date);
+CREATE INDEX IF NOT EXISTS idx_market_price_history_symbol_date
+    ON market_price_history(symbol, price_date);
+)sql";
+
+    return executeMigration(database, 21, "create_market_price_history", marketPriceHistoryMigration, error);
 }
 
 }
