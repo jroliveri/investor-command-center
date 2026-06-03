@@ -62,21 +62,53 @@ void appendWarning(std::string& warning, const std::string& addition)
 std::string WatchlistSignalService::calculateSignalStatus(double currentPrice, double buySignalPrice, double sellSignalPrice)
 {
     if (currentPrice <= 0.0) {
-        return "No Price";
+        return "Hold";
     }
 
     const bool buyTriggered = buySignalPrice > 0.0 && currentPrice <= buySignalPrice;
     const bool sellTriggered = sellSignalPrice > 0.0 && currentPrice >= sellSignalPrice;
     if (buyTriggered && sellTriggered) {
-        return "Check Signals";
+        return "Hold";
     }
     if (buyTriggered) {
-        return "Buy Signal";
+        return "Buy";
     }
     if (sellTriggered) {
-        return "Sell Signal";
+        return "Sell";
     }
-    return "No Signal";
+    return "Hold";
+}
+
+int WatchlistSignalService::signalSortRank(const std::string& signalStatus)
+{
+    if (signalStatus == "Buy" || signalStatus == "Buy Signal") {
+        return 0;
+    }
+    if (signalStatus == "Sell" || signalStatus == "Sell Signal") {
+        return 1;
+    }
+    return 2;
+}
+
+int WatchlistSignalService::signalSortRank(const WatchlistItem& item)
+{
+    return signalSortRank(calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice));
+}
+
+bool WatchlistSignalService::hasSignalWarning(double currentPrice, double buySignalPrice, double sellSignalPrice)
+{
+    if (currentPrice <= 0.0) {
+        return false;
+    }
+
+    const bool buyTriggered = buySignalPrice > 0.0 && currentPrice <= buySignalPrice;
+    const bool sellTriggered = sellSignalPrice > 0.0 && currentPrice >= sellSignalPrice;
+    return buyTriggered && sellTriggered;
+}
+
+bool WatchlistSignalService::hasSignalWarning(const WatchlistItem& item)
+{
+    return hasSignalWarning(item.currentPrice, item.buySignalPrice, item.sellSignalPrice);
 }
 
 WatchlistPriceRefreshStatus WatchlistSignalService::refreshPrices(

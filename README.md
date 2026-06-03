@@ -82,7 +82,7 @@ Watchlists can be organized into named local groups. Existing watchlist items mi
 
 Two active watchlists can be assigned to the morning sidebar as Sidebar Watchlist 1 and Sidebar Watchlist 2. The sidebar uses the assigned watchlist names as section titles and shows up to 10 rows from each selected watchlist. Sidebar assignment is stored locally in SQLite and only affects display.
 
-Watchlist price signals are personal saved levels. The Watchlist page can refresh either the selected watchlist or all active watchlists, and the Research menu can explicitly refresh watchlist prices through the same market data provider used by Stock Research. Refreshes update local watchlist price metadata and show `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, or `Check Signals` badges. These signals are not recommendations, trading advice, brokerage actions, or money movement.
+Watchlist price signals are personal saved levels. The Watchlist page can refresh either the selected watchlist or all active watchlists, and the Research menu can explicitly refresh watchlist prices through the same market data provider used by Stock Research. Refreshes update local watchlist price metadata and show simplified `Buy`, `Sell`, or `Hold` user signals. Buy and Sell rows sort above Hold rows on the Watchlist page and in sidebar watchlists. These signals are not recommendations, trading advice, brokerage actions, or money movement.
 
 Database backups are local-only. Configure a backup folder in Settings, then use `Back Up Now` from Settings or the sidebar database area to create a timestamped SQLite backup file. Backup reminders are stored locally and shown inside the app; there are no OS notifications, cloud backup, or sync features.
 

@@ -112,24 +112,54 @@ std::string currentPriceText(double value)
 
 ImVec4 signalColor(const std::string& status)
 {
-    if (status == "Buy Signal") {
+    if (status == "Buy") {
         return UiTheme::Gain;
     }
-    if (status == "Sell Signal") {
+    if (status == "Sell") {
         return UiTheme::Loss;
-    }
-    if (status == "Check Signals") {
-        return UiTheme::Amber;
-    }
-    if (status == "No Price") {
-        return UiTheme::TextMuted;
     }
     return UiTheme::TextSecondary;
 }
 
-bool isActionableSignal(const std::string& status)
+ImVec4 signalColor(const WatchlistItem& item)
 {
-    return status == "Buy Signal" || status == "Sell Signal" || status == "Check Signals";
+    if (WatchlistSignalService::hasSignalWarning(item)) {
+        return UiTheme::Amber;
+    }
+    return signalColor(WatchlistSignalService::calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice));
+}
+
+int prioritySortRank(const std::string& priority)
+{
+    if (priority == "High") {
+        return 0;
+    }
+    if (priority == "Medium") {
+        return 1;
+    }
+    if (priority == "Low") {
+        return 2;
+    }
+    return 3;
+}
+
+void sortWatchlistItemsBySignal(std::vector<WatchlistItem>& items)
+{
+    std::stable_sort(items.begin(), items.end(), [](const WatchlistItem& left, const WatchlistItem& right) {
+        const int leftSignalRank = WatchlistSignalService::signalSortRank(left);
+        const int rightSignalRank = WatchlistSignalService::signalSortRank(right);
+        if (leftSignalRank != rightSignalRank) {
+            return leftSignalRank < rightSignalRank;
+        }
+
+        const int leftPriorityRank = prioritySortRank(left.priority);
+        const int rightPriorityRank = prioritySortRank(right.priority);
+        if (leftPriorityRank != rightPriorityRank) {
+            return leftPriorityRank < rightPriorityRank;
+        }
+
+        return left.ticker < right.ticker;
+    });
 }
 
 std::vector<Watchlist> activeWatchlists(const AppState& state)
@@ -170,6 +200,7 @@ std::vector<WatchlistItem> itemsForWatchlist(const AppState& state, int watchlis
             items.push_back(item);
         }
     }
+    sortWatchlistItemsBySignal(items);
     return items;
 }
 
@@ -501,8 +532,8 @@ void WatchlistView::drawWatchlistItems(AppState& state,
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 1.3f);
         ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthFixed, 76.0f);
         ImGui::TableSetupColumn("Current Price", ImGuiTableColumnFlags_WidthFixed, 112.0f);
-        ImGui::TableSetupColumn("Buy Signal", ImGuiTableColumnFlags_WidthFixed, 112.0f);
-        ImGui::TableSetupColumn("Sell Signal", ImGuiTableColumnFlags_WidthFixed, 112.0f);
+        ImGui::TableSetupColumn("Buy Level", ImGuiTableColumnFlags_WidthFixed, 112.0f);
+        ImGui::TableSetupColumn("Sell Level", ImGuiTableColumnFlags_WidthFixed, 112.0f);
         ImGui::TableSetupColumn("Signal", ImGuiTableColumnFlags_WidthFixed, 128.0f);
         ImGui::TableSetupColumn("Last Refresh", ImGuiTableColumnFlags_WidthFixed, 166.0f);
         ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthFixed, 144.0f);
@@ -668,7 +699,7 @@ void WatchlistView::openCreate(int watchlistId)
     draft_.watchlistId = watchlistId;
     draft_.assetType = "Stock";
     draft_.priority = "Medium";
-    draft_.signalStatus = "None";
+    draft_.signalStatus = "Hold";
     editing_ = false;
     editorPopupId_ = NewWatchlistEditorPopup;
     formError_.clear();
@@ -729,8 +760,8 @@ void WatchlistView::drawEditor(AppState& state, WatchlistRepository& repository,
         "Medium",
         "Low",
     });
-    ImGui::InputDouble("Buy Signal Price", &draft_.buySignalPrice, 0.0, 0.0, "%.4f");
-    ImGui::InputDouble("Sell Signal Price", &draft_.sellSignalPrice, 0.0, 0.0, "%.4f");
+    ImGui::InputDouble("Buy Level", &draft_.buySignalPrice, 0.0, 0.0, "%.4f");
+    ImGui::InputDouble("Sell Level", &draft_.sellSignalPrice, 0.0, 0.0, "%.4f");
     ImGui::InputDouble("Current price", &draft_.currentPrice, 0.0, 0.0, "%.4f");
     ImGui::InputTextMultiline("Reason watching", &draft_.reasonWatching, ImVec2(440.0f, 70.0f));
     ImGui::InputTextMultiline("Risk notes", &draft_.riskNotes, ImVec2(440.0f, 70.0f));
@@ -738,14 +769,14 @@ void WatchlistView::drawEditor(AppState& state, WatchlistRepository& repository,
     draft_.signalStatus = WatchlistSignalService::calculateSignalStatus(draft_.currentPrice, draft_.buySignalPrice, draft_.sellSignalPrice);
 
     ImGui::Separator();
-    ImGui::TextColored(signalColor(draft_.signalStatus), "Current signal: %s", draft_.signalStatus.c_str());
+    ImGui::TextColored(signalColor(draft_), "Current signal: %s", draft_.signalStatus.c_str());
     if (draft_.lastPriceRefreshAt.empty()) {
         ImGui::TextColored(UiTheme::TextMuted, "Last refresh: N/A");
     } else {
         ImGui::TextColored(UiTheme::TextMuted, "Last refresh: %s from %s", draft_.lastPriceRefreshAt.c_str(), emptyIfBlank(draft_.priceSource));
     }
     if (hasSignalLevelError(draft_)) {
-        ImGui::TextColored(UiTheme::TextWarning, "Buy signal price should be lower than sell signal price when both are entered.");
+        ImGui::TextColored(UiTheme::TextWarning, "Buy level should be lower than sell level when both are entered.");
     }
 
     UiTheme::formError(formError_);
@@ -754,7 +785,7 @@ void WatchlistView::drawEditor(AppState& state, WatchlistRepository& repository,
         if (active.empty()) {
             formError_ = "Create an active watchlist before saving items.";
         } else if (hasSignalLevelError(draft_)) {
-            formError_ = "Buy signal price must be lower than sell signal price, or leave one side blank.";
+            formError_ = "Buy level must be lower than sell level, or leave one side blank.";
         } else {
             draft_.targetBuyPrice = draft_.buySignalPrice;
             draft_.signalStatus = WatchlistSignalService::calculateSignalStatus(draft_.currentPrice, draft_.buySignalPrice, draft_.sellSignalPrice);
@@ -847,19 +878,22 @@ void WatchlistView::drawPriorityBadge(const std::string& priority) const
 void WatchlistView::drawSignalBadge(const WatchlistItem& item)
 {
     const std::string status = WatchlistSignalService::calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice);
-    const ImVec4 color = signalColor(status);
+    const ImVec4 color = signalColor(item);
 
-    if (isActionableSignal(status)) {
-        ImGui::PushStyleColor(ImGuiCol_Text, color);
-        if (ImGui::SmallButton((status + "##signal_badge_" + std::to_string(item.id)).c_str())) {
-            signalNoticeTicker_ = item.ticker;
-            signalNoticeStatus_ = status;
-            openSignalNoticePopup_ = true;
+    ImGui::PushStyleColor(ImGuiCol_Text, color);
+    if (ImGui::SmallButton((status + "##signal_badge_" + std::to_string(item.id)).c_str())) {
+        signalNoticeTicker_ = item.ticker;
+        signalNoticeStatus_ = status;
+        if (WatchlistSignalService::hasSignalWarning(item)) {
+            signalNoticeDetail_ = "Both saved thresholds match the current price. Review your watchlist levels if this was not intentional.";
+        } else if (item.currentPrice <= 0.0) {
+            signalNoticeDetail_ = "No current price is available, so the visible signal is Hold.";
+        } else {
+            signalNoticeDetail_.clear();
         }
-        ImGui::PopStyleColor();
-    } else {
-        ImGui::TextColored(color, "%s", status.c_str());
+        openSignalNoticePopup_ = true;
     }
+    ImGui::PopStyleColor();
 }
 
 void WatchlistView::drawSignalNoticePopup()
@@ -873,7 +907,10 @@ void WatchlistView::drawSignalNoticePopup()
     ImGui::TextColored(signalColor(signalNoticeStatus_), "%s", signalNoticeStatus_.c_str());
     ImGui::TextColored(UiTheme::TextMuted, "%s", signalNoticeTicker_.empty() ? "Selected watchlist item" : signalNoticeTicker_.c_str());
     ImGui::Spacing();
-    ImGui::TextWrapped("This is your saved price signal, not financial advice or a trade action.");
+    ImGui::TextWrapped("This is your saved price signal based on your own watchlist thresholds. It is not financial advice or a trade action.");
+    if (!signalNoticeDetail_.empty()) {
+        ImGui::TextColored(UiTheme::Amber, "%s", signalNoticeDetail_.c_str());
+    }
     ImGui::TextWrapped("Investor Command Center does not place trades, move money, connect to brokerage accounts, or recommend buy/sell decisions.");
     ImGui::Spacing();
     if (ImGui::Button("Close", ImVec2(100.0f, 0.0f))) {

@@ -444,15 +444,15 @@ If `watchlist_id` is missing or unset during migration, the item is assigned to 
 
 `target_buy_price` remains for backward compatibility. New UI and signal logic use `buy_signal_price` and `sell_signal_price`.
 
-Watchlist signal status is calculated from the locally saved price levels and the refreshed current price:
+Watchlist signal status is calculated from the locally saved price levels and the refreshed current price. The visible signal categories are intentionally simple:
 
 ```text
-Buy Signal = currentPrice <= buySignalPrice, when buySignalPrice > 0
-Sell Signal = currentPrice >= sellSignalPrice, when sellSignalPrice > 0
-Check Signals = both saved levels trigger
-No Price = currentPrice is missing or zero
-No Signal = no saved level is currently triggered
+Buy = currentPrice <= buySignalPrice, when buySignalPrice > 0
+Sell = currentPrice >= sellSignalPrice, when sellSignalPrice > 0
+Hold = no buy or sell condition is met
 ```
+
+If the current price is missing, the visible signal remains `Hold`. If both saved levels trigger at the same time, the visible signal remains `Hold` with warning styling so the user can review their own thresholds. Legacy stored values such as `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, `None`, and `Check Signals` are normalized to `Buy`, `Sell`, or `Hold`. New app writes use `Hold` as the default logical status even though early SQLite schemas retain the legacy `None` column default.
 
 Watchlist price refreshes use `MarketDataService` and the Yahoo Finance provider abstraction already used by Stock Research. Refreshes update only the watchlist record's current price, last refresh timestamp, source label, and calculated signal status. They do not update holdings, transactions, snapshots, brokerage records, or account balances.
 
@@ -488,7 +488,7 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Daily, monthly, and yearly gain/loss are calculated from portfolio snapshots.
 - Goal progress is calculated in C++ from the effective current amount divided by target amount, clamped between `0` and `100`.
 - Watchlist priority counts are calculated in C++ from the `priority` field.
-- Watchlist price signal badges are calculated in C++ from `current_price`, `buy_signal_price`, and `sell_signal_price`.
+- Watchlist price signal badges and signal-first sorting are calculated in C++ from `current_price`, `buy_signal_price`, and `sell_signal_price`.
 - Recent transactions are loaded from `transactions` ordered by `transaction_date DESC, id DESC`.
 
 ## Dashboard Current Price Refresh

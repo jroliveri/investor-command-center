@@ -12,6 +12,10 @@ class WatchlistRepository;
 
 namespace WatchlistSignalService {
 std::string calculateSignalStatus(double currentPrice, double buySignalPrice, double sellSignalPrice);
+int signalSortRank(const std::string& signalStatus);
+int signalSortRank(const WatchlistItem& item);
+bool hasSignalWarning(double currentPrice, double buySignalPrice, double sellSignalPrice);
+bool hasSignalWarning(const WatchlistItem& item);
 WatchlistPriceRefreshStatus refreshPrices(
     const std::vector<WatchlistItem>& items,
     MarketDataService& marketDataService,

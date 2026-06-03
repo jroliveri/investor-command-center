@@ -56,6 +56,7 @@ private:
     std::string deletePopupId_;
     std::string signalNoticeTicker_;
     std::string signalNoticeStatus_;
+    std::string signalNoticeDetail_;
     std::string watchlistFormError_;
     std::string formError_;
     std::string searchText_;

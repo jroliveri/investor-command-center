@@ -30,6 +30,17 @@ void normalizeTicker(std::string& ticker)
     });
 }
 
+std::string normalizeSignalStatus(const std::string& signalStatus)
+{
+    if (signalStatus == "Buy" || signalStatus == "Buy Signal") {
+        return "Buy";
+    }
+    if (signalStatus == "Sell" || signalStatus == "Sell Signal") {
+        return "Sell";
+    }
+    return "Hold";
+}
+
 Watchlist mapWatchlist(sqlite3_stmt* statement)
 {
     Watchlist watchlist;
@@ -69,9 +80,7 @@ WatchlistItem mapWatchlistItem(sqlite3_stmt* statement)
     if (item.buySignalPrice <= 0.0 && item.targetBuyPrice > 0.0) {
         item.buySignalPrice = item.targetBuyPrice;
     }
-    if (item.signalStatus.empty()) {
-        item.signalStatus = "None";
-    }
+    item.signalStatus = normalizeSignalStatus(item.signalStatus);
     return item;
 }
 
@@ -404,9 +413,7 @@ bool WatchlistRepository::create(WatchlistItem& item, std::string& error) const
         item.buySignalPrice = item.targetBuyPrice;
     }
     item.targetBuyPrice = item.buySignalPrice;
-    if (item.signalStatus.empty()) {
-        item.signalStatus = "None";
-    }
+    item.signalStatus = normalizeSignalStatus(item.signalStatus);
     if (!validate(item, error)) {
         return false;
     }
@@ -471,9 +478,7 @@ bool WatchlistRepository::update(const WatchlistItem& item, std::string& error) 
         normalized.buySignalPrice = normalized.targetBuyPrice;
     }
     normalized.targetBuyPrice = normalized.buySignalPrice;
-    if (normalized.signalStatus.empty()) {
-        normalized.signalStatus = "None";
-    }
+    normalized.signalStatus = normalizeSignalStatus(normalized.signalStatus);
     if (!validate(normalized, error)) {
         return false;
     }

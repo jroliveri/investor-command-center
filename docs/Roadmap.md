@@ -32,6 +32,7 @@
 - Goals can use manual current amounts or linked calculated account values
 - User-defined capital gains allocation helper for Sell transactions
 - User-defined Watchlist buy/sell price signals with explicit Yahoo Finance refresh and local signal badges
+- Simplified Watchlist signal categories: Buy, Sell, and Hold, sorted with Buy/Sell first
 - Existing watchlist items migrate into a default `Main Watchlist`
 - Sidebar Watchlist 1 and 2 assignment controls for active watchlists
 - Local SQLite database backups with configurable folder, Back Up Now button, and local reminder settings

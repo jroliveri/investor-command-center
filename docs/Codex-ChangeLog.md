@@ -1,5 +1,41 @@
 # Codex Change Log
 
+## 2026-06-03 Watchlist Signal Simplification
+
+### Changed Files
+
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.cpp`
+- `src/db/Migrations.cpp`
+- `src/models/WatchlistItem.hpp`
+- `src/repositories/WatchlistRepository.cpp`
+- `src/services/WatchlistSignalService.hpp`
+- `src/services/WatchlistSignalService.cpp`
+- `src/ui/WatchlistView.hpp`
+- `src/ui/WatchlistView.cpp`
+
+### Behavior Added
+
+- Simplified visible watchlist signal categories to `Buy`, `Sell`, and `Hold`.
+- Added centralized watchlist signal sort rank helpers.
+- Added migration support to normalize legacy stored signal labels into `Buy`, `Sell`, or `Hold`.
+- Sorted Watchlist page rows by signal first: Buy, then Sell, then Hold.
+- Sorted sidebar watchlist rows with the same signal-first order so the top 10 favors Buy/Sell user signals.
+- Updated signal badges and pop-up wording to reinforce that signals are user-defined thresholds, not financial advice or trade actions.
+- Kept overlapping triggered thresholds visible as `Hold` with amber warning styling.
+
+### Validation
+
+- Built the Debug CMake preset with Visual Studio's bundled CMake executable.
+- Built the Release CMake preset with Visual Studio's bundled CMake executable.
+
+### Known Issues
+
+- Manual desktop click-through is still recommended to confirm final badge colors and row ordering with local watchlist data.
+
 ## 2026-06-02 Sidebar Watchlist Assignment
 
 ### Changed Files

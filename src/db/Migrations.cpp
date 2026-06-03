@@ -511,7 +511,31 @@ CREATE INDEX IF NOT EXISTS idx_watchlists_sidebar_slot
     ON watchlists(show_in_sidebar, sidebar_slot, is_active);
 )sql";
 
-    return executeMigration(database, 19, "add_watchlist_sidebar_assignment", watchlistSidebarAssignmentMigration, error);
+    if (!executeMigration(database, 19, "add_watchlist_sidebar_assignment", watchlistSidebarAssignmentMigration, error)) {
+        return false;
+    }
+
+    const char* watchlistSignalSimplificationMigration = R"sql(
+UPDATE watchlist
+SET signal_status = 'Buy'
+WHERE signal_status = 'Buy Signal';
+
+UPDATE watchlist
+SET signal_status = 'Sell'
+WHERE signal_status = 'Sell Signal';
+
+UPDATE watchlist
+SET signal_status = 'Hold'
+WHERE signal_status IS NULL
+   OR signal_status = ''
+   OR signal_status = 'None'
+   OR signal_status = 'Watch'
+   OR signal_status = 'No Signal'
+   OR signal_status = 'No Price'
+   OR signal_status = 'Check Signals';
+)sql";
+
+    return executeMigration(database, 20, "simplify_watchlist_signal_status", watchlistSignalSimplificationMigration, error);
 }
 
 }

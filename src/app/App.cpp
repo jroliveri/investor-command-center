@@ -130,29 +130,53 @@ bool isRepositoryRoot(const std::string& path)
     return pathsEquivalent(absolutePath(path), repositoryRoot);
 }
 
-ImVec4 sidebarSignalColor(const std::string& status)
+ImVec4 sidebarSignalColor(const WatchlistItem& item)
 {
-    if (status == "Buy Signal") {
-        return UiTheme::Gain;
-    }
-    if (status == "Sell Signal") {
-        return UiTheme::Loss;
-    }
-    if (status == "Check Signals") {
+    if (WatchlistSignalService::hasSignalWarning(item)) {
         return UiTheme::Amber;
     }
-    if (status == "No Price") {
-        return UiTheme::TextMuted;
+
+    const std::string status = WatchlistSignalService::calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice);
+    if (status == "Buy") {
+        return UiTheme::Gain;
+    }
+    if (status == "Sell") {
+        return UiTheme::Loss;
     }
     return UiTheme::TextSecondary;
 }
 
-const char* sidebarSignalLabel(const std::string& status)
+int watchlistPrioritySortRank(const std::string& priority)
 {
-    if (status == "No Signal") {
-        return "Watch";
+    if (priority == "High") {
+        return 0;
     }
-    return status.c_str();
+    if (priority == "Medium") {
+        return 1;
+    }
+    if (priority == "Low") {
+        return 2;
+    }
+    return 3;
+}
+
+void sortWatchlistItemsBySignal(std::vector<WatchlistItem>& items)
+{
+    std::stable_sort(items.begin(), items.end(), [](const WatchlistItem& left, const WatchlistItem& right) {
+        const int leftSignalRank = WatchlistSignalService::signalSortRank(left);
+        const int rightSignalRank = WatchlistSignalService::signalSortRank(right);
+        if (leftSignalRank != rightSignalRank) {
+            return leftSignalRank < rightSignalRank;
+        }
+
+        const int leftPriorityRank = watchlistPrioritySortRank(left.priority);
+        const int rightPriorityRank = watchlistPrioritySortRank(right.priority);
+        if (leftPriorityRank != rightPriorityRank) {
+            return leftPriorityRank < rightPriorityRank;
+        }
+
+        return left.ticker < right.ticker;
+    });
 }
 
 const Watchlist* sidebarWatchlistForSlot(const AppState& state, int sidebarSlot)
@@ -173,6 +197,7 @@ std::vector<WatchlistItem> sidebarWatchlistItems(const AppState& state, int watc
             items.push_back(item);
         }
     }
+    sortWatchlistItemsBySignal(items);
     return items;
 }
 
@@ -950,7 +975,7 @@ void App::renderWatchlistPanel(int sidebarSlot)
             ImGui::Text("%s", currentPrice.c_str());
             ImGui::TableNextColumn();
             const std::string signalStatus = WatchlistSignalService::calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice);
-            ImGui::TextColored(sidebarSignalColor(signalStatus), "%s", sidebarSignalLabel(signalStatus));
+            ImGui::TextColored(sidebarSignalColor(item), "%s", signalStatus.c_str());
         }
         ImGui::EndTable();
     }
