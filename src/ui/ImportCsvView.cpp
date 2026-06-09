@@ -51,10 +51,12 @@ void ImportCsvView::render(AppState& state, CsvImportService& importService, con
 {
     UiTheme::sectionHeading("Import CSV", "Import holdings from local CSV files with preview, mapping, and validation.");
 
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("ImportPrivacy", ImVec2(0.0f, 92.0f), true);
     ImGui::TextColored(UiTheme::Amber, "Privacy");
     ImGui::TextWrapped("CSV files may contain personal financial data. This importer reads the selected local file, does not copy it into the repository, and imports only validated rows into SQLite.");
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     ImGui::Spacing();
     ImGui::Text("Import Account");
@@ -154,6 +156,7 @@ void ImportCsvView::drawAccountSelector(AppState& state)
 {
     const int previousAccountId = selectedAccountId_;
 
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("ImportAccountSection", ImVec2(0.0f, 74.0f), true);
     if (ImGui::BeginCombo("Import into account", accountNameFor(state, selectedAccountId_))) {
         for (const Account& account : state.accounts) {
@@ -168,6 +171,7 @@ void ImportCsvView::drawAccountSelector(AppState& state)
         ImGui::EndCombo();
     }
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     if (selectedAccountId_ != previousAccountId && !table_.headers.empty()) {
         rebuildPreview(state);
@@ -177,17 +181,22 @@ void ImportCsvView::drawAccountSelector(AppState& state)
 void ImportCsvView::drawFileSection(const AppState& state)
 {
     ImGui::Text("File");
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("ImportFileSection", ImVec2(0.0f, 92.0f), true);
     ImGui::SetNextItemWidth(520.0f);
     ImGui::InputText("CSV file", &csvPath_);
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Browse")) {
         browseForCsv();
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Load Preview")) {
         loadPreview(state);
     }
+    UiTheme::popButtonStyle();
 
     if (!loadError_.empty()) {
         ImGui::TextColored(UiTheme::Loss, "%s", loadError_.c_str());
@@ -195,11 +204,13 @@ void ImportCsvView::drawFileSection(const AppState& state)
         ImGui::TextColored(UiTheme::MutedText, "Source CSV files stay local and are not copied into the repository.");
     }
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 void ImportCsvView::drawHeaderDetection(const AppState& state)
 {
     ImGui::Text("Header Detection");
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("HeaderDetectionSection", ImVec2(0.0f, 106.0f), true);
     ImGui::Text("Detected header row: %d", table_.headerRowNumber);
     ImGui::SameLine();
@@ -214,11 +225,14 @@ void ImportCsvView::drawHeaderDetection(const AppState& state)
     ImGui::SetNextItemWidth(150.0f);
     ImGui::InputInt("Header row", &headerRowInput_);
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Apply Header Row")) {
         reloadWithHeaderRow(state);
     }
+    UiTheme::popButtonStyle();
     ImGui::TextColored(UiTheme::MutedText, "Use this only when automatic detection picked the wrong row.");
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 bool ImportCsvView::drawImportFieldCombo(std::size_t columnIndex)
@@ -268,7 +282,8 @@ void ImportCsvView::drawMappingEditor(const AppState& state)
     ImGui::TextColored(UiTheme::MutedText, "Map each CSV column to the field it should become in Investor Command Center. Columns set to Ignore will not be imported.");
 
     bool changed = false;
-    if (ImGui::BeginTable("ColumnMappingTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 330.0f))) {
+    UiTheme::pushTableStyle();
+    if (ImGui::BeginTable("ColumnMappingTable", 5, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 330.0f))) {
         ImGui::TableSetupColumn("CSV Column Header", ImGuiTableColumnFlags_WidthFixed, 220.0f);
         ImGui::TableSetupColumn("CSV Sample Value", ImGuiTableColumnFlags_WidthFixed, 180.0f);
         ImGui::TableSetupColumn("Import Field", ImGuiTableColumnFlags_WidthFixed, 220.0f);
@@ -299,11 +314,12 @@ void ImportCsvView::drawMappingEditor(const AppState& state)
             const ImVec4 color = std::strcmp(status, "OK") == 0
                 ? UiTheme::Gain
                 : (std::strcmp(status, "Ignored") == 0 ? UiTheme::MutedText : UiTheme::Amber);
-            ImGui::TextColored(color, "%s", status);
+            UiTheme::badge(status, color);
         }
 
         ImGui::EndTable();
     }
+    UiTheme::popTableStyle();
 
     if (changed) {
         rebuildPreview(state);
@@ -318,7 +334,8 @@ void ImportCsvView::drawPreviewTable()
         return;
     }
 
-    if (ImGui::BeginTable("ImportPreviewTable", 14, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 360.0f))) {
+    UiTheme::pushTableStyle();
+    if (ImGui::BeginTable("ImportPreviewTable", 14, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 360.0f))) {
         ImGui::TableSetupColumn("Row", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 86.0f);
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 76.0f);
@@ -339,7 +356,7 @@ void ImportCsvView::drawPreviewTable()
         for (const HoldingsCsvPreviewRow& row : previewRows_) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::Text("%d", row.sourceRowNumber);
+            UiTheme::textRightAligned(std::to_string(row.sourceRowNumber).c_str(), UiTheme::TextSecondary);
             ImGui::TableNextColumn();
             UiTheme::badge(row.valid() ? "Ready" : "Blocked", row.valid() ? UiTheme::Gain : UiTheme::Loss);
             ImGui::TableNextColumn();
@@ -349,20 +366,20 @@ void ImportCsvView::drawPreviewTable()
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", row.holding.assetType.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::formatQuantity(row.holding.shares).c_str());
+            UiTheme::textRightAligned(Money::formatQuantity(row.holding.shares).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(row.holding.currentPrice).c_str());
+            UiTheme::textRightAligned(Money::format(row.holding.currentPrice).c_str(), UiTheme::ElectricCyan);
             ImGui::TableNextColumn();
             const std::string totalCostBasisText = row.hasTotalCostBasis ? Money::format(row.totalCostBasis) : "n/a";
-            ImGui::Text("%s", totalCostBasisText.c_str());
+            UiTheme::textRightAligned(totalCostBasisText.c_str(), row.hasTotalCostBasis ? UiTheme::TextSecondary : UiTheme::TextMuted);
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(row.holding.averageCost).c_str());
+            UiTheme::textRightAligned(Money::format(row.holding.averageCost).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(row.marketValue).c_str());
+            UiTheme::textRightAligned(Money::format(row.marketValue).c_str());
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::moneyColor(row.gainLossDollar), "%s", Money::format(row.gainLossDollar).c_str());
+            UiTheme::textRightAligned(Money::format(row.gainLossDollar).c_str(), UiTheme::moneyColor(row.gainLossDollar));
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::moneyColor(row.gainLossDollar), "%s", Money::formatPercent(row.gainLossPercent, true).c_str());
+            UiTheme::textRightAligned(Money::formatPercent(row.gainLossPercent, true).c_str(), UiTheme::moneyColor(row.gainLossDollar));
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", row.holding.notes.c_str());
             ImGui::TableNextColumn();
@@ -376,6 +393,7 @@ void ImportCsvView::drawPreviewTable()
 
         ImGui::EndTable();
     }
+    UiTheme::popTableStyle();
 }
 
 void ImportCsvView::drawValidationSummary(AppState& state, CsvImportService& importService, const std::function<void()>& reloadData)
@@ -389,6 +407,7 @@ void ImportCsvView::drawValidationSummary(AppState& state, CsvImportService& imp
     }));
 
     ImGui::Text("Validation Summary");
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("ImportStats", ImVec2(0.0f, 106.0f), true);
     ImGui::TextColored(UiTheme::Gain, "Valid rows: %d", validRows);
     ImGui::SameLine();
@@ -398,11 +417,14 @@ void ImportCsvView::drawValidationSummary(AppState& state, CsvImportService& imp
 
     ImGui::TextColored(UiTheme::MutedText, "Required: ticker, shares, and current price. Average cost can be imported directly or calculated from total cost basis.");
     ImGui::BeginDisabled(validRows == 0);
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Import Valid Rows")) {
         importValidRows(state, importService, reloadData);
     }
+    UiTheme::popButtonStyle();
     ImGui::EndDisabled();
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 std::string ImportCsvView::sampleValueForColumn(std::size_t columnIndex) const

@@ -80,6 +80,7 @@ void HoldingsView::render(AppState& state, HoldingRepository& repository, const 
 {
     UiTheme::sectionHeading("Holdings", "Manual lots with local gain/loss calculations.");
 
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (state.accounts.empty()) {
         ImGui::BeginDisabled();
         ImGui::Button("Add Holding");
@@ -90,16 +91,21 @@ void HoldingsView::render(AppState& state, HoldingRepository& repository, const 
         openCreate(state);
         openEditorPopup_ = true;
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
     ImGui::InputTextWithHint("##HoldingSearch", "Search holdings", &searchText_);
 
     ImGui::Spacing();
 
+    UiTheme::pushPanelStyle();
+    ImGui::BeginChild("HoldingsTablePanel", ImVec2(0.0f, 0.0f), true);
     int visibleRows = 0;
     if (state.holdings.empty()) {
         UiTheme::emptyState("No holdings yet", "Add a holding after creating at least one account.");
-    } else if (ImGui::BeginTable("HoldingsTable", 12, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
+    } else {
+        UiTheme::pushTableStyle();
+        if (ImGui::BeginTable("HoldingsTable", 12, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 76.0f);
         ImGui::TableSetupColumn("Asset", ImGuiTableColumnFlags_WidthStretch, 1.2f);
         ImGui::TableSetupColumn("Account", ImGuiTableColumnFlags_WidthStretch, 1.0f);
@@ -131,44 +137,51 @@ void HoldingsView::render(AppState& state, HoldingRepository& repository, const 
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", accountName);
             ImGui::TableNextColumn();
-            ImGui::TextColored(holding.status == "Inactive" ? UiTheme::MutedText : UiTheme::Gain, "%s", holding.status.c_str());
+            UiTheme::badge(holding.status.c_str(), holding.status == "Inactive" ? UiTheme::TextMuted : UiTheme::Gain);
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", holding.assetType.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::formatQuantity(holding.shares).c_str());
+            UiTheme::textRightAligned(Money::formatQuantity(holding.shares).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(holding.averageCost).c_str());
+            UiTheme::textRightAligned(Money::format(holding.averageCost).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(holding.currentPrice).c_str());
+            UiTheme::textRightAligned(Money::format(holding.currentPrice).c_str(), UiTheme::ElectricCyan);
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(metrics.costBasis).c_str());
+            UiTheme::textRightAligned(Money::format(metrics.costBasis).c_str(), UiTheme::TextSecondary);
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(metrics.marketValue).c_str());
+            UiTheme::textRightAligned(Money::format(metrics.marketValue).c_str());
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::moneyColor(metrics.gainLossDollar), "%s / %s",
-                Money::format(metrics.gainLossDollar).c_str(),
-                Money::formatPercent(metrics.gainLossPercent).c_str());
+            const std::string gainLossText = Money::format(metrics.gainLossDollar) + " / " + Money::formatPercent(metrics.gainLossPercent);
+            UiTheme::textRightAligned(gainLossText.c_str(), UiTheme::moneyColor(metrics.gainLossDollar));
             ImGui::TableNextColumn();
             const std::string editButtonId = "Edit##edit_button_" + std::to_string(holding.id);
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(holding);
                 openEditorPopup_ = true;
             }
+            UiTheme::popButtonStyle();
             ImGui::SameLine();
             const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(holding.id);
+            UiTheme::pushButtonStyle(UiTheme::Loss);
             if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = holding.id;
                 deleteName_ = holding.ticker + " - " + holding.assetName;
                 deletePopupId_ = holdingDeletePopupId(holding.id);
                 openDeletePopup_ = true;
             }
+            UiTheme::popButtonStyle();
         }
 
         ImGui::EndTable();
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No holdings match the current search.");
         }
+        }
+        UiTheme::popTableStyle();
     }
+    ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     if (openEditorPopup_) {
         ImGui::OpenPopup(editorPopupId_.empty() ? HoldingEditorPopup : editorPopupId_.c_str());

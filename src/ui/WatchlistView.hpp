@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "models/TechnicalIndicatorSnapshot.hpp"
 #include "models/Watchlist.hpp"
 #include "models/WatchlistItem.hpp"
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,10 +30,10 @@ private:
     void openEdit(const WatchlistItem& item);
     void drawEditor(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData);
     void drawDeleteConfirmation(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData);
-    void refreshPrices(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, const std::vector<WatchlistItem>& items, const std::string& watchlistName, const std::function<void()>& reloadData);
+    void refreshPrices(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, TechnicalIndicatorService& technicalIndicatorService, const std::vector<WatchlistItem>& items, const std::string& watchlistName, const std::function<void()>& reloadData);
     void refreshHistory(AppState& state, MarketDataService& marketDataService, TechnicalIndicatorService& technicalIndicatorService, const std::vector<WatchlistItem>& items, const std::string& watchlistName);
     void drawPriorityBadge(const std::string& priority) const;
-    void drawSignalBadge(const WatchlistItem& item);
+    void drawSignalBadge(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators);
     void drawSignalNoticePopup();
     void ensureSelectedWatchlist(const AppState& state);
     bool hasSignalLevelError(const WatchlistItem& item) const;

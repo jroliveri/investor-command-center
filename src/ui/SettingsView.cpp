@@ -36,7 +36,9 @@ constexpr const char* BackupReminderFrequencySettingKey = "database.backup_remin
 void disabledAction(const char* label, const char* note)
 {
     ImGui::BeginDisabled();
+    UiTheme::pushButtonStyle(UiTheme::TextMuted);
     ImGui::Button(label, ImVec2(180.0f, 0.0f));
+    UiTheme::popButtonStyle();
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::TextColored(UiTheme::MutedText, "%s", note);
@@ -244,6 +246,7 @@ void SettingsView::render(AppState& state,
     const float gap = ImGui::GetStyle().ItemSpacing.x;
     const float panelWidth = (availableWidth - gap) / 2.0f;
 
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("AppInfo", ImVec2(panelWidth, 260.0f), true);
     ImGui::Text("Application");
     ImGui::Separator();
@@ -285,6 +288,7 @@ void SettingsView::render(AppState& state,
     }
     ImGui::TextColored(UiTheme::MutedText, "Theme preference is stored locally in SQLite.");
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     ImGui::SameLine();
 
@@ -292,6 +296,7 @@ void SettingsView::render(AppState& state,
 
     ImGui::Spacing();
 
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("Privacy", ImVec2(panelWidth, 280.0f), true);
     ImGui::Text("Data Privacy");
     ImGui::Separator();
@@ -302,6 +307,7 @@ void SettingsView::render(AppState& state,
     ImGui::TextColored(UiTheme::MutedText, "No cloud sync");
     ImGui::TextColored(UiTheme::MutedText, "No automatic market data refresh");
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     ImGui::SameLine();
 
@@ -309,6 +315,7 @@ void SettingsView::render(AppState& state,
 
     ImGui::Spacing();
 
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("ResearchSettings", ImVec2(0.0f, 190.0f), true);
     ImGui::Text("Research Settings");
     ImGui::Separator();
@@ -328,12 +335,14 @@ void SettingsView::render(AppState& state,
     ImGui::TextWrapped("Research data is informational, may be delayed or unavailable, and is not financial advice. CSV import remains the primary portfolio update workflow. Dashboard price refreshes are display-only in this pass.");
     ImGui::TextColored(UiTheme::MutedText, "Yahoo Finance quote cache metadata is stored locally for convenience only.");
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     ImGui::Spacing();
     renderCapitalGainAllocation(state, allocationRepository, reloadData);
 
     ImGui::Spacing();
 
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("CsvExports", ImVec2(0.0f, 0.0f), true);
     ImGui::Text("CSV Export Placeholders");
     ImGui::Separator();
@@ -344,6 +353,7 @@ void SettingsView::render(AppState& state,
     disabledAction("Export Goals CSV", "Planned local file export");
     disabledAction("Export Watchlist CSV", "Planned local file export");
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath, const std::function<bool(const std::string&, std::string&)>& moveDatabaseToFolder)
@@ -355,6 +365,7 @@ void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath,
         databaseFolderDraftInitialized_ = true;
     }
 
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("DatabaseLocation", ImVec2(0.0f, 260.0f), true);
     ImGui::Text("Database Location");
     ImGui::Separator();
@@ -374,6 +385,7 @@ void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath,
         ImGui::TextColored(UiTheme::TextWarning, "Selected folder is inside the repository. Personal databases should stay outside Git.");
     }
 
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Choose Database Folder", ImVec2(190.0f, 0.0f))) {
         std::string error;
         const std::optional<std::string> folder = chooseFolder(L"Choose Investor Command Center Database Folder", error);
@@ -385,7 +397,9 @@ void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath,
             databaseLocationMessageIsError_ = true;
         }
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Move Database Now", ImVec2(170.0f, 0.0f))) {
         if (databaseFolderDraft_.empty()) {
             databaseLocationMessage_ = "Choose a database folder before moving the database.";
@@ -397,7 +411,9 @@ void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath,
             openMoveDatabaseConfirmation_ = true;
         }
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Open Database Folder", ImVec2(180.0f, 0.0f))) {
         std::string error;
         openFolderInExplorer(activeFolder.string(), error);
@@ -406,12 +422,14 @@ void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath,
             databaseLocationMessageIsError_ = true;
         }
     }
+    UiTheme::popButtonStyle();
 
     if (!databaseLocationMessage_.empty()) {
         ImGui::TextColored(databaseLocationMessageIsError_ ? UiTheme::Loss : UiTheme::Gain, "%s", databaseLocationMessage_.c_str());
     }
     ImGui::TextColored(UiTheme::MutedText, "Moving uses copy, verification, and saved path switching. The old database is not deleted automatically.");
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     if (openMoveDatabaseConfirmation_) {
         ImGui::OpenPopup("Move Database Location");
@@ -446,6 +464,7 @@ void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath,
 
 void SettingsView::renderDatabaseBackup(AppState& state, AppSettingsRepository& settingsRepository, const std::function<void()>& backupNow)
 {
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("DatabaseBackup", ImVec2(0.0f, 280.0f), true);
     ImGui::Text("Database Backup");
     ImGui::Separator();
@@ -456,6 +475,7 @@ void SettingsView::renderDatabaseBackup(AppState& state, AppSettingsRepository& 
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::InputText("##BackupFolderPath", &state.databaseBackupSettings.backupFolder);
 
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Choose Backup Folder", ImVec2(180.0f, 0.0f))) {
         std::string error;
         const std::optional<std::string> folder = chooseFolder(L"Choose Investor Command Center Backup Folder", error);
@@ -474,8 +494,10 @@ void SettingsView::renderDatabaseBackup(AppState& state, AppSettingsRepository& 
             backupMessageIsError_ = true;
         }
     }
+    UiTheme::popButtonStyle();
 
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Save Backup Settings", ImVec2(180.0f, 0.0f))) {
         std::string error;
         if (saveDatabaseBackupSettings(state, settingsRepository, error)) {
@@ -487,8 +509,10 @@ void SettingsView::renderDatabaseBackup(AppState& state, AppSettingsRepository& 
             backupMessageIsError_ = true;
         }
     }
+    UiTheme::popButtonStyle();
 
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Back Up Now", ImVec2(120.0f, 0.0f))) {
         std::string error;
         if (saveDatabaseBackupSettings(state, settingsRepository, error)) {
@@ -500,6 +524,7 @@ void SettingsView::renderDatabaseBackup(AppState& state, AppSettingsRepository& 
             backupMessageIsError_ = true;
         }
     }
+    UiTheme::popButtonStyle();
 
     ImGui::Spacing();
     ImGui::Checkbox("Backup reminder enabled", &state.databaseBackupSettings.reminderEnabled);
@@ -534,10 +559,12 @@ void SettingsView::renderDatabaseBackup(AppState& state, AppSettingsRepository& 
 
     ImGui::TextColored(UiTheme::MutedText, "Backup files are personal local data and should stay out of GitHub.");
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAllocationRepository& allocationRepository, const std::function<void()>& reloadData)
 {
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("CapitalGainsAllocation", ImVec2(0.0f, 330.0f), true);
     ImGui::Text("Capital Gains Allocation");
     ImGui::Separator();
@@ -555,6 +582,7 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
         ImGui::TextColored(allocationMessageIsError_ ? UiTheme::Loss : UiTheme::Gain, "%s", allocationMessage_.c_str());
     }
 
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Add Allocation Category")) {
         CapitalGainAllocationRule rule;
         rule.name = "New Category";
@@ -572,18 +600,21 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
             allocationMessageIsError_ = true;
         }
     }
+    UiTheme::popButtonStyle();
 
     ImGui::Spacing();
 
     if (state.capitalGainAllocationRules.empty()) {
         ImGui::TextColored(UiTheme::MutedText, "No allocation categories yet.");
         ImGui::EndChild();
+        UiTheme::popPanelStyle();
         return;
     }
 
     bool shouldReload = false;
+    UiTheme::pushTableStyle();
     if (ImGui::BeginTable("CapitalGainAllocationRulesTable", 7,
-            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
+            ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
             ImVec2(0.0f, 205.0f))) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 1.2f);
         ImGui::TableSetupColumn("Percentage", ImGuiTableColumnFlags_WidthFixed, 120.0f);
@@ -618,6 +649,7 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
             if (!canMoveUp) {
                 ImGui::BeginDisabled();
             }
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton("Up")) {
                 std::swap(state.capitalGainAllocationRules[index], state.capitalGainAllocationRules[index - 1]);
                 std::string error;
@@ -631,6 +663,7 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
                     allocationMessageIsError_ = true;
                 }
             }
+            UiTheme::popButtonStyle();
             if (!canMoveUp) {
                 ImGui::EndDisabled();
             }
@@ -638,6 +671,7 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
             if (!canMoveDown) {
                 ImGui::BeginDisabled();
             }
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton("Down")) {
                 std::swap(state.capitalGainAllocationRules[index], state.capitalGainAllocationRules[index + 1]);
                 std::string error;
@@ -651,6 +685,7 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
                     allocationMessageIsError_ = true;
                 }
             }
+            UiTheme::popButtonStyle();
             if (!canMoveDown) {
                 ImGui::EndDisabled();
             }
@@ -661,6 +696,7 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
             }
 
             ImGui::TableNextColumn();
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton("Save")) {
                 rule.sortOrder = static_cast<int>(index) + 1;
                 std::string error;
@@ -673,9 +709,11 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
                     allocationMessageIsError_ = true;
                 }
             }
+            UiTheme::popButtonStyle();
 
             ImGui::TableNextColumn();
             if (rule.isActive) {
+                UiTheme::pushButtonStyle(UiTheme::Amber);
                 if (ImGui::SmallButton("Deactivate")) {
                     rule.isActive = false;
                     std::string error;
@@ -688,11 +726,13 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
                         allocationMessageIsError_ = true;
                     }
                 }
+                UiTheme::popButtonStyle();
             } else {
-                ImGui::TextColored(UiTheme::MutedText, "Inactive");
+                UiTheme::badge("Inactive", UiTheme::TextMuted);
             }
 
             ImGui::TableNextColumn();
+            UiTheme::pushButtonStyle(UiTheme::Loss);
             if (ImGui::SmallButton("Delete")) {
                 std::string error;
                 if (allocationRepository.remove(rule.id, error)) {
@@ -705,6 +745,7 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
                     allocationMessageIsError_ = true;
                 }
             }
+            UiTheme::popButtonStyle();
 
             ImGui::PopID();
             if (stopRenderingRows) {
@@ -714,6 +755,7 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
 
         ImGui::EndTable();
     }
+    UiTheme::popTableStyle();
 
     if (shouldReload) {
         reloadData();
@@ -721,4 +763,5 @@ void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAlloc
 
     ImGui::TextColored(UiTheme::MutedText, "Allocation rules are stored locally and used only as a display helper for realized gains.");
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }

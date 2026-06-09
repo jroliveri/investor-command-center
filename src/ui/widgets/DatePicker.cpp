@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "ui/widgets/DatePicker.hpp"
 
+#include "ui/UiTheme.hpp"
 #include "util/Date.hpp"
 
 #include <imgui.h>
@@ -99,10 +100,12 @@ bool draw(const char* label, std::string& value, bool optional)
     }
 
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Pick Date")) {
         pickerStates[pickerId] = stateForValue(value);
         ImGui::OpenPopup("DatePickerPopup");
     }
+    UiTheme::popButtonStyle();
 
     PickerState& state = pickerStates[pickerId];
     if (state.year == 0) {
@@ -110,17 +113,22 @@ bool draw(const char* label, std::string& value, bool optional)
     }
 
     if (ImGui::BeginPopup("DatePickerPopup")) {
+        UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
         if (ImGui::Button("<")) {
             moveMonth(state, -1);
         }
+        UiTheme::popButtonStyle();
         ImGui::SameLine();
         const std::string heading = std::string(MonthNames[static_cast<std::size_t>(state.month - 1)]) + " " + std::to_string(state.year);
-        ImGui::Text("%s", heading.c_str());
+        ImGui::TextColored(UiTheme::TextPrimary, "%s", heading.c_str());
         ImGui::SameLine();
+        UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
         if (ImGui::Button(">")) {
             moveMonth(state, 1);
         }
+        UiTheme::popButtonStyle();
 
+        UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
         if (ImGui::Button("Today")) {
             const Date::DateParts today = Date::todayParts();
             state.year = today.year;
@@ -129,17 +137,21 @@ bool draw(const char* label, std::string& value, bool optional)
             changed = true;
             ImGui::CloseCurrentPopup();
         }
+        UiTheme::popButtonStyle();
 
         if (optional) {
             ImGui::SameLine();
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::Button("Clear")) {
                 value.clear();
                 changed = true;
                 ImGui::CloseCurrentPopup();
             }
+            UiTheme::popButtonStyle();
         }
 
         ImGui::Separator();
+        UiTheme::pushTableStyle();
         if (ImGui::BeginTable("DatePickerCalendar", 7, ImGuiTableFlags_SizingFixedFit)) {
             for (const char* weekday : WeekdayNames) {
                 ImGui::TableSetupColumn(weekday, ImGuiTableColumnFlags_WidthFixed, 38.0f);
@@ -170,17 +182,18 @@ bool draw(const char* label, std::string& value, bool optional)
 
             ImGui::EndTable();
         }
+        UiTheme::popTableStyle();
 
         ImGui::EndPopup();
     }
 
     const bool hasInvalidManualValue = !value.empty() && !Date::isIsoDate(value);
     if (hasInvalidManualValue) {
-        ImGui::TextColored(ImVec4(0.86f, 0.36f, 0.36f, 1.0f), "Date must be in YYYY-MM-DD format.");
+        ImGui::TextColored(UiTheme::TextDanger, "Date must be in YYYY-MM-DD format.");
     } else if (optional) {
-        ImGui::TextColored(ImVec4(0.62f, 0.66f, 0.64f, 1.0f), "Optional. Dates are stored as YYYY-MM-DD.");
+        ImGui::TextColored(UiTheme::TextMuted, "Optional. Dates are stored as YYYY-MM-DD.");
     } else {
-        ImGui::TextColored(ImVec4(0.62f, 0.66f, 0.64f, 1.0f), "Dates are stored as YYYY-MM-DD.");
+        ImGui::TextColored(UiTheme::TextMuted, "Dates are stored as YYYY-MM-DD.");
     }
 
     ImGui::PopID();
@@ -190,7 +203,7 @@ bool draw(const char* label, std::string& value, bool optional)
 void drawTableDate(const std::string& value, bool optional)
 {
     if (value.empty()) {
-        ImGui::TextColored(ImVec4(0.62f, 0.66f, 0.64f, 1.0f), "%s", optional ? "-" : "Missing");
+        ImGui::TextColored(UiTheme::TextMuted, "%s", optional ? "-" : "Missing");
         if (!optional && ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Date is required.");
         }
@@ -198,7 +211,7 @@ void drawTableDate(const std::string& value, bool optional)
     }
 
     if (!Date::isIsoDate(value)) {
-        ImGui::TextColored(ImVec4(0.86f, 0.36f, 0.36f, 1.0f), "%s", value.c_str());
+        ImGui::TextColored(UiTheme::TextDanger, "%s", value.c_str());
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Invalid date. Expected YYYY-MM-DD.");
         }

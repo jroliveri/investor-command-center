@@ -19,7 +19,7 @@
 - Dashboard summaries with dividends, realized gains, and snapshot-based movement
 - Customizable dashboard layout with local reorder, hide/show, and reset controls
 - Dashboard chart panels with local data selector, time range, chart type controls, and persisted chart preferences
-- Trading-terminal inspired shell with top menu navigation, account information column, compact panels, and light terminal theme
+- Modern finance command-center shell with top menu navigation, account information column, compact panels, and light trading view theme
 - All main app sections reachable from the top menu bar without side navigation
 - Morning snapshot sidebar with account information, account rows, two watchlist slices, and bottom database/version info
 - Research menu with first-pass Stock Research using a Yahoo Finance provider abstraction
@@ -33,7 +33,7 @@
 - Reusable calendar picker controls for editable date fields
 - Goals can use manual current amounts or linked calculated account values
 - User-defined capital gains allocation helper for Sell transactions
-- User-defined Watchlist buy/sell price signals with explicit Yahoo Finance refresh and local signal badges
+- User-defined Watchlist buy/sell signals with explicit Yahoo Finance refresh, local signal badges, and RSI/MACD Buy confirmation
 - Simplified Watchlist signal categories: Buy, Sell, and Hold, sorted with Buy/Sell first
 - Existing watchlist items migrate into a default `Main Watchlist`
 - Sidebar Watchlist 1 and 2 assignment controls for active watchlists

@@ -16,7 +16,9 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <array>
 #include <cfloat>
+#include <cctype>
 #include <cmath>
 #include <ctime>
 #include <functional>
@@ -33,6 +35,185 @@ void nextCardColumn(int index, int columns)
     if (index % columns != columns - 1) {
         ImGui::SameLine();
     }
+}
+
+std::string uppercaseCopy(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+        return static_cast<char>(std::toupper(character));
+    });
+    return value;
+}
+
+void drawPanelChrome(const char* title, ImVec4 accent)
+{
+    const ImVec2 min = ImGui::GetWindowPos();
+    const ImVec2 size = ImGui::GetWindowSize();
+    const ImVec2 max(min.x + size.x, min.y + size.y);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    drawList->AddRectFilled(min, ImVec2(max.x, min.y + 38.0f), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::SurfaceElevated, 0.16f)), 16.0f, ImDrawFlags_RoundCornersTop);
+    drawList->AddRectFilled(ImVec2(min.x + 14.0f, min.y + 9.0f), ImVec2(min.x + 62.0f, min.y + 11.0f), ImGui::GetColorU32(UiTheme::withAlpha(accent, 0.34f)), 2.0f);
+    drawList->AddRect(min, max, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::BorderSubtle, 0.08f)), 16.0f);
+
+    ImGui::TextColored(UiTheme::TextSecondary, "%s", title);
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x;
+    drawList->AddRectFilled(cursor, ImVec2(cursor.x + width, cursor.y + 1.0f), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::BorderSubtle, 0.08f)));
+    ImGui::Dummy(ImVec2(width, 8.0f));
+}
+
+void beginDashboardPanel(const char* id, const char* title, ImVec2 size, ImVec4 accent, ImGuiWindowFlags flags = 0)
+{
+    UiTheme::pushPanelStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f, 13.0f));
+    ImGui::BeginChild(id, size, true, flags);
+    ImGui::PopStyleVar();
+    drawPanelChrome(title, accent);
+}
+
+void endDashboardPanel()
+{
+    ImGui::EndChild();
+    UiTheme::popPanelStyle();
+}
+
+bool isWidgetVisible(const std::vector<DashboardWidget>& widgets, const char* widgetKey)
+{
+    return std::any_of(widgets.begin(), widgets.end(), [widgetKey](const DashboardWidget& widget) {
+        return widget.widgetKey == widgetKey;
+    });
+}
+
+bool isPromotedDashboardWidget(const std::string& widgetKey)
+{
+    static constexpr std::array<const char*, 11> PromotedKeys {{
+        "portfolio_summary",
+        "performance_movement",
+        "holdings_table",
+        "realized_gains",
+        "dividend_summary",
+        "recent_transactions",
+        "snapshot_status",
+        "allocation_panel",
+        "performance_panel",
+        "income_gains_panel",
+        "top_gainers_losers",
+    }};
+
+    return std::any_of(PromotedKeys.begin(), PromotedKeys.end(), [&widgetKey](const char* promotedKey) {
+        return widgetKey == promotedKey;
+    });
+}
+
+ImVec4 signalColor(const std::string& signal)
+{
+    if (signal == "Buy" || signal == "Buy Signal") {
+        return UiTheme::Gain;
+    }
+    if (signal == "Sell" || signal == "Sell Signal") {
+        return UiTheme::Loss;
+    }
+    return UiTheme::ElectricCyan;
+}
+
+bool isTransactionCashOutflow(const Transaction& transaction)
+{
+    return transaction.transactionType == "Buy" ||
+        transaction.transactionType == "Withdrawal" ||
+        transaction.transactionType == "Fee";
+}
+
+bool isTransactionCashInflow(const Transaction& transaction)
+{
+    return transaction.transactionType == "Sell" ||
+        transaction.transactionType == "Dividend" ||
+        transaction.transactionType == "Contribution" ||
+        transaction.transactionType == "Interest";
+}
+
+ImVec4 transactionBadgeColor(const std::string& transactionType)
+{
+    if (transactionType == "Buy" || transactionType == "Dividend" || transactionType == "Contribution" || transactionType == "Interest") {
+        return UiTheme::Gain;
+    }
+    if (transactionType == "Sell" || transactionType == "Withdrawal" || transactionType == "Fee") {
+        return UiTheme::Loss;
+    }
+    if (transactionType == "Transfer") {
+        return UiTheme::ElectricCyan;
+    }
+    return UiTheme::TextMuted;
+}
+
+ImVec4 transactionAmountColor(const Transaction& transaction)
+{
+    if (transaction.totalAmount < 0.0 || isTransactionCashOutflow(transaction)) {
+        return UiTheme::Loss;
+    }
+    if (transaction.totalAmount > 0.0 && isTransactionCashInflow(transaction)) {
+        return UiTheme::Gain;
+    }
+    return transaction.totalAmount == 0.0 ? UiTheme::TextMuted : UiTheme::TextSecondary;
+}
+
+int signalRank(const std::string& signal)
+{
+    if (signal == "Buy" || signal == "Buy Signal") {
+        return 0;
+    }
+    if (signal == "Sell" || signal == "Sell Signal") {
+        return 1;
+    }
+    return 2;
+}
+
+int priorityRank(const std::string& priority)
+{
+    if (priority == "High") {
+        return 0;
+    }
+    if (priority == "Medium") {
+        return 1;
+    }
+    if (priority == "Low") {
+        return 2;
+    }
+    return 3;
+}
+
+std::vector<WatchlistItem> sortedWatchlistItems(const AppState& state)
+{
+    std::vector<WatchlistItem> items = state.watchlist;
+    std::stable_sort(items.begin(), items.end(), [](const WatchlistItem& left, const WatchlistItem& right) {
+        return left.ticker < right.ticker;
+    });
+    std::stable_sort(items.begin(), items.end(), [](const WatchlistItem& left, const WatchlistItem& right) {
+        const int leftSignalRank = signalRank(left.signalStatus);
+        const int rightSignalRank = signalRank(right.signalStatus);
+        if (leftSignalRank != rightSignalRank) {
+            return leftSignalRank < rightSignalRank;
+        }
+
+        const int leftPriorityRank = priorityRank(left.priority);
+        const int rightPriorityRank = priorityRank(right.priority);
+        if (leftPriorityRank != rightPriorityRank) {
+            return leftPriorityRank < rightPriorityRank;
+        }
+
+        return false;
+    });
+    return items;
+}
+
+ImVec4 mixColor(ImVec4 left, ImVec4 right, float amount)
+{
+    const float t = std::clamp(amount, 0.0f, 1.0f);
+    return ImVec4(
+        left.x + (right.x - left.x) * t,
+        left.y + (right.y - left.y) * t,
+        left.z + (right.z - left.z) * t,
+        left.w + (right.w - left.w) * t);
 }
 
 struct PlotArea {
@@ -179,6 +360,45 @@ bool stringCombo(const char* label, std::string& value, const std::vector<const 
     return changed;
 }
 
+bool segmentedOptions(const char* id, std::string& value, const std::vector<const char*>& options)
+{
+    bool changed = false;
+    ImGui::PushID(id);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(UiTheme::TextMuted, "%s", id);
+    ImGui::SameLine();
+
+    const float rowStartX = ImGui::GetCursorPosX();
+    const float rowEndX = ImGui::GetWindowContentRegionMax().x;
+    for (std::size_t index = 0; index < options.size(); ++index) {
+        const char* option = options[index];
+        if (index > 0) {
+            ImGui::SameLine(0.0f, 5.0f);
+        }
+        if (ImGui::GetCursorPosX() + 52.0f > rowEndX && ImGui::GetCursorPosX() > rowStartX) {
+            ImGui::NewLine();
+            ImGui::SetCursorPosX(rowStartX);
+        }
+
+        const bool selected = value == option;
+        UiTheme::pushButtonStyle(selected ? UiTheme::NeonMagenta : UiTheme::ElectricCyan);
+        if (!selected) {
+            ImGui::PushStyleColor(ImGuiCol_Text, UiTheme::TextSecondary);
+        }
+        if (ImGui::Button(option, ImVec2(48.0f, 0.0f))) {
+            value = option;
+            changed = true;
+        }
+        if (!selected) {
+            ImGui::PopStyleColor();
+        }
+        UiTheme::popButtonStyle();
+    }
+
+    ImGui::PopID();
+    return changed;
+}
+
 void saveChartSetting(AppState& state, DashboardChartSettingsRepository& repository, const DashboardChartSetting& setting)
 {
     std::string error;
@@ -202,15 +422,9 @@ void drawChartControls(
     ImGui::SetNextItemWidth(180.0f);
     changed = stringCombo("Data", setting.dataMode, dataOptions) || changed;
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(130.0f);
-    if (allowLatest) {
-        changed = stringCombo("Range", setting.timeRange, timeRangeOptions()) || changed;
-    } else {
-        changed = stringCombo("Range", setting.timeRange, chartRangeOptions()) || changed;
-    }
-    ImGui::SameLine();
     ImGui::SetNextItemWidth(160.0f);
     changed = stringCombo("Chart Type", setting.chartType, chartTypeOptions) || changed;
+    changed = segmentedOptions("Range", setting.timeRange, allowLatest ? timeRangeOptions() : chartRangeOptions()) || changed;
 
     if (changed) {
         saveChartSetting(state, repository, setting);
@@ -275,25 +489,57 @@ PlotArea reservePlotArea(float height)
     return PlotArea { cursor, ImVec2(cursor.x + size.x, cursor.y + size.y) };
 }
 
+void drawPlotFrame(ImDrawList* drawList, const PlotArea& area, ImVec4 accent)
+{
+    drawList->AddRectFilled(area.min, area.max, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::SurfaceMain, 0.50f)), 12.0f);
+    drawList->AddRect(area.min, area.max, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::BorderSubtle, 0.08f)), 12.0f);
+
+    constexpr int GridLines = 4;
+    for (int index = 1; index < GridLines; ++index) {
+        const float y = area.min.y + (area.max.y - area.min.y) * static_cast<float>(index) / static_cast<float>(GridLines);
+        drawList->AddLine(ImVec2(area.min.x + 12.0f, y), ImVec2(area.max.x - 12.0f, y), ImGui::GetColorU32(UiTheme::PlotGrid), 1.0f);
+    }
+
+    drawList->AddRectFilled(
+        ImVec2(area.min.x + 16.0f, area.min.y + 12.0f),
+        ImVec2(std::min(area.max.x - 16.0f, area.min.x + 132.0f), area.min.y + 14.0f),
+        ImGui::GetColorU32(UiTheme::withAlpha(accent, 0.26f)),
+        12.0f,
+        0);
+}
+
 void drawEmptyPlot(ImDrawList* drawList, const PlotArea& area, const char* message)
 {
-    const ImU32 border = ImGui::GetColorU32(ImGuiCol_Border);
     const ImU32 muted = ImGui::GetColorU32(UiTheme::MutedText);
-    drawList->AddRect(area.min, area.max, border, 6.0f);
+    drawPlotFrame(drawList, area, UiTheme::ElectricCyan);
     drawList->AddText(ImVec2(area.min.x + 14.0f, area.min.y + 14.0f), muted, message);
+}
+
+void drawGlassTooltip(const ChartPoint& point)
+{
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, UiTheme::withAlpha(UiTheme::GlassPanel, 0.96f));
+    ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(UiTheme::ElectricCyan, 0.42f));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
+    ImGui::BeginTooltip();
+    ImGui::TextColored(UiTheme::TextMuted, "%s", point.label.c_str());
+    ImGui::TextColored(UiTheme::TextPrimary, "%s", Money::format(point.value).c_str());
+    ImGui::EndTooltip();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
 }
 
 void drawBars(const std::vector<double>& values, const std::vector<std::string>& labels, ImVec4 color, const char* emptyMessage)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     const PlotArea area = reservePlotArea(150.0f);
-    const ImU32 border = ImGui::GetColorU32(ImGuiCol_Border);
-    drawList->AddRect(area.min, area.max, border, 6.0f);
 
     if (values.empty()) {
         drawEmptyPlot(drawList, area, emptyMessage);
         return;
     }
+
+    drawPlotFrame(drawList, area, color);
 
     const double maxValue = std::max(1.0, *std::max_element(values.begin(), values.end()));
     const float gap = 9.0f;
@@ -308,7 +554,8 @@ void drawBars(const std::vector<double>& values, const std::vector<std::string>&
         const float x = innerLeft + static_cast<float>(index) * (barWidth + gap);
         const float ratio = static_cast<float>(values[index] / maxValue);
         const float y = innerBottom - (innerBottom - innerTop) * ratio;
-        drawList->AddRectFilled(ImVec2(x, y), ImVec2(x + barWidth, innerBottom), barColor, 4.0f);
+        drawList->AddRectFilled(ImVec2(x, y), ImVec2(x + barWidth, innerBottom), ImGui::GetColorU32(UiTheme::withAlpha(color, 0.22f)), 5.0f);
+        drawList->AddRectFilled(ImVec2(x + 2.0f, y), ImVec2(x + barWidth - 2.0f, innerBottom), barColor, 5.0f);
 
         if (index < labels.size()) {
             drawList->AddText(ImVec2(x, area.max.y - 22.0f), ImGui::GetColorU32(UiTheme::MutedText), labels[index].c_str());
@@ -337,6 +584,7 @@ void drawHorizontalAllocationBars(const std::vector<ChartPoint>& points, const c
         return;
     }
 
+    UiTheme::pushTableStyle();
     if (ImGui::BeginTable("AllocationBarsTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp, ImVec2(0.0f, 170.0f))) {
         ImGui::TableSetupColumn("Segment", ImGuiTableColumnFlags_WidthStretch, 0.8f);
         ImGui::TableSetupColumn("Weight", ImGuiTableColumnFlags_WidthFixed, 74.0f);
@@ -352,25 +600,33 @@ void drawHorizontalAllocationBars(const std::vector<ChartPoint>& points, const c
             ImGui::TableNextColumn();
             ImGui::Text("%s", point.label.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::formatPercent(percent).c_str());
+            UiTheme::textRightAligned(Money::formatPercent(percent).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(point.value).c_str());
+            UiTheme::textRightAligned(Money::format(point.value).c_str());
             ImGui::TableNextColumn();
-            ImGui::ProgressBar(static_cast<float>(percent / 100.0), ImVec2(-FLT_MIN, 0.0f), "");
+            const ImVec2 barMin = ImGui::GetCursorScreenPos();
+            const ImVec2 barSize(ImGui::GetContentRegionAvail().x, 14.0f);
+            const ImVec2 barMax(barMin.x + barSize.x, barMin.y + barSize.y);
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::ElectricCyan, 0.08f)), 7.0f);
+            drawList->AddRectFilled(barMin, ImVec2(barMin.x + barSize.x * static_cast<float>(percent / 100.0), barMax.y), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::ElectricCyan, 0.42f)), 7.0f);
+            drawList->AddRect(barMin, barMax, ImGui::GetColorU32(UiTheme::BorderSubtle), 7.0f);
+            ImGui::Dummy(barSize);
         }
 
         ImGui::EndTable();
     }
+    UiTheme::popTableStyle();
 }
 
-void drawLineChart(const std::vector<ChartPoint>& points, ImVec4 color, const char* emptyMessage)
+void drawLineChart(const std::vector<ChartPoint>& points, ImVec4 color, const char* emptyMessage, float height = 220.0f, bool gradientLine = false)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const PlotArea area = reservePlotArea(178.0f);
-    const ImU32 border = ImGui::GetColorU32(ImGuiCol_Border);
+    const PlotArea area = reservePlotArea(height);
+    const bool hovered = ImGui::IsItemHovered();
     const ImU32 lineColor = ImGui::GetColorU32(color);
     const ImU32 muted = ImGui::GetColorU32(UiTheme::MutedText);
-    drawList->AddRect(area.min, area.max, border, 6.0f);
+    drawPlotFrame(drawList, area, color);
 
     if (points.size() < 2) {
         drawList->AddText(ImVec2(area.min.x + 14.0f, area.min.y + 14.0f), muted, emptyMessage);
@@ -392,34 +648,61 @@ void drawLineChart(const std::vector<ChartPoint>& points, ImVec4 color, const ch
     const float top = area.min.y + 22.0f;
     const float bottom = area.max.y - 34.0f;
 
-    ImVec2 previous;
+    std::vector<ImVec2> positions;
+    positions.reserve(points.size());
     for (std::size_t index = 0; index < points.size(); ++index) {
         const float x = left + (right - left) * static_cast<float>(index) / static_cast<float>(points.size() - 1);
         const double ratio = (points[index].value - minValue) / (maxValue - minValue);
         const float y = bottom - static_cast<float>(ratio) * (bottom - top);
-        const ImVec2 current(x, y);
-        drawList->AddCircleFilled(current, 3.5f, lineColor);
-        if (index > 0) {
-            drawList->AddLine(previous, current, lineColor, 2.0f);
-        }
-        previous = current;
+        positions.push_back(ImVec2(x, y));
+    }
+
+    for (std::size_t index = 1; index < positions.size(); ++index) {
+        const float t = static_cast<float>(index) / static_cast<float>(positions.size() - 1);
+        const ImVec4 segmentColor = gradientLine ? mixColor(UiTheme::ChartCyan, UiTheme::ChartMagenta, t) : color;
+        drawList->AddLine(positions[index - 1], positions[index], ImGui::GetColorU32(UiTheme::withAlpha(segmentColor, 0.16f)), 7.0f);
+        drawList->AddLine(positions[index - 1], positions[index], gradientLine ? ImGui::GetColorU32(segmentColor) : lineColor, 2.4f);
+    }
+
+    for (std::size_t index = 0; index < positions.size(); ++index) {
+        const bool currentPoint = index + 1 == positions.size();
+        const ImVec4 pointColor = currentPoint ? UiTheme::NeonMagenta : (gradientLine ? mixColor(UiTheme::ChartCyan, UiTheme::ChartMagenta, static_cast<float>(index) / static_cast<float>(positions.size() - 1)) : color);
+        drawList->AddCircleFilled(positions[index], currentPoint ? 5.6f : 4.0f, ImGui::GetColorU32(UiTheme::SurfaceMain));
+        drawList->AddCircleFilled(positions[index], currentPoint ? 3.8f : 2.8f, ImGui::GetColorU32(pointColor));
     }
 
     const std::string first = points.front().label + ": " + Money::format(points.front().value);
     const std::string last = points.back().label + ": " + Money::format(points.back().value);
     drawList->AddText(ImVec2(area.min.x + 14.0f, area.min.y + 14.0f), muted, first.c_str());
     drawList->AddText(ImVec2(area.min.x + 14.0f, area.max.y - 28.0f), muted, last.c_str());
+
+    if (hovered) {
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        std::size_t nearestIndex = 0;
+        float nearestDistance = FLT_MAX;
+        for (std::size_t index = 0; index < positions.size(); ++index) {
+            const float distance = std::fabs(positions[index].x - mouse.x);
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearestIndex = index;
+            }
+        }
+
+        const ImVec2 marker = positions[nearestIndex];
+        drawList->AddLine(ImVec2(marker.x, top), ImVec2(marker.x, bottom), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::NeonMagenta, 0.38f)), 1.0f);
+        drawList->AddCircle(marker, 6.8f, ImGui::GetColorU32(UiTheme::NeonMagenta), 24, 1.5f);
+        drawGlassTooltip(points[nearestIndex]);
+    }
 }
 
 void drawMonthlyBarChart(const std::vector<ChartPoint>& points, ImVec4 color, const char* emptyMessage)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const PlotArea area = reservePlotArea(178.0f);
-    const ImU32 border = ImGui::GetColorU32(ImGuiCol_Border);
+    const PlotArea area = reservePlotArea(206.0f);
     const ImU32 positive = ImGui::GetColorU32(color);
     const ImU32 negative = ImGui::GetColorU32(UiTheme::Loss);
     const ImU32 muted = ImGui::GetColorU32(UiTheme::MutedText);
-    drawList->AddRect(area.min, area.max, border, 6.0f);
+    drawPlotFrame(drawList, area, color);
 
     if (points.empty()) {
         drawList->AddText(ImVec2(area.min.x + 14.0f, area.min.y + 14.0f), muted, emptyMessage);
@@ -439,7 +722,7 @@ void drawMonthlyBarChart(const std::vector<ChartPoint>& points, ImVec4 color, co
     const float gap = 8.0f;
     const float barWidth = std::max(8.0f, (right - left - gap * static_cast<float>(points.size() - 1)) / static_cast<float>(points.size()));
 
-    drawList->AddLine(ImVec2(left, baseline), ImVec2(right, baseline), border, 1.0f);
+    drawList->AddLine(ImVec2(left, baseline), ImVec2(right, baseline), ImGui::GetColorU32(UiTheme::BorderSubtle), 1.0f);
 
     for (std::size_t index = 0; index < points.size(); ++index) {
         const ChartPoint& point = points[index];
@@ -447,7 +730,9 @@ void drawMonthlyBarChart(const std::vector<ChartPoint>& points, ImVec4 color, co
         const float height = (bottom - top) * 0.5f * static_cast<float>(std::fabs(point.value) / maxAbs);
         const float y0 = point.value >= 0.0 ? baseline - height : baseline;
         const float y1 = point.value >= 0.0 ? baseline : baseline + height;
-        drawList->AddRectFilled(ImVec2(x, y0), ImVec2(x + barWidth, y1), point.value >= 0.0 ? positive : negative, 3.0f);
+        const ImVec4 fill = point.value >= 0.0 ? color : UiTheme::Loss;
+        drawList->AddRectFilled(ImVec2(x, y0), ImVec2(x + barWidth, y1), ImGui::GetColorU32(UiTheme::withAlpha(fill, 0.22f)), 4.0f);
+        drawList->AddRectFilled(ImVec2(x + 2.0f, y0), ImVec2(x + barWidth - 2.0f, y1), point.value >= 0.0 ? positive : negative, 4.0f);
         drawList->AddText(ImVec2(x, area.max.y - 22.0f), muted, point.label.c_str());
     }
 }
@@ -564,6 +849,22 @@ void drawUnavailableCard(const char* title, ImVec2 size)
     UiTheme::metricCard(title, "N/A", "Not enough snapshot data yet", UiTheme::MutedText, size);
 }
 
+int metricGridColumns(float availableWidth)
+{
+    return availableWidth > 1180.0f ? 4 : (availableWidth > 820.0f ? 3 : (availableWidth > 520.0f ? 2 : 1));
+}
+
+float metricGridHeight(int cardCount, float availableWidth)
+{
+    if (cardCount <= 0) {
+        return 0.0f;
+    }
+
+    const int columns = metricGridColumns(availableWidth);
+    const int rows = (cardCount + columns - 1) / columns;
+    return static_cast<float>(rows) * 112.0f + static_cast<float>(rows - 1) * ImGui::GetStyle().ItemSpacing.y;
+}
+
 struct MetricCardData {
     std::string title;
     std::string value;
@@ -572,6 +873,58 @@ struct MetricCardData {
     bool available = true;
 };
 
+struct SummaryMetricData {
+    const char* title;
+    std::string value;
+    std::string caption;
+    ImVec4 accent;
+    ImVec4 valueColor;
+};
+
+void drawSummaryMetricCard(const SummaryMetricData& card, ImVec2 size)
+{
+    UiTheme::pushPanelStyle();
+    ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(card.accent, 0.16f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f, 14.0f));
+    ImGui::BeginChild(card.title, size, true, ImGuiWindowFlags_NoScrollbar);
+    ImGui::PopStyleVar();
+
+    const ImVec2 min = ImGui::GetWindowPos();
+    const ImVec2 max(min.x + ImGui::GetWindowSize().x, min.y + ImGui::GetWindowSize().y);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(min, max, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::SurfaceElevated, 0.36f)), 16.0f);
+    drawList->AddRectFilled(min, ImVec2(max.x, min.y + 36.0f), ImGui::GetColorU32(UiTheme::withAlpha(card.accent, 0.030f)), 16.0f, ImDrawFlags_RoundCornersTop);
+    drawList->AddRectFilled(ImVec2(min.x + 14.0f, min.y + 10.0f), ImVec2(min.x + 62.0f, min.y + 12.0f), ImGui::GetColorU32(UiTheme::withAlpha(card.accent, 0.44f)), 2.0f);
+    drawList->AddRect(min, max, ImGui::GetColorU32(UiTheme::withAlpha(card.accent, 0.14f)), 16.0f);
+
+    const std::string label = uppercaseCopy(card.title);
+    ImGui::TextColored(UiTheme::TextMuted, "%s", label.c_str());
+    ImGui::SetWindowFontScale(1.24f);
+    UiTheme::pushNumericFont();
+    ImGui::TextColored(card.valueColor, "%s", card.value.c_str());
+    UiTheme::popNumericFont();
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::TextColored(UiTheme::TextMuted, "%s", card.caption.c_str());
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    UiTheme::popPanelStyle();
+}
+
+void drawSummaryMetricRow(const std::vector<SummaryMetricData>& cards)
+{
+    const float availableWidth = ImGui::GetContentRegionAvail().x;
+    const int columns = availableWidth > 1240.0f ? 5 : (availableWidth > 980.0f ? 3 : (availableWidth > 640.0f ? 2 : 1));
+    const float gap = ImGui::GetStyle().ItemSpacing.x;
+    const float cardWidth = (availableWidth - gap * static_cast<float>(columns - 1)) / static_cast<float>(columns);
+    const ImVec2 cardSize(cardWidth, 132.0f);
+
+    for (std::size_t index = 0; index < cards.size(); ++index) {
+        drawSummaryMetricCard(cards[index], cardSize);
+        nextCardColumn(static_cast<int>(index), columns);
+    }
+}
+
 void drawMetricGrid(const std::vector<MetricCardData>& cards)
 {
     if (cards.empty()) {
@@ -579,7 +932,7 @@ void drawMetricGrid(const std::vector<MetricCardData>& cards)
     }
 
     const float availableWidth = ImGui::GetContentRegionAvail().x;
-    const int columns = availableWidth > 1180.0f ? 4 : (availableWidth > 820.0f ? 3 : 2);
+    const int columns = metricGridColumns(availableWidth);
     const float gap = ImGui::GetStyle().ItemSpacing.x;
     const float cardWidth = (availableWidth - (gap * static_cast<float>(columns - 1))) / static_cast<float>(columns);
     const ImVec2 cardSize(cardWidth, 112.0f);
@@ -604,15 +957,20 @@ std::string movementCaption(bool available)
 
 void drawPortfolioSummary(const DashboardData& data)
 {
-    TerminalPanel::begin("Portfolio Overview", ImVec2(0.0f, 250.0f));
-    drawMetricGrid({
-        { "Total Portfolio Value", Money::format(data.portfolio.accountBalance), "Holdings plus cash", UiTheme::Gain },
-        { "Total Holdings Value", Money::format(data.portfolio.holdingsMarketValue), "Shares x current price", UiTheme::Gain },
-        { "Total Cash Balance", Money::format(data.portfolio.cashBalance), "Account cash", UiTheme::Amber },
-        { "Total Cost Basis", Money::format(data.portfolio.costBasis), "Shares x average cost", UiTheme::MutedText },
-        { "Unrealized Gain/Loss", Money::format(data.portfolio.gainLossDollar), Money::formatPercent(data.portfolio.gainLossPercent, true), UiTheme::moneyColor(data.portfolio.gainLossDollar) },
+    const float availableWidth = ImGui::GetContentRegionAvail().x;
+    const int columns = availableWidth > 1240.0f ? 5 : (availableWidth > 980.0f ? 3 : (availableWidth > 640.0f ? 2 : 1));
+    const int rows = (5 + columns - 1) / columns;
+    const float panelHeight = 66.0f + static_cast<float>(rows) * 132.0f + static_cast<float>(rows - 1) * ImGui::GetStyle().ItemSpacing.y;
+
+    beginDashboardPanel("PortfolioOverviewPanel", "Portfolio Summary", ImVec2(0.0f, panelHeight), UiTheme::NeonMagenta);
+    drawSummaryMetricRow({
+        { "Total Portfolio Value", Money::format(data.portfolio.accountBalance), "Holdings plus cash", UiTheme::NeonMagenta, UiTheme::TextPrimary },
+        { "Cash Balance", Money::format(data.portfolio.cashBalance), "Account cash", UiTheme::ElectricCyan, UiTheme::ElectricCyan },
+        { "Holdings Value", Money::format(data.portfolio.holdingsMarketValue), "Shares x current price", UiTheme::SoftBlue, UiTheme::TextPrimary },
+        { "Unrealized Gain/Loss", Money::format(data.portfolio.gainLossDollar), Money::formatPercent(data.portfolio.gainLossPercent, true), UiTheme::Gain, UiTheme::moneyColor(data.portfolio.gainLossDollar) },
+        { "Realized Gain/Loss", Money::format(data.realizedGains.thisYear), "This year realized", UiTheme::Loss, UiTheme::moneyColor(data.realizedGains.thisYear) },
     });
-    TerminalPanel::end();
+    endDashboardPanel();
 }
 
 void drawPriceRefreshStatus(const AppState& state, const std::function<void()>& refreshCurrentPrices)
@@ -644,6 +1002,199 @@ void drawPriceRefreshStatus(const AppState& state, const std::function<void()>& 
     TerminalPanel::end();
 }
 
+void drawDashboardToolbar(bool customizeMode, const std::function<void()>& toggleCustomize, const std::function<void()>& refreshCurrentPrices)
+{
+    beginDashboardPanel("DashboardToolbarPanel", "Dashboard Controls", ImVec2(0.0f, 86.0f), UiTheme::ElectricCyan, ImGuiWindowFlags_NoScrollbar);
+    UiTheme::pushButtonStyle(customizeMode ? UiTheme::NeonMagenta : UiTheme::ElectricCyan);
+    if (ImGui::Button(customizeMode ? "Done Customizing" : "Customize Dashboard", ImVec2(172.0f, 0.0f))) {
+        toggleCustomize();
+    }
+    UiTheme::popButtonStyle();
+    ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
+    if (ImGui::Button("Refresh Current Prices", ImVec2(186.0f, 0.0f))) {
+        refreshCurrentPrices();
+    }
+    UiTheme::popButtonStyle();
+    ImGui::SameLine();
+    ImGui::TextColored(UiTheme::TextMuted, "Dashboard data is local; price refreshes are explicit and display-only.");
+    endDashboardPanel();
+}
+
+void drawDashboardWatchlistPanel(const AppState& state)
+{
+    beginDashboardPanel("DashboardWatchlistPanel", "Watchlist", ImVec2(0.0f, 330.0f), UiTheme::ElectricCyan);
+    const std::vector<WatchlistItem> items = sortedWatchlistItems(state);
+    if (items.empty()) {
+        ImGui::TextColored(UiTheme::TextMuted, "No watchlist items yet.");
+        ImGui::TextWrapped("Create watchlist items from the Watchlist page to monitor local symbols here.");
+        endDashboardPanel();
+        return;
+    }
+
+    UiTheme::pushTableStyle();
+    if (ImGui::BeginTable("DashboardWatchlistTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp, ImVec2(0.0f, 250.0f))) {
+        ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 74.0f);
+        ImGui::TableSetupColumn("Price", ImGuiTableColumnFlags_WidthFixed, 96.0f);
+        ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthFixed, 74.0f);
+        ImGui::TableSetupColumn("Signal", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
+        const int limit = std::min<int>(8, static_cast<int>(items.size()));
+        for (int index = 0; index < limit; ++index) {
+            const WatchlistItem& item = items[static_cast<std::size_t>(index)];
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", item.ticker.c_str());
+            ImGui::TableNextColumn();
+            UiTheme::textRightAligned(item.currentPrice > 0.0 ? Money::format(item.currentPrice).c_str() : "N/A");
+            ImGui::TableNextColumn();
+            UiTheme::badge(item.priority.c_str(), item.priority == "High" ? UiTheme::Amber : UiTheme::TextMuted);
+            ImGui::TableNextColumn();
+            UiTheme::badge(item.signalStatus.c_str(), signalColor(item.signalStatus));
+        }
+        ImGui::EndTable();
+    }
+    UiTheme::popTableStyle();
+    endDashboardPanel();
+}
+
+void drawTechnicalSignalsPanel(const AppState& state)
+{
+    beginDashboardPanel("DashboardTechnicalSignalsPanel", "Technical Signals", ImVec2(0.0f, 260.0f), UiTheme::NeonMagenta);
+
+    int buyCount = 0;
+    int sellCount = 0;
+    int holdCount = 0;
+    for (const WatchlistItem& item : state.watchlist) {
+        if (item.signalStatus == "Buy" || item.signalStatus == "Buy Signal") {
+            ++buyCount;
+        } else if (item.signalStatus == "Sell" || item.signalStatus == "Sell Signal") {
+            ++sellCount;
+        } else {
+            ++holdCount;
+        }
+    }
+
+    const float columnWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
+    UiTheme::metricCard("Buy", std::to_string(buyCount).c_str(), "Watchlist signals", UiTheme::Gain, ImVec2(columnWidth, 82.0f));
+    ImGui::SameLine();
+    UiTheme::metricCard("Hold", std::to_string(holdCount).c_str(), "Watchlist signals", UiTheme::ElectricCyan, ImVec2(columnWidth, 82.0f));
+    ImGui::SameLine();
+    UiTheme::metricCard("Sell", std::to_string(sellCount).c_str(), "Watchlist signals", UiTheme::Loss, ImVec2(columnWidth, 82.0f));
+
+    ImGui::Spacing();
+    const std::vector<WatchlistItem> items = sortedWatchlistItems(state);
+    if (items.empty()) {
+        ImGui::TextColored(UiTheme::TextMuted, "Signals appear after watchlist items are added.");
+        endDashboardPanel();
+        return;
+    }
+
+    UiTheme::pushTableStyle();
+    if (ImGui::BeginTable("DashboardTechnicalSignalsTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp, ImVec2(0.0f, 92.0f))) {
+        ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+        ImGui::TableSetupColumn("Buy Level", ImGuiTableColumnFlags_WidthFixed, 94.0f);
+        ImGui::TableSetupColumn("Signal");
+        ImGui::TableHeadersRow();
+
+        const int limit = std::min<int>(4, static_cast<int>(items.size()));
+        for (int index = 0; index < limit; ++index) {
+            const WatchlistItem& item = items[static_cast<std::size_t>(index)];
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", item.ticker.c_str());
+            ImGui::TableNextColumn();
+            UiTheme::textRightAligned(item.buySignalPrice > 0.0 ? Money::format(item.buySignalPrice).c_str() : "N/A", UiTheme::Gain);
+            ImGui::TableNextColumn();
+            UiTheme::badge(item.signalStatus.c_str(), signalColor(item.signalStatus));
+        }
+        ImGui::EndTable();
+    }
+    UiTheme::popTableStyle();
+    endDashboardPanel();
+}
+
+void drawAccountStatusPanel(
+    AppState& state,
+    const DashboardData& data,
+    const std::string& today,
+    const std::function<void()>& refreshCurrentPrices,
+    const std::function<void()>& reloadData,
+    const std::function<void(bool)>& createSnapshot,
+    bool showSnapshotControls)
+{
+    beginDashboardPanel("DashboardAccountStatusPanel", "Account / Data Status", ImVec2(0.0f, showSnapshotControls ? 310.0f : 238.0f), UiTheme::SoftBlue);
+
+    const DashboardPriceRefreshStatus& status = state.dashboardPriceRefreshStatus;
+    const PortfolioSnapshot* latest = DashboardService::latestSnapshot(state);
+    const ImportBatch* latestImport = DashboardService::latestImportBatch(state);
+
+    ImGui::TextColored(UiTheme::TextMuted, "Active Accounts");
+    ImGui::SameLine(150.0f);
+    ImGui::TextColored(UiTheme::TextPrimary, "%d", data.portfolio.activeAccounts);
+    ImGui::TextColored(UiTheme::TextMuted, "Holdings");
+    ImGui::SameLine(150.0f);
+    ImGui::TextColored(UiTheme::TextPrimary, "%d", data.portfolio.holdingCount);
+    ImGui::TextColored(UiTheme::TextMuted, "Last CSV Import");
+    ImGui::SameLine(150.0f);
+    ImGui::TextColored(UiTheme::TextSecondary, "%s", latestImport == nullptr ? "None" : latestImport->importDate.c_str());
+    ImGui::TextColored(UiTheme::TextMuted, "Last Snapshot");
+    ImGui::SameLine(150.0f);
+    ImGui::TextColored(UiTheme::TextSecondary, "%s", latest == nullptr ? "None" : latest->snapshotDate.c_str());
+    ImGui::TextColored(UiTheme::TextMuted, "Price Provider");
+    ImGui::SameLine(150.0f);
+    ImGui::TextColored(UiTheme::ElectricCyan, "%s", status.provider.empty() ? "Yahoo Finance" : status.provider.c_str());
+    ImGui::TextColored(UiTheme::TextMuted, "Last Refresh");
+    ImGui::SameLine(150.0f);
+    ImGui::TextColored(UiTheme::TextSecondary, "%s", status.hasRun && !status.lastRefreshedAt.empty() ? status.lastRefreshedAt.c_str() : "Not refreshed this session");
+
+    ImGui::Spacing();
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
+    if (ImGui::Button("Refresh Current Prices", ImVec2(178.0f, 0.0f))) {
+        refreshCurrentPrices();
+    }
+    UiTheme::popButtonStyle();
+    ImGui::SameLine();
+    ImGui::TextColored(UiTheme::TextMuted, "Updated: %d   Failed: %d   Cached: %d", status.refreshedSymbols, status.failedSymbols, status.cachedSymbols);
+
+    if (!status.warning.empty()) {
+        ImGui::TextColored(status.failedSymbols > 0 ? UiTheme::Amber : UiTheme::TextMuted, "%s", status.warning.c_str());
+    }
+
+    if (showSnapshotControls) {
+        ImGui::Spacing();
+        UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
+        if (ImGui::Button("Create Manual Snapshot", ImVec2(190.0f, 0.0f))) {
+            if (DashboardService::hasSnapshotForDate(state, today)) {
+                ImGui::OpenPopup("Replace Today Snapshot");
+            } else {
+                createSnapshot(false);
+            }
+        }
+        UiTheme::popButtonStyle();
+        ImGui::SameLine();
+        ImGui::TextColored(UiTheme::TextMuted, "CSV imports create snapshots automatically.");
+    }
+
+    endDashboardPanel();
+
+    if (ImGui::BeginPopupModal("Replace Today Snapshot", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("A manual snapshot already exists for today.");
+        ImGui::TextColored(UiTheme::MutedText, "Replace it with the current dashboard totals?");
+        if (ImGui::Button("Replace Snapshot", ImVec2(150.0f, 0.0f))) {
+            createSnapshot(true);
+            ImGui::CloseCurrentPopup();
+            reloadData();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void drawSingleMetricSection(const MetricCardData& card)
 {
     TerminalPanel::begin(card.title.c_str(), ImVec2(0.0f, 150.0f));
@@ -653,7 +1204,8 @@ void drawSingleMetricSection(const MetricCardData& card)
 
 void drawPerformanceMovement(const DashboardData& data, const AppState& state)
 {
-    TerminalPanel::begin("Daily / Monthly / Yearly Movement", ImVec2(0.0f, 230.0f));
+    const float panelHeight = 92.0f + metricGridHeight(3, ImGui::GetContentRegionAvail().x) + 46.0f;
+    beginDashboardPanel("DashboardPerformanceMovementPanel", "Performance Movement", ImVec2(0.0f, panelHeight), UiTheme::Gain);
     drawMetricGrid({
         { "Daily Gain/Loss", data.performance.hasDaily ? Money::format(data.performance.daily) : "N/A", movementCaption(data.performance.hasDaily), UiTheme::moneyColor(data.performance.daily), data.performance.hasDaily },
         { "Monthly Gain/Loss", data.performance.hasMonthly ? Money::format(data.performance.monthly) : "N/A", movementCaption(data.performance.hasMonthly), UiTheme::moneyColor(data.performance.monthly), data.performance.hasMonthly },
@@ -663,63 +1215,80 @@ void drawPerformanceMovement(const DashboardData& data, const AppState& state)
     ImGui::TextColored(UiTheme::MutedText, state.portfolioSnapshots.empty()
         ? "Import a CSV to create your first snapshot. Manual snapshots are available as an optional advanced tool."
         : "Performance is based on local snapshots created by CSV imports or manual snapshots and may include deposits or withdrawals. Contribution-adjusted returns are planned for a future update.");
-    TerminalPanel::end();
+    endDashboardPanel();
 }
 
 void drawRealizedGainsPanel(const DashboardData& data)
 {
-    TerminalPanel::begin("Realized Gains", ImVec2(0.0f, 190.0f));
+    beginDashboardPanel("DashboardRealizedGainsPanel", "Realized Gains", ImVec2(0.0f, 198.0f), UiTheme::Loss);
     ImGui::TextColored(UiTheme::moneyColor(data.realizedGains.today), "Today: %s", Money::format(data.realizedGains.today).c_str());
     ImGui::TextColored(UiTheme::moneyColor(data.realizedGains.thisMonth), "This month: %s", Money::format(data.realizedGains.thisMonth).c_str());
     ImGui::TextColored(UiTheme::moneyColor(data.realizedGains.thisYear), "This year: %s", Money::format(data.realizedGains.thisYear).c_str());
     ImGui::TextColored(UiTheme::MutedText, "Sell transactions: %d", data.realizedGains.sellCount);
     ImGui::Spacing();
     ImGui::TextWrapped("Realized gain/loss is separate from unrealized holding movement and is calculated from sell transactions using average cost basis.");
-    TerminalPanel::end();
+    endDashboardPanel();
 }
 
 void drawDividendSummaryPanel(const DashboardData& data)
 {
-    TerminalPanel::begin("Dividend Summary", ImVec2(0.0f, 190.0f));
+    const float panelHeight = 76.0f + metricGridHeight(3, ImGui::GetContentRegionAvail().x);
+    beginDashboardPanel("DashboardDividendSummaryPanel", "Dividend Summary", ImVec2(0.0f, panelHeight), UiTheme::Amber);
     drawMetricGrid({
         { "Dividends This Month", Money::format(data.dividends.thisMonth), "Recorded dividends", UiTheme::Amber },
         { "Dividends This Year", Money::format(data.dividends.thisYear), "Recorded dividends", UiTheme::Amber },
         { "Lifetime Dividends", Money::format(data.dividends.lifetime), "Recorded dividends", UiTheme::Amber },
     });
-    TerminalPanel::end();
+    endDashboardPanel();
 }
 
 void drawRecentTransactionsPanel(const AppState& state)
 {
-    TerminalPanel::begin("Recent Activity", ImVec2(0.0f, 235.0f));
+    beginDashboardPanel("DashboardRecentTransactionsPanel", "Recent Transactions", ImVec2(0.0f, 300.0f), UiTheme::ElectricCyan);
     if (state.transactions.empty()) {
-        UiTheme::emptyState("No transactions yet", "Add buys, sells, dividends, and cash activity to build the ledger.");
+        ImGui::TextColored(UiTheme::TextMuted, "No transactions yet.");
+        ImGui::TextWrapped("Add buys, sells, dividends, and cash activity to build the ledger.");
     } else {
-        const int limit = std::min<int>(8, static_cast<int>(state.transactions.size()));
-        for (int index = 0; index < limit; ++index) {
-            const Transaction& transaction = state.transactions[static_cast<std::size_t>(index)];
-            ImGui::Text("%s", transaction.transactionDate.c_str());
-            ImGui::SameLine(105.0f);
-            UiTheme::badge(transaction.transactionType.c_str(), transaction.transactionType == "Sell" ? UiTheme::Loss : UiTheme::Amber);
-            ImGui::SameLine(190.0f);
-            ImGui::Text("%s", transaction.ticker.empty() ? transaction.assetName.c_str() : transaction.ticker.c_str());
-            ImGui::SameLine();
-            ImGui::TextColored(UiTheme::MutedText, "%s", Money::format(transaction.totalAmount).c_str());
+        UiTheme::pushTableStyle();
+        if (ImGui::BeginTable("DashboardRecentTransactionsTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp, ImVec2(0.0f, 222.0f))) {
+            ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthFixed, 92.0f);
+            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 84.0f);
+            ImGui::TableSetupColumn("Symbol");
+            ImGui::TableSetupColumn("Amount", ImGuiTableColumnFlags_WidthFixed, 112.0f);
+            ImGui::TableHeadersRow();
+
+            const int limit = std::min<int>(8, static_cast<int>(state.transactions.size()));
+            for (int index = 0; index < limit; ++index) {
+                const Transaction& transaction = state.transactions[static_cast<std::size_t>(index)];
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", transaction.transactionDate.c_str());
+                ImGui::TableNextColumn();
+                UiTheme::badge(transaction.transactionType.c_str(), transactionBadgeColor(transaction.transactionType));
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", transaction.ticker.empty() ? transaction.assetName.c_str() : transaction.ticker.c_str());
+                ImGui::TableNextColumn();
+                UiTheme::textRightAligned(Money::format(transaction.totalAmount).c_str(), transactionAmountColor(transaction));
+            }
+            ImGui::EndTable();
         }
+        UiTheme::popTableStyle();
     }
-    TerminalPanel::end();
+    endDashboardPanel();
 }
 
 void drawHoldingsTablePanel(const AppState& state)
 {
-    TerminalPanel::begin("Holdings", ImVec2(0.0f, 290.0f));
+    beginDashboardPanel("DashboardHoldingsPanel", "Holdings", ImVec2(0.0f, 330.0f), UiTheme::SoftBlue);
     const std::vector<Holding> holdings = dashboardHoldings(state);
     if (holdings.empty()) {
-        UiTheme::emptyState("No holdings yet", "Import a positions CSV or add holdings manually.");
-        TerminalPanel::end();
+        ImGui::TextColored(UiTheme::TextMuted, "No holdings yet.");
+        ImGui::TextWrapped("Import a positions CSV or add holdings manually.");
+        endDashboardPanel();
         return;
     }
 
+    UiTheme::pushTableStyle();
     if (ImGui::BeginTable("DashboardHoldingsTable", 8, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 225.0f))) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 70.0f);
         ImGui::TableSetupColumn("Asset");
@@ -745,16 +1314,16 @@ void drawHoldingsTablePanel(const AppState& state)
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", holding.assetType.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::formatQuantity(holding.shares).c_str());
+            UiTheme::textRightAligned(Money::formatQuantity(holding.shares).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(holding.currentPrice).c_str());
+            UiTheme::textRightAligned(Money::format(holding.currentPrice).c_str(), UiTheme::ElectricCyan);
             ImGui::TableNextColumn();
             const std::string priceSource = DashboardService::priceSourceForHolding(state, holding);
             ImGui::TextColored(priceSource == "Live Quote" ? UiTheme::Gain : (priceSource == "Cached Quote" ? UiTheme::Amber : UiTheme::MutedText), "%s", priceSource.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(metrics.marketValue).c_str());
+            UiTheme::textRightAligned(Money::format(metrics.marketValue).c_str());
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::moneyColor(metrics.gainLossDollar), "%s", Money::format(metrics.gainLossDollar).c_str());
+            UiTheme::textRightAligned(Money::format(metrics.gainLossDollar).c_str(), UiTheme::moneyColor(metrics.gainLossDollar));
             ++rendered;
             if (rendered >= 18) {
                 break;
@@ -762,7 +1331,8 @@ void drawHoldingsTablePanel(const AppState& state)
         }
         ImGui::EndTable();
     }
-    TerminalPanel::end();
+    UiTheme::popTableStyle();
+    endDashboardPanel();
 }
 
 void drawSnapshotStatusPanel(
@@ -919,7 +1489,7 @@ std::vector<ChartPoint> incomeGainPoints(const AppState& state, const std::strin
 
 void drawAllocationPanel(AppState& state, DashboardChartSettingsRepository& chartSettingsRepository)
 {
-    TerminalPanel::begin("Allocation", ImVec2(0.0f, 300.0f));
+    beginDashboardPanel("DashboardAllocationPanel", "Allocation", ImVec2(0.0f, 330.0f), UiTheme::SoftBlue);
     DashboardChartSetting setting = chartSettingFor(state, "allocation_panel");
     drawChartControls(state,
         chartSettingsRepository,
@@ -939,12 +1509,12 @@ void drawAllocationPanel(AppState& state, DashboardChartSettingsRepository& char
         drawHorizontalAllocationBars(allocationPoints(state, setting.dataMode), "Add active holdings with current prices to see allocation.");
     }
 
-    TerminalPanel::end();
+    endDashboardPanel();
 }
 
 void drawPerformanceChartPanel(AppState& state, DashboardChartSettingsRepository& chartSettingsRepository)
 {
-    TerminalPanel::begin("Performance", ImVec2(0.0f, 300.0f));
+    beginDashboardPanel("DashboardPerformanceChartPanel", "Portfolio Performance", ImVec2(0.0f, 382.0f), UiTheme::ElectricCyan);
     DashboardChartSetting setting = chartSettingFor(state, "performance_panel");
     drawChartControls(state,
         chartSettingsRepository,
@@ -954,14 +1524,15 @@ void drawPerformanceChartPanel(AppState& state, DashboardChartSettingsRepository
         false);
 
     const std::vector<ChartPoint> points = performancePoints(state, setting.dataMode, setting.timeRange);
-    drawLineChart(points, UiTheme::Gain, "Not enough snapshot data for this range.");
+    const ImVec4 chartColor = setting.dataMode == "Unrealized Gain/Loss" ? UiTheme::moneyColor(points.empty() ? 0.0 : points.back().value) : UiTheme::ChartCyan;
+    drawLineChart(points, chartColor, "Not enough snapshot data for this range.", 250.0f, setting.dataMode != "Unrealized Gain/Loss");
     ImGui::TextColored(UiTheme::MutedText, "Performance charts use local portfolio snapshots.");
-    TerminalPanel::end();
+    endDashboardPanel();
 }
 
 void drawIncomeGainsChartPanel(AppState& state, DashboardChartSettingsRepository& chartSettingsRepository)
 {
-    TerminalPanel::begin("Income / Gains", ImVec2(0.0f, 300.0f));
+    beginDashboardPanel("DashboardIncomeGainsPanel", "Income / Gains", ImVec2(0.0f, 330.0f), UiTheme::Amber);
     DashboardChartSetting setting = chartSettingFor(state, "income_gains_panel");
     drawChartControls(state,
         chartSettingsRepository,
@@ -973,7 +1544,7 @@ void drawIncomeGainsChartPanel(AppState& state, DashboardChartSettingsRepository
     const std::vector<ChartPoint> points = incomeGainPoints(state, setting.dataMode, setting.timeRange);
     drawMonthlyBarChart(points, setting.dataMode == "Dividends" ? UiTheme::Amber : UiTheme::Gain, "Not enough local records for this range.");
     ImGui::TextColored(UiTheme::MutedText, "Bars group local records by month.");
-    TerminalPanel::end();
+    endDashboardPanel();
 }
 
 void drawAssetAllocationPanel(const AppState& state)
@@ -1022,7 +1593,7 @@ void drawPortfolioValueHistoryPanel(const AppState& state, const PortfolioSummar
 
 void drawTopGainersLosersPanel(const AppState& state)
 {
-    TerminalPanel::begin("Top Gainers / Top Losers", ImVec2(0.0f, 280.0f));
+    beginDashboardPanel("DashboardTopMoversPanel", "Market Highlights", ImVec2(0.0f, 356.0f), UiTheme::NeonMagenta);
     struct HoldingRow {
         std::string ticker;
         std::string name;
@@ -1043,12 +1614,48 @@ void drawTopGainersLosersPanel(const AppState& state)
     });
 
     if (rows.empty()) {
-        UiTheme::emptyState("No holdings yet", "Import or add holdings to review gain/loss movement.");
-        TerminalPanel::end();
+        ImGui::TextColored(UiTheme::TextMuted, "No holdings yet.");
+        ImGui::TextWrapped("Import or add holdings to review gain/loss movement.");
+        endDashboardPanel();
         return;
     }
 
-    if (ImGui::BeginTable("TopGainersLosersTable", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_Resizable)) {
+    const int tileCount = std::min<int>(3, static_cast<int>(rows.size()));
+    const float tileWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * static_cast<float>(tileCount - 1)) / static_cast<float>(tileCount);
+    for (int index = 0; index < tileCount; ++index) {
+        const HoldingRow& row = rows[static_cast<std::size_t>(index)];
+        const ImVec4 accent = UiTheme::moneyColor(row.metrics.gainLossDollar);
+        UiTheme::pushPanelStyle();
+        ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(accent, 0.15f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 10.0f));
+        ImGui::BeginChild(("MoverTile" + std::to_string(index)).c_str(), ImVec2(tileWidth, 86.0f), true, ImGuiWindowFlags_NoScrollbar);
+        ImGui::PopStyleVar();
+
+        const ImVec2 min = ImGui::GetWindowPos();
+        const ImVec2 max(min.x + ImGui::GetWindowSize().x, min.y + ImGui::GetWindowSize().y);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(min, max, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::SurfaceMain, 0.46f)), 14.0f);
+        drawList->AddRectFilled(ImVec2(min.x + 12.0f, max.y - 9.0f), ImVec2(min.x + 58.0f, max.y - 7.0f), ImGui::GetColorU32(UiTheme::withAlpha(accent, 0.46f)), 2.0f);
+
+        ImGui::TextColored(UiTheme::TextPrimary, "%s", row.ticker.c_str());
+        ImGui::SetWindowFontScale(1.08f);
+        UiTheme::pushNumericFont();
+        ImGui::TextColored(accent, "%s", Money::format(row.metrics.gainLossDollar).c_str());
+        UiTheme::popNumericFont();
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::TextColored(UiTheme::TextMuted, "%s", Money::formatPercent(row.metrics.gainLossPercent, true).c_str());
+
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+        UiTheme::popPanelStyle();
+        if (index + 1 < tileCount) {
+            ImGui::SameLine();
+        }
+    }
+    ImGui::Spacing();
+
+    UiTheme::pushTableStyle();
+    if (ImGui::BeginTable("TopGainersLosersTable", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_Resizable, ImVec2(0.0f, 178.0f))) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 90.0f);
         ImGui::TableSetupColumn("Asset");
         ImGui::TableSetupColumn("Market Value", ImGuiTableColumnFlags_WidthFixed, 130.0f);
@@ -1065,15 +1672,16 @@ void drawTopGainersLosersPanel(const AppState& state)
             ImGui::TableSetColumnIndex(1);
             ImGui::Text("%s", row.name.c_str());
             ImGui::TableSetColumnIndex(2);
-            ImGui::Text("%s", Money::format(row.metrics.marketValue).c_str());
+            UiTheme::textRightAligned(Money::format(row.metrics.marketValue).c_str());
             ImGui::TableSetColumnIndex(3);
-            ImGui::TextColored(UiTheme::moneyColor(row.metrics.gainLossDollar), "%s", Money::format(row.metrics.gainLossDollar).c_str());
+            UiTheme::textRightAligned(Money::format(row.metrics.gainLossDollar).c_str(), UiTheme::moneyColor(row.metrics.gainLossDollar));
             ImGui::TableSetColumnIndex(4);
-            ImGui::TextColored(UiTheme::moneyColor(row.metrics.gainLossDollar), "%s", Money::formatPercent(row.metrics.gainLossPercent, true).c_str());
+            UiTheme::textRightAligned(Money::formatPercent(row.metrics.gainLossPercent, true).c_str(), UiTheme::moneyColor(row.metrics.gainLossDollar));
         }
         ImGui::EndTable();
     }
-    TerminalPanel::end();
+    UiTheme::popTableStyle();
+    endDashboardPanel();
 }
 
 void drawDashboardWidget(
@@ -1132,18 +1740,10 @@ void DashboardView::render(
     const std::string today = Date::todayIso8601();
     const DashboardData data = DashboardService::build(state, today, Date::currentMonthPrefix(), Date::currentYearPrefix());
 
-    UiTheme::sectionHeading("Dashboard", "Terminal-style portfolio review. CSV imports update holdings and create local snapshots.");
-
-    if (ImGui::Button(customizeMode_ ? "Done Customizing" : "Customize Dashboard")) {
+    const auto toggleCustomize = [this]() {
         customizeMode_ = !customizeMode_;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Refresh Current Prices")) {
-        refreshCurrentPrices();
-    }
-    ImGui::Spacing();
-    drawPriceRefreshStatus(state, refreshCurrentPrices);
-    ImGui::Spacing();
+    };
+    drawDashboardToolbar(customizeMode_, toggleCustomize, refreshCurrentPrices);
 
     if (customizeMode_) {
         renderCustomizePanel(state, layoutRepository, reloadData);
@@ -1160,9 +1760,103 @@ void DashboardView::render(
         createTodaySnapshot(state, snapshotRepository, reloadData, replaceExisting);
     };
 
-    const int columns = ImGui::GetContentRegionAvail().x > 1220.0f ? 2 : 1;
-    if (ImGui::BeginTable("DashboardTerminalWorkspace", columns, ImGuiTableFlags_SizingStretchSame)) {
+    if (isWidgetVisible(visibleWidgets, "portfolio_summary")) {
+        drawPortfolioSummary(data);
+        ImGui::Spacing();
+    }
+
+    const float availableWidth = ImGui::GetContentRegionAvail().x;
+    const int primaryColumns = availableWidth > 1180.0f ? 2 : 1;
+    if (ImGui::BeginTable("DashboardPrimaryWorkspace", primaryColumns, ImGuiTableFlags_SizingStretchProp)) {
+        if (primaryColumns == 2) {
+            ImGui::TableSetupColumn("Primary", ImGuiTableColumnFlags_WidthStretch, 2.1f);
+            ImGui::TableSetupColumn("Watchlist", ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        }
+        ImGui::TableNextColumn();
+        if (isWidgetVisible(visibleWidgets, "performance_panel")) {
+            drawPerformanceChartPanel(state, chartSettingsRepository);
+            ImGui::Spacing();
+        }
+
+        const bool showAllocation = isWidgetVisible(visibleWidgets, "allocation_panel");
+        const bool showIncomeGains = isWidgetVisible(visibleWidgets, "income_gains_panel");
+        if (showAllocation || showIncomeGains) {
+            const int chartColumns = ImGui::GetContentRegionAvail().x > 940.0f && showAllocation && showIncomeGains ? 2 : 1;
+            if (ImGui::BeginTable("DashboardSecondaryCharts", chartColumns, ImGuiTableFlags_SizingStretchSame)) {
+                if (showAllocation) {
+                    ImGui::TableNextColumn();
+                    drawAllocationPanel(state, chartSettingsRepository);
+                }
+                if (showIncomeGains) {
+                    ImGui::TableNextColumn();
+                    drawIncomeGainsChartPanel(state, chartSettingsRepository);
+                }
+                ImGui::EndTable();
+            }
+        }
+
+        ImGui::TableNextColumn();
+        drawDashboardWatchlistPanel(state);
+        ImGui::Spacing();
+        drawTechnicalSignalsPanel(state);
+        ImGui::EndTable();
+    }
+
+    ImGui::Spacing();
+    const int operationsColumns = ImGui::GetContentRegionAvail().x > 1260.0f ? 3 : (ImGui::GetContentRegionAvail().x > 840.0f ? 2 : 1);
+    if (ImGui::BeginTable("DashboardOperationsGrid", operationsColumns, ImGuiTableFlags_SizingStretchSame)) {
+        if (isWidgetVisible(visibleWidgets, "recent_transactions")) {
+            ImGui::TableNextColumn();
+            drawRecentTransactionsPanel(state);
+        }
+
+        ImGui::TableNextColumn();
+        drawAccountStatusPanel(state, data, today, refreshCurrentPrices, reloadData, createSnapshot, isWidgetVisible(visibleWidgets, "snapshot_status"));
+
+        if (isWidgetVisible(visibleWidgets, "performance_movement")) {
+            ImGui::TableNextColumn();
+            drawPerformanceMovement(data, state);
+        }
+        if (isWidgetVisible(visibleWidgets, "realized_gains")) {
+            ImGui::TableNextColumn();
+            drawRealizedGainsPanel(data);
+        }
+        if (isWidgetVisible(visibleWidgets, "dividend_summary")) {
+            ImGui::TableNextColumn();
+            drawDividendSummaryPanel(data);
+        }
+        ImGui::EndTable();
+    }
+
+    if (isWidgetVisible(visibleWidgets, "holdings_table")) {
+        ImGui::Spacing();
+        drawHoldingsTablePanel(state);
+    }
+
+    if (isWidgetVisible(visibleWidgets, "top_gainers_losers")) {
+        ImGui::Spacing();
+        drawTopGainersLosersPanel(state);
+    }
+
+    bool hasAdditionalWidgets = false;
+    for (const DashboardWidget& widget : visibleWidgets) {
+        if (!isPromotedDashboardWidget(widget.widgetKey)) {
+            hasAdditionalWidgets = true;
+            break;
+        }
+    }
+
+    if (!hasAdditionalWidgets) {
+        return;
+    }
+
+    ImGui::Spacing();
+    const int additionalColumns = ImGui::GetContentRegionAvail().x > 1220.0f ? 2 : 1;
+    if (ImGui::BeginTable("DashboardAdditionalWidgets", additionalColumns, ImGuiTableFlags_SizingStretchSame)) {
         for (const DashboardWidget& widget : visibleWidgets) {
+            if (isPromotedDashboardWidget(widget.widgetKey)) {
+                continue;
+            }
             ImGui::TableNextColumn();
             drawDashboardWidget(widget, state, snapshotRepository, chartSettingsRepository, data, today, reloadData, createSnapshot);
         }
@@ -1172,12 +1866,12 @@ void DashboardView::render(
 
 void DashboardView::renderCustomizePanel(AppState& state, DashboardLayoutRepository& layoutRepository, const std::function<void()>& reloadData)
 {
-    ImGui::BeginChild("DashboardCustomizePanel", ImVec2(0.0f, 440.0f), true);
-    ImGui::Text("Customize Dashboard");
+    beginDashboardPanel("DashboardCustomizePanel", "Customize Dashboard", ImVec2(0.0f, 458.0f), UiTheme::NeonMagenta);
     ImGui::TextWrapped("Rearrange your dashboard so it matches the way you review your portfolio.");
     ImGui::TextColored(UiTheme::MutedText, "Dashboard layout is stored locally.");
     ImGui::Spacing();
 
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Reset Dashboard Layout")) {
         std::string error;
         if (layoutRepository.resetToDefaults(error)) {
@@ -1187,9 +1881,11 @@ void DashboardView::renderCustomizePanel(AppState& state, DashboardLayoutReposit
             state.setStatus("Could not reset dashboard layout: " + error, true);
         }
     }
+    UiTheme::popButtonStyle();
 
     ImGui::Spacing();
     std::vector<DashboardWidget> widgets = DashboardLayoutService::orderedWidgets(state.dashboardWidgets);
+    UiTheme::pushTableStyle();
     if (ImGui::BeginTable("DashboardCustomizeTable", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Section");
         ImGui::TableSetupColumn("Visible", ImGuiTableColumnFlags_WidthFixed, 90.0f);
@@ -1249,8 +1945,9 @@ void DashboardView::renderCustomizePanel(AppState& state, DashboardLayoutReposit
         }
         ImGui::EndTable();
     }
+    UiTheme::popTableStyle();
 
-    ImGui::EndChild();
+    endDashboardPanel();
 }
 
 void DashboardView::createTodaySnapshot(AppState& state, PortfolioSnapshotRepository& snapshotRepository, const std::function<void()>& reloadData, bool replaceExisting)

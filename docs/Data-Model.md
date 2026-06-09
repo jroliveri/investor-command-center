@@ -311,7 +311,7 @@ Historical price cache records store daily OHLCV data fetched explicitly from Ya
 
 Rows are upserted by `symbol + provider + price_date`, so repeated refreshes update existing cached dates instead of creating duplicates. If an online history refresh fails and cached rows exist, the app can use the cached history with a warning.
 
-This table is the foundation for future RSI, MACD, and volume analysis. It does not create trading recommendations, does not change watchlist `Buy`/`Sell`/`Hold` user signals, and does not update holdings, account balances, snapshots, or CSV-imported records.
+This table is the foundation for RSI, MACD, and volume analysis. It does not create trading recommendations and does not update holdings, account balances, snapshots, or CSV-imported records. Cached technical indicator snapshots derived from this table can be used as filters for user-defined Watchlist Buy signals.
 
 ## technical_indicator_cache
 
@@ -353,7 +353,7 @@ MACD histogram = MACD line - MACD signal
 volumeVsAvg20Percent = (latestVolume - avgVolume20) / avgVolume20 * 100
 ```
 
-If there are not enough closing-price or volume rows, the app stores `NULL` for that specific indicator and the UI displays `N/A`. Indicator snapshots are informational research context only. They do not change user-defined watchlist signals, do not generate recommendations, do not update holdings, and do not create trades.
+If there are not enough closing-price or volume rows, the app stores `NULL` for that specific indicator and the UI displays `N/A`. Indicator snapshots are informational research context only. They can filter user-defined Watchlist Buy signals, but they do not generate recommendations, do not update holdings, and do not create trades.
 
 ## app_settings
 
@@ -515,21 +515,23 @@ If `watchlist_id` is missing or unset during migration, the item is assigned to 
 
 `target_buy_price` remains for backward compatibility. New UI and signal logic use `buy_signal_price` and `sell_signal_price`.
 
-Watchlist signal status is calculated from the locally saved price levels and the refreshed current price. The visible signal categories are intentionally simple:
+Watchlist signal status is calculated from locally saved price levels, the refreshed current price, and cached technical indicators for Buy confirmation. The visible signal categories are intentionally simple:
 
 ```text
-Buy = currentPrice <= buySignalPrice, when buySignalPrice > 0
+Buy = currentPrice <= buySignalPrice, when buySignalPrice > 0,
+      and rsi_14 is between 40 and 60,
+      and macd_histogram > 0
 Sell = currentPrice >= sellSignalPrice, when sellSignalPrice > 0
-Hold = no buy or sell condition is met
+Hold = no complete buy or sell condition is met
 ```
 
-If the current price is missing, the visible signal remains `Hold`. If both saved levels trigger at the same time, the visible signal remains `Hold` with warning styling so the user can review their own thresholds. Legacy stored values such as `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, `None`, and `Check Signals` are normalized to `Buy`, `Sell`, or `Hold`. New app writes use `Hold` as the default logical status even though early SQLite schemas retain the legacy `None` column default.
+If the current price is missing, the visible signal remains `Hold`. If RSI or MACD histogram data is missing, Buy does not activate and the visible signal remains `Hold` unless the Sell condition is met. Legacy stored values such as `Buy Signal`, `Sell Signal`, `No Signal`, `No Price`, `None`, and `Check Signals` are normalized to `Buy`, `Sell`, or `Hold`. New app writes use `Hold` as the default logical status even though early SQLite schemas retain the legacy `None` column default.
 
 Watchlist price refreshes use `MarketDataService` and the Yahoo Finance provider abstraction already used by Stock Research. Refreshes update only the watchlist record's current price, last refresh timestamp, source label, and calculated signal status. They do not update holdings, transactions, snapshots, brokerage records, or account balances.
 
-Watchlist historical refresh actions use the same provider abstraction to populate `market_price_history` for selected or all active watchlist tickers. Historical rows are informational cache records only and do not change user-defined watchlist signals.
+Watchlist historical refresh actions use the same provider abstraction to populate `market_price_history` for selected or all active watchlist tickers. Historical rows are informational cache records only; the technical snapshots calculated from those rows are used as Buy signal filters.
 
-After a successful history refresh, the app recalculates and upserts `technical_indicator_cache` snapshots for the refreshed symbols. The optional Watchlist `Show Technicals` toggle displays cached RSI, MACD, and volume context without changing signal-first sorting.
+After a successful history refresh, the app recalculates and upserts `technical_indicator_cache` snapshots for the refreshed symbols. The optional Watchlist `Show Technicals` toggle displays cached RSI, MACD, and volume context. Signal-first sorting still sorts Buy, then Sell, then Hold; Buy now requires the price target plus RSI/MACD confirmation.
 
 Watchlist signals are user-defined tracking levels only. They are not financial advice, trading recommendations, brokerage actions, or money movement.
 
@@ -558,14 +560,14 @@ When `costBasis` is zero, `gainLossPercent` is reported as `0` to avoid division
 - Capital gain allocation rules are loaded from `capital_gain_allocation_rules` and only affect the local transaction allocation helper.
 - Market quote cache records are used by Stock Research and explicit Watchlist price refreshes only; they do not affect portfolio calculations.
 - Market price history cache records are used by Stock Research and explicit Watchlist history refreshes only; they do not affect portfolio calculations.
-- Technical indicator cache records are calculated from market price history and do not affect portfolio calculations or watchlist `Buy`/`Sell`/`Hold` signal logic.
+- Technical indicator cache records are calculated from market price history. They do not affect portfolio calculations, but cached RSI and MACD histogram values are used as confirmation filters for Watchlist Buy signals.
 - Watchlist groups and sidebar assignments affect local organization and visibility only; they do not affect portfolio calculations.
 - Dividend totals are calculated in C++ from `dividends.date_received` using `YYYY-MM` and `YYYY` prefixes.
 - Realized gain/loss totals are calculated from sell transactions.
 - Daily, monthly, and yearly gain/loss are calculated from portfolio snapshots.
 - Goal progress is calculated in C++ from the effective current amount divided by target amount, clamped between `0` and `100`.
 - Watchlist priority counts are calculated in C++ from the `priority` field.
-- Watchlist price signal badges and signal-first sorting are calculated in C++ from `current_price`, `buy_signal_price`, and `sell_signal_price`.
+- Watchlist price signal badges and signal-first sorting are calculated in C++ from `current_price`, `buy_signal_price`, `sell_signal_price`, and cached RSI/MACD values for Buy confirmation.
 - Recent transactions are loaded from `transactions` ordered by `transaction_date DESC, id DESC`.
 
 ## Dashboard Current Price Refresh

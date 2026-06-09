@@ -19,8 +19,33 @@
 #include <cmath>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
+
+class ScopedImGuiStyleColors {
+public:
+    ScopedImGuiStyleColors() = default;
+    ScopedImGuiStyleColors(const ScopedImGuiStyleColors&) = delete;
+    ScopedImGuiStyleColors& operator=(const ScopedImGuiStyleColors&) = delete;
+
+    ~ScopedImGuiStyleColors()
+    {
+        if (count_ > 0) {
+            ImGui::PopStyleColor(count_);
+        }
+    }
+
+    void push(ImGuiCol colorIndex, ImVec4 color)
+    {
+        ImGui::PushStyleColor(colorIndex, color);
+        ++count_;
+    }
+
+private:
+    int count_ = 0;
+};
 
 std::string trim(std::string value)
 {
@@ -137,12 +162,7 @@ ImVec4 statusColor(const std::string& status)
 
 void renderStatusBadge(const char* label, ImVec4 color)
 {
-    ImGui::PushStyleColor(ImGuiCol_Button, color);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, color);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, color);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.05f, 0.06f, 0.07f, 1.0f));
-    ImGui::Button(label, ImVec2(92.0f, 0.0f));
-    ImGui::PopStyleColor(4);
+    UiTheme::badge(label, color);
 }
 
 void renderResearchMetric(const char* label, const std::string& value, ImVec4 color)
@@ -165,16 +185,61 @@ std::string optionalTechnicalNumber(const std::optional<double>& value, int deci
     return value.has_value() ? Money::formatNumber(*value, decimals) : "N/A";
 }
 
+void renderTechnicalMetricCard(const char* label, const std::string& value, ImVec4 accent, ImVec2 size)
+{
+    UiTheme::pushPanelStyle();
+    ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(accent, 0.30f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 9.0f));
+    ImGui::BeginChild(label, size, true, ImGuiWindowFlags_NoScrollbar);
+    ImGui::PopStyleVar();
+
+    const ImVec2 min = ImGui::GetWindowPos();
+    const ImVec2 max(min.x + ImGui::GetWindowSize().x, min.y + ImGui::GetWindowSize().y);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(min, max, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::SurfaceMain, 0.44f)), 14.0f);
+    drawList->AddRectFilled(min, ImVec2(max.x, min.y + 2.0f), ImGui::GetColorU32(UiTheme::withAlpha(accent, 0.68f)), 14.0f, ImDrawFlags_RoundCornersTop);
+    drawList->AddRect(min, max, ImGui::GetColorU32(UiTheme::withAlpha(accent, 0.26f)), 14.0f);
+
+    ImGui::TextColored(UiTheme::TextMuted, "%s", label);
+    ImGui::SetWindowFontScale(1.08f);
+    ImGui::TextColored(value == "N/A" ? UiTheme::TextMuted : accent, "%s", value.c_str());
+    ImGui::SetWindowFontScale(1.0f);
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    UiTheme::popPanelStyle();
+}
+
+void renderTechnicalMetricGrid(const std::vector<std::pair<const char*, std::pair<std::string, ImVec4>>>& metrics)
+{
+    const float availableWidth = ImGui::GetContentRegionAvail().x;
+    const int columns = availableWidth > 680.0f ? 4 : (availableWidth > 460.0f ? 3 : 2);
+    const float gap = ImGui::GetStyle().ItemSpacing.x;
+    const float cardWidth = (availableWidth - gap * static_cast<float>(columns - 1)) / static_cast<float>(columns);
+    const ImVec2 cardSize(cardWidth, 66.0f);
+
+    for (std::size_t index = 0; index < metrics.size(); ++index) {
+        renderTechnicalMetricCard(metrics[index].first, metrics[index].second.first, metrics[index].second.second, cardSize);
+        if (static_cast<int>(index % static_cast<std::size_t>(columns)) != columns - 1) {
+            ImGui::SameLine();
+        }
+    }
+}
+
 void renderCurrentPriceHero(const MarketQuote& quote)
 {
     ImGui::TextColored(UiTheme::TextSecondary, "Current Price");
     ImGui::SetWindowFontScale(1.55f);
+    UiTheme::pushNumericFont();
     ImGui::TextColored(quote.currentPrice.has_value() ? UiTheme::TextPrimary : UiTheme::TextMuted, "%s", optionalMoney(quote.currentPrice).c_str());
+    UiTheme::popNumericFont();
     ImGui::SetWindowFontScale(1.0f);
 
     const std::string change = optionalMoney(quote.priceChangeDollar);
     const std::string changePercent = optionalPercent(quote.priceChangePercent, true);
+    UiTheme::pushNumericFont();
     ImGui::TextColored(movementColor(quote.priceChangeDollar), "%s   %s", change.c_str(), changePercent.c_str());
+    UiTheme::popNumericFont();
 }
 
 } // namespace
@@ -185,8 +250,9 @@ void StockResearchView::render(AppState& state,
     WatchlistRepository& watchlistRepository,
     const std::function<void()>& reloadData)
 {
-    ImGui::PushStyleColor(ImGuiCol_Text, UiTheme::TextPrimary);
-    ImGui::PushStyleColor(ImGuiCol_TextDisabled, UiTheme::TextMuted);
+    ScopedImGuiStyleColors pageColors;
+    pageColors.push(ImGuiCol_Text, UiTheme::TextPrimary);
+    pageColors.push(ImGuiCol_TextDisabled, UiTheme::TextMuted);
 
     UiTheme::sectionHeading("Stock Research", "Research data is informational and may be delayed. CSV import remains the portfolio update workflow.");
 
@@ -228,7 +294,6 @@ void StockResearchView::render(AppState& state,
     }
     TerminalPanel::end();
 
-    ImGui::PopStyleColor(2);
 }
 
 void StockResearchView::refreshCurrent(MarketDataService& marketDataService, AppState& state)
@@ -349,6 +414,7 @@ bool StockResearchView::addCurrentQuoteToWatchlist(AppState& state, WatchlistRep
 
 void StockResearchView::renderToolbar(AppState& state, MarketDataService& marketDataService, WatchlistRepository& watchlistRepository, const std::function<void()>& reloadData)
 {
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("ResearchToolbar", ImVec2(0.0f, 58.0f), true, ImGuiWindowFlags_NoScrollbar);
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(UiTheme::TextSecondary, "Ticker");
@@ -358,18 +424,22 @@ void StockResearchView::renderToolbar(AppState& state, MarketDataService& market
     searchSymbol_ = uppercase(searchSymbol_);
 
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Search / Fetch", ImVec2(120.0f, 0.0f)) || enterPressed) {
         fetchSymbol(marketDataService, state);
     }
+    UiTheme::popButtonStyle();
 
     ImGui::SameLine();
     const bool canAdd = hasResult_ && !lastResult_.quote.symbol.empty() && !watchlistContains(state, lastResult_.quote.symbol);
     if (!canAdd) {
         ImGui::BeginDisabled();
     }
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Add to Watchlist", ImVec2(135.0f, 0.0f))) {
         addCurrentQuoteToWatchlist(state, watchlistRepository, reloadData);
     }
+    UiTheme::popButtonStyle();
     if (!canAdd) {
         ImGui::EndDisabled();
     }
@@ -378,26 +448,32 @@ void StockResearchView::renderToolbar(AppState& state, MarketDataService& market
     if (!hasResult_) {
         ImGui::BeginDisabled();
     }
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Refresh", ImVec2(82.0f, 0.0f))) {
         fetchSymbol(marketDataService, state);
     }
+    UiTheme::popButtonStyle();
     if (!hasResult_) {
         ImGui::EndDisabled();
     }
 
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::TextMuted);
     if (ImGui::Button("Clear", ImVec2(70.0f, 0.0f))) {
         clearResult(state);
     }
+    UiTheme::popButtonStyle();
 
     ImGui::SameLine();
     ImGui::TextColored(UiTheme::TextMuted, "Data source: %s", marketDataService.providerName());
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 void StockResearchView::renderStatusStrip(const MarketDataService& marketDataService)
 {
     const std::string status = statusLabel(lastResult_, hasResult_);
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("ResearchStatusStrip", ImVec2(0.0f, 82.0f), true, ImGuiWindowFlags_NoScrollbar);
     renderStatusBadge(status.c_str(), statusColor(status));
     ImGui::SameLine();
@@ -415,6 +491,7 @@ void StockResearchView::renderStatusStrip(const MarketDataService& marketDataSer
         ImGui::TextColored(UiTheme::TextMuted, "Research data is informational only. It does not create trades, alerts, recommendations, or brokerage actions.");
     }
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 void StockResearchView::renderQuoteSummary()
@@ -477,22 +554,20 @@ void StockResearchView::renderHistoryPanel(MarketDataService& marketDataService,
     }
     for (const char* range : Ranges) {
         ImGui::PushID(range);
-        if (historyRange_ == range) {
-            ImGui::PushStyleColor(ImGuiCol_Button, UiTheme::Accent);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UiTheme::Accent);
-        }
+        const bool selected = historyRange_ == range;
+        UiTheme::pushButtonStyle(selected ? UiTheme::NeonMagenta : UiTheme::ElectricCyan);
         if (ImGui::Button(range, ImVec2(54.0f, 0.0f))) {
             fetchHistory(marketDataService, technicalIndicatorService, state, range);
         }
-        if (historyRange_ == range) {
-            ImGui::PopStyleColor(2);
-        }
+        UiTheme::popButtonStyle();
         ImGui::PopID();
         ImGui::SameLine();
     }
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Refresh History", ImVec2(132.0f, 0.0f))) {
         fetchHistory(marketDataService, technicalIndicatorService, state, historyRange_);
     }
+    UiTheme::popButtonStyle();
     if (!hasSymbol) {
         ImGui::EndDisabled();
     }
@@ -563,14 +638,16 @@ void StockResearchView::renderTechnicalsPanel(TechnicalIndicatorService& technic
     ImGui::TextColored(UiTheme::TextSecondary, "Calculated for: %s", snapshot.calculatedForDate.empty() ? "N/A" : snapshot.calculatedForDate.c_str());
     ImGui::TextColored(UiTheme::TextSecondary, "Calculated at: %s", snapshot.calculatedAt.empty() ? "N/A" : snapshot.calculatedAt.c_str());
     ImGui::Separator();
-    renderResearchMetric("RSI 14", optionalTechnicalNumber(snapshot.rsi14, 1));
-    renderResearchMetric("MACD Line", optionalTechnicalNumber(snapshot.macdLine, 4));
-    renderResearchMetric("MACD Signal", optionalTechnicalNumber(snapshot.macdSignal, 4));
-    renderResearchMetric("MACD Histogram", optionalTechnicalNumber(snapshot.macdHistogram, 4), movementColor(snapshot.macdHistogram));
-    renderResearchMetric("Latest Volume", formatLargeNumber(snapshot.latestVolume));
-    renderResearchMetric("20D Avg Volume", formatLargeNumber(snapshot.avgVolume20));
-    renderResearchMetric("50D Avg Volume", formatLargeNumber(snapshot.avgVolume50));
-    renderResearchMetric("Volume vs 20D Avg", optionalPercent(snapshot.volumeVsAvg20Percent, true), movementColor(snapshot.volumeVsAvg20Percent));
+    renderTechnicalMetricGrid({
+        { "RSI 14", { optionalTechnicalNumber(snapshot.rsi14, 1), UiTheme::ElectricCyan } },
+        { "MACD Line", { optionalTechnicalNumber(snapshot.macdLine, 4), UiTheme::ElectricCyan } },
+        { "MACD Signal", { optionalTechnicalNumber(snapshot.macdSignal, 4), UiTheme::NeonMagenta } },
+        { "MACD Histogram", { optionalTechnicalNumber(snapshot.macdHistogram, 4), movementColor(snapshot.macdHistogram) } },
+        { "Latest Volume", { formatLargeNumber(snapshot.latestVolume), UiTheme::ElectricCyan } },
+        { "20D Avg Volume", { formatLargeNumber(snapshot.avgVolume20), UiTheme::TextSecondary } },
+        { "50D Avg Volume", { formatLargeNumber(snapshot.avgVolume50), UiTheme::TextSecondary } },
+        { "Volume vs 20D Avg", { optionalPercent(snapshot.volumeVsAvg20Percent, true), movementColor(snapshot.volumeVsAvg20Percent) } },
+    });
 
     if (!snapshot.rsi14.has_value() || !snapshot.macdHistogram.has_value() || !snapshot.avgVolume20.has_value()) {
         ImGui::TextColored(UiTheme::TextMuted, "Not enough historical data to calculate every indicator.");

@@ -61,7 +61,11 @@ private:
     void backupDatabaseNow();
     bool moveDatabaseToFolder(const std::string& folder, std::string& message);
     void renderTopMenuBar();
+    void renderShellHeader();
+    void renderTopNavigationTabs();
     void renderAccountColumn();
+    void renderSidebarNavigation();
+    void renderSidebarNavigationItem(AppSection section, const char* icon, const char* label);
     void renderAccountInfoPanel();
     void renderAccountsPanel();
     void renderWatchlistPanel(int sidebarSlot);

@@ -73,37 +73,34 @@ void DividendsView::render(AppState& state, DividendRepository& repository, cons
     const float gap = ImGui::GetStyle().ItemSpacing.x;
     const float cardWidth = (availableWidth - (gap * 2.0f)) / 3.0f;
 
-    ImGui::BeginChild("DividendMonthCard", ImVec2(cardWidth, 74.0f), true);
-    ImGui::TextColored(UiTheme::MutedText, "This Month");
-    ImGui::TextColored(UiTheme::Amber, "%s", Money::format(summary.thisMonth).c_str());
-    ImGui::EndChild();
+    UiTheme::metricCard("This Month", Money::format(summary.thisMonth).c_str(), "Recorded income", UiTheme::Amber, ImVec2(cardWidth, 74.0f));
     ImGui::SameLine();
-    ImGui::BeginChild("DividendYearCard", ImVec2(cardWidth, 74.0f), true);
-    ImGui::TextColored(UiTheme::MutedText, "This Year");
-    ImGui::TextColored(UiTheme::Amber, "%s", Money::format(summary.thisYear).c_str());
-    ImGui::EndChild();
+    UiTheme::metricCard("This Year", Money::format(summary.thisYear).c_str(), "Recorded income", UiTheme::Amber, ImVec2(cardWidth, 74.0f));
     ImGui::SameLine();
-    ImGui::BeginChild("DividendLifetimeCard", ImVec2(cardWidth, 74.0f), true);
-    ImGui::TextColored(UiTheme::MutedText, "Lifetime");
-    ImGui::TextColored(UiTheme::Amber, "%s", Money::format(summary.lifetime).c_str());
-    ImGui::EndChild();
+    UiTheme::metricCard("Lifetime", Money::format(summary.lifetime).c_str(), "Recorded income", UiTheme::Amber, ImVec2(cardWidth, 74.0f));
 
     ImGui::Spacing();
 
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Add Dividend")) {
         openCreate();
         openEditorPopup_ = true;
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
     ImGui::InputTextWithHint("##DividendSearch", "Search dividends", &searchText_);
 
     ImGui::Spacing();
 
+    UiTheme::pushPanelStyle();
+    ImGui::BeginChild("DividendsTablePanel", ImVec2(0.0f, 0.0f), true);
     int visibleRows = 0;
     if (state.dividends.empty()) {
         UiTheme::emptyState("No dividends yet", "Add cash income as distributions arrive.");
-    } else if (ImGui::BeginTable("DividendsTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
+    } else {
+        UiTheme::pushTableStyle();
+        if (ImGui::BeginTable("DividendsTable", 8, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
         ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthFixed, 100.0f);
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 76.0f);
         ImGui::TableSetupColumn("Asset", ImGuiTableColumnFlags_WidthStretch, 1.2f);
@@ -131,32 +128,40 @@ void DividendsView::render(AppState& state, DividendRepository& repository, cons
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", accountName);
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::Amber, "%s", Money::format(dividend.amountReceived).c_str());
+            UiTheme::textRightAligned(Money::format(dividend.amountReceived).c_str(), UiTheme::Gain);
             ImGui::TableNextColumn();
-            ImGui::TextColored(dividend.reinvested ? UiTheme::Gain : UiTheme::MutedText, "%s", dividend.reinvested ? "Yes" : "No");
+            UiTheme::badge(dividend.reinvested ? "Yes" : "No", dividend.reinvested ? UiTheme::Gain : UiTheme::TextMuted);
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", dividend.updatedAt.c_str());
             ImGui::TableNextColumn();
             const std::string editButtonId = "Edit##edit_button_" + std::to_string(dividend.id);
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(dividend);
                 openEditorPopup_ = true;
             }
+            UiTheme::popButtonStyle();
             ImGui::SameLine();
             const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(dividend.id);
+            UiTheme::pushButtonStyle(UiTheme::Loss);
             if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = dividend.id;
                 deleteName_ = dividend.dateReceived + " " + dividend.ticker;
                 deletePopupId_ = dividendDeletePopupId(dividend.id);
                 openDeletePopup_ = true;
             }
+            UiTheme::popButtonStyle();
         }
 
         ImGui::EndTable();
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No dividends match the current search.");
         }
+        }
+        UiTheme::popTableStyle();
     }
+    ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     if (openEditorPopup_) {
         ImGui::OpenPopup(editorPopupId_.empty() ? DividendEditorPopup : editorPopupId_.c_str());

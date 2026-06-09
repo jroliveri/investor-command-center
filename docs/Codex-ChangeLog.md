@@ -1,5 +1,64 @@
 # Codex Change Log
 
+## 2026-06-04 Watchlist Buy Signal Technical Confirmation
+
+### Changed Files
+
+- `README.md`
+- `docs/Data-Model.md`
+- `docs/Roadmap.md`
+- `docs/Codex-ChangeLog.md`
+- `src/app/App.cpp`
+- `src/services/WatchlistSignalService.hpp`
+- `src/services/WatchlistSignalService.cpp`
+- `src/ui/WatchlistView.hpp`
+- `src/ui/WatchlistView.cpp`
+
+### Behavior Added
+
+- Added `WatchlistSignalResult` with signal, condition booleans, data availability flags, and reason text.
+- Updated Buy signal logic to require saved buy price target, RSI 40-60, and positive MACD histogram.
+- Kept Sell signal logic price-only for the saved sell price target.
+- Kept missing RSI/MACD data from activating Buy; affected items remain Hold unless Sell is active.
+- Updated Watchlist row badges and sidebar badges to use the same central signal calculation.
+- Added signal reason tooltips/details such as missing technical data, RSI waiting state, MACD not positive, and Sell target reached.
+- Preserved signal-first sorting order: Buy, Sell, Hold.
+- Kept CSV import, dashboard calculations, market data fetching, transactions, brokerage sync, and trading actions unchanged.
+
+### Validation
+
+- Built the Debug CMake preset with Visual Studio's bundled CMake executable.
+- Built the Release CMake preset with Visual Studio's bundled CMake executable.
+
+### Known Issues
+
+- Manual desktop click-through is still recommended to confirm local RSI/MACD cache scenarios against real watchlist data.
+- Yahoo Finance data remains informational and may be delayed, cached, unavailable, rate-limited, incomplete, or changed without notice.
+- Signals remain user-defined personal tracking helpers and are not financial advice or trading recommendations.
+
+## 2026-06-03 Stock Research Style Stack Guard
+
+### Changed Files
+
+- `docs/Codex-ChangeLog.md`
+- `src/ui/StockResearchView.cpp`
+
+### Behavior Added
+
+- Audited the tracked source tree for `ImPlot::PushStyleColor` and `ImPlot::PopStyleColor` calls; no tracked ImPlot style color calls are present in the current codebase.
+- Added a small scoped ImGui style color guard in Stock Research so local style color pushes are popped exactly once even if the render code changes later.
+- Replaced manual Stock Research page/status-badge `ImGui::PopStyleColor(count)` calls with scoped cleanup.
+- Kept market data, technical indicator calculations, CSV import, and watchlist signal logic unchanged.
+
+### Validation
+
+- Built the Debug CMake preset with Visual Studio's bundled CMake executable.
+- Built the Release CMake preset with Visual Studio's bundled CMake executable.
+
+### Known Issues
+
+- If the assertion still references `implot.cpp`, the active runtime may be loading stale/generated chart code outside the tracked source tree; clean `out/`/`build/` and rebuild before retesting.
+
 ## 2026-06-03 Technical Indicator Tracking
 
 ### Changed Files

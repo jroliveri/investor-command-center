@@ -17,6 +17,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -171,15 +172,12 @@ ImVec4 signalColor(const std::string& status)
     if (status == "Sell") {
         return UiTheme::Loss;
     }
-    return UiTheme::TextSecondary;
+    return UiTheme::ElectricCyan;
 }
 
-ImVec4 signalColor(const WatchlistItem& item)
+ImVec4 signalColor(const WatchlistSignalResult& signal)
 {
-    if (WatchlistSignalService::hasSignalWarning(item)) {
-        return UiTheme::Amber;
-    }
-    return signalColor(WatchlistSignalService::calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice));
+    return signalColor(signal.signal);
 }
 
 int prioritySortRank(const std::string& priority)
@@ -196,11 +194,35 @@ int prioritySortRank(const std::string& priority)
     return 3;
 }
 
-void sortWatchlistItemsBySignal(std::vector<WatchlistItem>& items)
+std::optional<TechnicalIndicatorSnapshot> cachedIndicatorsFor(TechnicalIndicatorService& technicalIndicatorService, const WatchlistItem& item)
 {
-    std::stable_sort(items.begin(), items.end(), [](const WatchlistItem& left, const WatchlistItem& right) {
-        const int leftSignalRank = WatchlistSignalService::signalSortRank(left);
-        const int rightSignalRank = WatchlistSignalService::signalSortRank(right);
+    std::string error;
+    return technicalIndicatorService.cachedSnapshot(item.ticker, "Yahoo Finance", error);
+}
+
+void showGlassTooltip(const std::string& text)
+{
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, UiTheme::withAlpha(UiTheme::GlassPanel, 0.96f));
+    ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(UiTheme::ElectricCyan, 0.42f));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
+    ImGui::BeginTooltip();
+    ImGui::TextWrapped("%s", text.c_str());
+    ImGui::EndTooltip();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+}
+
+void sortWatchlistItemsBySignal(std::vector<WatchlistItem>& items, TechnicalIndicatorService& technicalIndicatorService)
+{
+    std::map<int, WatchlistSignalResult> signalResults;
+    for (const WatchlistItem& item : items) {
+        signalResults[item.id] = WatchlistSignalService::calculateSignal(item, cachedIndicatorsFor(technicalIndicatorService, item));
+    }
+
+    std::stable_sort(items.begin(), items.end(), [&signalResults](const WatchlistItem& left, const WatchlistItem& right) {
+        const int leftSignalRank = WatchlistSignalService::signalSortRank(signalResults[left.id].signal);
+        const int rightSignalRank = WatchlistSignalService::signalSortRank(signalResults[right.id].signal);
         if (leftSignalRank != rightSignalRank) {
             return leftSignalRank < rightSignalRank;
         }
@@ -245,7 +267,7 @@ const Watchlist* findWatchlist(const std::vector<Watchlist>& watchlists, int wat
     return result == watchlists.end() ? nullptr : &(*result);
 }
 
-std::vector<WatchlistItem> itemsForWatchlist(const AppState& state, int watchlistId)
+std::vector<WatchlistItem> itemsForWatchlist(const AppState& state, int watchlistId, TechnicalIndicatorService& technicalIndicatorService)
 {
     std::vector<WatchlistItem> items;
     for (const WatchlistItem& item : state.watchlist) {
@@ -253,7 +275,7 @@ std::vector<WatchlistItem> itemsForWatchlist(const AppState& state, int watchlis
             items.push_back(item);
         }
     }
-    sortWatchlistItemsBySignal(items);
+    sortWatchlistItemsBySignal(items, technicalIndicatorService);
     return items;
 }
 
@@ -341,15 +363,18 @@ void WatchlistView::render(AppState& state,
 
 void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& repository, const std::function<void()>& reloadData)
 {
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("WatchlistManagerPanel", ImVec2(0.0f, 250.0f), true);
-    ImGui::TextColored(UiTheme::Accent, "Watchlist Manager");
+    ImGui::TextColored(UiTheme::TextPrimary, "Watchlist Manager");
     ImGui::TextWrapped("Create and organize named local watchlists. Deactivated watchlists are hidden from normal watchlist and sidebar views.");
     ImGui::Separator();
 
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Create Watchlist", ImVec2(150.0f, 0.0f))) {
         openWatchlistCreate(state);
         openWatchlistEditorPopup_ = true;
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
     ImGui::Checkbox("Show inactive", &showInactiveWatchlists_);
 
@@ -357,11 +382,13 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
     if (visible.empty()) {
         UiTheme::emptyState("No watchlists yet", "Create a watchlist to start grouping local ticker ideas.");
         ImGui::EndChild();
+        UiTheme::popPanelStyle();
         return;
     }
 
     ImGui::Spacing();
-    if (ImGui::BeginTable("WatchlistManagerTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp)) {
+    UiTheme::pushTableStyle();
+    if (ImGui::BeginTable("WatchlistManagerTable", 8, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 180.0f);
         ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 76.0f);
@@ -382,12 +409,12 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
             ImGui::TableNextColumn();
             ImGui::Text("%s", watchlist.name.c_str());
             if (watchlist.id == selectedWatchlistId_) {
-                ImGui::TextColored(UiTheme::TextMuted, "Selected");
+                UiTheme::badge("Selected", UiTheme::NeonMagenta);
             }
             ImGui::TableNextColumn();
             ImGui::TextWrapped("%s", watchlist.description.empty() ? "N/A" : watchlist.description.c_str());
             ImGui::TableNextColumn();
-            ImGui::TextColored(watchlist.isActive ? UiTheme::TextSuccess : UiTheme::TextMuted, "%s", watchlist.isActive ? "Active" : "Inactive");
+            UiTheme::badge(watchlist.isActive ? "Active" : "Inactive", watchlist.isActive ? UiTheme::Gain : UiTheme::TextMuted);
             ImGui::TableNextColumn();
             if (!watchlist.isActive) {
                 ImGui::TextColored(UiTheme::TextMuted, "Not shown");
@@ -425,14 +452,15 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
             }
             ImGui::TableNextColumn();
             if (countError.empty()) {
-                ImGui::Text("%d", itemCount);
+                UiTheme::textRightAligned(std::to_string(itemCount).c_str());
             } else {
-                ImGui::TextColored(UiTheme::TextWarning, "N/A");
+                UiTheme::textRightAligned("N/A", UiTheme::TextWarning);
             }
             ImGui::TableNextColumn();
             if (index == 0) {
                 ImGui::BeginDisabled();
             }
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton("Up")) {
                 std::vector<Watchlist> reordered = visible;
                 std::swap(reordered[index], reordered[index - 1]);
@@ -444,6 +472,7 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
                     state.setStatus("Could not update watchlist order: " + error, true);
                 }
             }
+            UiTheme::popButtonStyle();
             if (index == 0) {
                 ImGui::EndDisabled();
             }
@@ -451,6 +480,7 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
             if (index + 1 >= visible.size()) {
                 ImGui::BeginDisabled();
             }
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton("Down")) {
                 std::vector<Watchlist> reordered = visible;
                 std::swap(reordered[index], reordered[index + 1]);
@@ -462,11 +492,13 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
                     state.setStatus("Could not update watchlist order: " + error, true);
                 }
             }
+            UiTheme::popButtonStyle();
             if (index + 1 >= visible.size()) {
                 ImGui::EndDisabled();
             }
             ImGui::TableNextColumn();
             if (watchlist.isActive) {
+                UiTheme::pushButtonStyle(UiTheme::Loss);
                 if (ImGui::SmallButton("Deactivate")) {
                     deactivateWatchlistId_ = watchlist.id;
                     deactivateWatchlistName_ = watchlist.name;
@@ -474,6 +506,7 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
                     deactivateWatchlistPopupId_ = watchlistDeactivatePopupId(watchlist.id);
                     openDeactivateWatchlistPopup_ = true;
                 }
+                UiTheme::popButtonStyle();
             } else if (ImGui::SmallButton("Activate")) {
                 Watchlist updated = watchlist;
                 updated.isActive = true;
@@ -488,17 +521,21 @@ void WatchlistView::drawWatchlistManager(AppState& state, WatchlistRepository& r
             }
             ImGui::TableNextColumn();
             const std::string editButtonId = "Edit##watchlist_group_edit_button_" + std::to_string(watchlist.id);
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton(editButtonId.c_str())) {
                 openWatchlistEdit(watchlist);
                 openWatchlistEditorPopup_ = true;
             }
+            UiTheme::popButtonStyle();
             ImGui::PopID();
         }
 
         ImGui::EndTable();
     }
+    UiTheme::popTableStyle();
 
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 void WatchlistView::drawWatchlistItems(AppState& state,
@@ -507,8 +544,9 @@ void WatchlistView::drawWatchlistItems(AppState& state,
     TechnicalIndicatorService& technicalIndicatorService,
     const std::function<void()>& reloadData)
 {
+    UiTheme::pushPanelStyle();
     ImGui::BeginChild("WatchlistItemsPanel", ImVec2(0.0f, 0.0f), true);
-    ImGui::TextColored(UiTheme::Accent, "Watchlist Items");
+    ImGui::TextColored(UiTheme::TextPrimary, "Watchlist Items");
     ImGui::TextWrapped("Select an active watchlist, then add or edit the local symbols assigned to it.");
     ImGui::Separator();
 
@@ -516,6 +554,7 @@ void WatchlistView::drawWatchlistItems(AppState& state,
     if (active.empty()) {
         UiTheme::emptyState("No active watchlists", "Create or reactivate a watchlist before adding items.");
         ImGui::EndChild();
+        UiTheme::popPanelStyle();
         return;
     }
 
@@ -538,7 +577,7 @@ void WatchlistView::drawWatchlistItems(AppState& state,
         ImGui::EndCombo();
     }
 
-    std::vector<WatchlistItem> selectedItems = itemsForWatchlist(state, selectedWatchlistId_);
+    std::vector<WatchlistItem> selectedItems = itemsForWatchlist(state, selectedWatchlistId_, technicalIndicatorService);
     const WatchlistSummary summary = PortfolioCalculator::calculateWatchlist(selectedItems);
     ImGui::SameLine();
     ImGui::TextColored(UiTheme::Loss, "High: %d", summary.highPriority);
@@ -548,28 +587,38 @@ void WatchlistView::drawWatchlistItems(AppState& state,
     ImGui::TextColored(UiTheme::MutedText, "Low: %d", summary.lowPriority);
 
     ImGui::Spacing();
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Add Watchlist Item", ImVec2(150.0f, 0.0f))) {
         openCreate(selectedWatchlistId_);
         openEditorPopup_ = true;
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Refresh Selected Watchlist", ImVec2(194.0f, 0.0f))) {
-        refreshPrices(state, repository, marketDataService, selectedItems, selectedName, reloadData);
+        refreshPrices(state, repository, marketDataService, technicalIndicatorService, selectedItems, selectedName, reloadData);
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
     if (ImGui::Button("Refresh All Watchlists", ImVec2(180.0f, 0.0f))) {
-        refreshPrices(state, repository, marketDataService, state.watchlist, "All Watchlists", reloadData);
+        refreshPrices(state, repository, marketDataService, technicalIndicatorService, state.watchlist, "All Watchlists", reloadData);
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
     ImGui::InputTextWithHint("##WatchlistSearch", "Search selected watchlist", &searchText_);
+    UiTheme::pushButtonStyle(UiTheme::SoftBlue);
     if (ImGui::Button("Refresh History for Selected Watchlist", ImVec2(250.0f, 0.0f))) {
         refreshHistory(state, marketDataService, technicalIndicatorService, selectedItems, selectedName);
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::SoftBlue);
     if (ImGui::Button("Refresh History for All Watchlists", ImVec2(226.0f, 0.0f))) {
         refreshHistory(state, marketDataService, technicalIndicatorService, state.watchlist, "All Watchlists");
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
     ImGui::Checkbox("Show Technicals", &showTechnicals_);
 
@@ -595,7 +644,9 @@ void WatchlistView::drawWatchlistItems(AppState& state,
     int visibleRows = 0;
     if (selectedItems.empty()) {
         UiTheme::emptyState("No items in this watchlist", "Add symbols to this named watchlist when you want to monitor them manually.");
-    } else if (ImGui::BeginTable("WatchlistTable", showTechnicals_ ? 13 : 10, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
+    } else {
+        UiTheme::pushTableStyle();
+        if (ImGui::BeginTable("WatchlistTable", showTechnicals_ ? 13 : 10, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 76.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 1.3f);
         ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthFixed, 76.0f);
@@ -629,18 +680,17 @@ void WatchlistView::drawWatchlistItems(AppState& state,
             ImGui::TableNextColumn();
             drawPriorityBadge(item.priority);
             ImGui::TableNextColumn();
-            ImGui::Text("%s", currentPriceText(item.currentPrice).c_str());
+            UiTheme::textRightAligned(currentPriceText(item.currentPrice).c_str());
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::Gain, "%s", priceOrNotSet(item.buySignalPrice).c_str());
+            UiTheme::textRightAligned(priceOrNotSet(item.buySignalPrice).c_str(), UiTheme::Gain);
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::Loss, "%s", priceOrNotSet(item.sellSignalPrice).c_str());
+            UiTheme::textRightAligned(priceOrNotSet(item.sellSignalPrice).c_str(), UiTheme::Loss);
             ImGui::TableNextColumn();
-            drawSignalBadge(item);
+            const std::optional<TechnicalIndicatorSnapshot> indicators = cachedIndicatorsFor(technicalIndicatorService, item);
+            drawSignalBadge(item, indicators);
             if (showTechnicals_) {
-                std::string indicatorError;
-                const std::optional<TechnicalIndicatorSnapshot> indicators = technicalIndicatorService.cachedSnapshot(item.ticker, "Yahoo Finance", indicatorError);
                 ImGui::TableNextColumn();
-                ImGui::TextColored(indicators.has_value() && indicators->rsi14.has_value() ? UiTheme::TextPrimary : UiTheme::TextMuted,
+                ImGui::TextColored(indicators.has_value() && indicators->rsi14.has_value() ? UiTheme::ElectricCyan : UiTheme::TextMuted,
                     "%s",
                     indicators.has_value() ? optionalNumberText(indicators->rsi14, 1).c_str() : "N/A");
                 ImGui::TableNextColumn();
@@ -658,18 +708,22 @@ void WatchlistView::drawWatchlistItems(AppState& state,
             ImGui::TextColored(UiTheme::TextMuted, "%s", emptyIfBlank(item.priceSource));
             ImGui::TableNextColumn();
             const std::string editButtonId = "Edit##edit_button_" + std::to_string(item.id);
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(item);
                 openEditorPopup_ = true;
             }
+            UiTheme::popButtonStyle();
             ImGui::SameLine();
             const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(item.id);
+            UiTheme::pushButtonStyle(UiTheme::Loss);
             if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = item.id;
                 deleteName_ = item.ticker + " - " + item.assetName;
                 deletePopupId_ = watchlistDeletePopupId(item.id);
                 openDeletePopup_ = true;
             }
+            UiTheme::popButtonStyle();
             ImGui::PopID();
         }
 
@@ -677,9 +731,12 @@ void WatchlistView::drawWatchlistItems(AppState& state,
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No watchlist items match the current search.");
         }
+        }
+        UiTheme::popTableStyle();
     }
 
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 void WatchlistView::openWatchlistCreate(const AppState& state)
@@ -858,7 +915,9 @@ void WatchlistView::drawEditor(AppState& state, WatchlistRepository& repository,
     draft_.signalStatus = WatchlistSignalService::calculateSignalStatus(draft_.currentPrice, draft_.buySignalPrice, draft_.sellSignalPrice);
 
     ImGui::Separator();
-    ImGui::TextColored(signalColor(draft_), "Current signal: %s", draft_.signalStatus.c_str());
+    const WatchlistSignalResult draftSignal = WatchlistSignalService::calculateSignal(draft_, std::nullopt);
+    ImGui::TextColored(signalColor(draftSignal), "Current signal: %s", draftSignal.signal.c_str());
+    ImGui::TextColored(UiTheme::TextMuted, "%s", draftSignal.reasonText.c_str());
     if (draft_.lastPriceRefreshAt.empty()) {
         ImGui::TextColored(UiTheme::TextMuted, "Last refresh: N/A");
     } else {
@@ -934,12 +993,13 @@ void WatchlistView::drawDeleteConfirmation(AppState& state, WatchlistRepository&
 void WatchlistView::refreshPrices(AppState& state,
     WatchlistRepository& repository,
     MarketDataService& marketDataService,
+    TechnicalIndicatorService& technicalIndicatorService,
     const std::vector<WatchlistItem>& items,
     const std::string& watchlistName,
     const std::function<void()>& reloadData)
 {
     std::string error;
-    WatchlistPriceRefreshStatus refreshStatus = WatchlistSignalService::refreshPrices(items, marketDataService, repository, error);
+    WatchlistPriceRefreshStatus refreshStatus = WatchlistSignalService::refreshPrices(items, marketDataService, technicalIndicatorService, repository, error);
     reloadData();
     state.watchlistPriceRefreshStatus = refreshStatus;
 
@@ -1042,28 +1102,25 @@ void WatchlistView::drawPriorityBadge(const std::string& priority) const
         color = UiTheme::MutedText;
     }
 
-    ImGui::TextColored(color, "%s", priority.c_str());
+    UiTheme::badge(priority.c_str(), color);
 }
 
-void WatchlistView::drawSignalBadge(const WatchlistItem& item)
+void WatchlistView::drawSignalBadge(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators)
 {
-    const std::string status = WatchlistSignalService::calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice);
-    const ImVec4 color = signalColor(item);
+    const WatchlistSignalResult signal = WatchlistSignalService::calculateSignal(item, technicalIndicators);
+    const ImVec4 color = signalColor(signal);
 
-    ImGui::PushStyleColor(ImGuiCol_Text, color);
-    if (ImGui::SmallButton((status + "##signal_badge_" + std::to_string(item.id)).c_str())) {
+    UiTheme::pushBadgeStyle(color);
+    if (ImGui::SmallButton((signal.signal + "##signal_badge_" + std::to_string(item.id)).c_str())) {
         signalNoticeTicker_ = item.ticker;
-        signalNoticeStatus_ = status;
-        if (WatchlistSignalService::hasSignalWarning(item)) {
-            signalNoticeDetail_ = "Both saved thresholds match the current price. Review your watchlist levels if this was not intentional.";
-        } else if (item.currentPrice <= 0.0) {
-            signalNoticeDetail_ = "No current price is available, so the visible signal is Hold.";
-        } else {
-            signalNoticeDetail_.clear();
-        }
+        signalNoticeStatus_ = signal.signal;
+        signalNoticeDetail_ = signal.reasonText;
         openSignalNoticePopup_ = true;
     }
-    ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered() && !signal.reasonText.empty()) {
+        showGlassTooltip(signal.reasonText);
+    }
+    UiTheme::popBadgeStyle();
 }
 
 void WatchlistView::drawSignalNoticePopup()
@@ -1077,7 +1134,7 @@ void WatchlistView::drawSignalNoticePopup()
     ImGui::TextColored(signalColor(signalNoticeStatus_), "%s", signalNoticeStatus_.c_str());
     ImGui::TextColored(UiTheme::TextMuted, "%s", signalNoticeTicker_.empty() ? "Selected watchlist item" : signalNoticeTicker_.c_str());
     ImGui::Spacing();
-    ImGui::TextWrapped("This is your saved price signal based on your own watchlist thresholds. It is not financial advice or a trade action.");
+    ImGui::TextWrapped("This is your saved price signal based on your own watchlist thresholds and local technical filters. It is not financial advice or a trade action.");
     if (!signalNoticeDetail_.empty()) {
         ImGui::TextColored(UiTheme::Amber, "%s", signalNoticeDetail_.c_str());
     }

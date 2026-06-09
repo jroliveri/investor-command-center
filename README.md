@@ -17,13 +17,13 @@ Bug reports are welcome. Feature requests may be considered, but this is not int
 ## Current App
 
 - Native Win32 desktop shell using Dear ImGui with a DirectX 11 renderer
-- Trading-terminal inspired desktop shell with compact top menu navigation, morning snapshot sidebar, and modular workspace panels
+- Modern finance command-center shell with compact top menu navigation, portfolio sidebar, and modular workspace panels
 - Top menu access for Dashboard, Accounts, Holdings, Transactions, Dividends, Goals, Watchlist, Stock Research, Reports, Import CSV, and Settings
 - Active page shown in the workspace header while the sidebar focuses on daily account/watchlist context
 - Dashboard performance panels based on local accounts, holdings, transactions, dividends, and portfolio snapshots
 - Customizable Dashboard layout with local reorder, hide/show, and reset controls
 - Controlled Dashboard chart panels for allocation, performance, and income/gains with local data, time-range, and chart-type preferences
-- Theme support for Dark Command Center and Light Trading Terminal
+- Theme support for Dark Finance Command and Light Trading View
 - Account create, edit, and delete workflow
 - Holding create, edit, and delete workflow
 - Transaction create, edit, delete, and search workflow with buy/sell fields, fees, and realized gain/loss tracking
@@ -64,13 +64,13 @@ Dashboard daily, monthly, and yearly movement is based on local portfolio snapsh
 
 Dashboard layout preferences are stored locally in SQLite. Reordering or hiding dashboard sections changes only the view; it does not change portfolio calculations or stored financial records. `Reset Dashboard Layout` restores the default view.
 
-The Dashboard uses compact terminal-style panels for portfolio review, movement, holdings, recent activity, realized gains, dividends, snapshot history, and allocation views. It remains a personal tracking dashboard and does not provide trading recommendations.
+The Dashboard uses modern finance panels for portfolio review, movement, holdings, recent activity, realized gains, dividends, snapshot history, and allocation views. It remains a personal tracking dashboard and does not provide trading recommendations.
 
 Navigation is handled from the top menu bar. The left rail is a morning snapshot panel for portfolio totals, account summaries, two compact watchlist slices, and local version/database information. It is not a page navigation menu.
 
 Dashboard chart preferences are stored locally in SQLite. The chart panels can switch between common investing views: allocation bars for asset/account/holding allocation, line charts for snapshot-based performance, and monthly bar charts for dividends or realized gains. These charts are for personal review only and do not provide financial advice.
 
-Theme preference is stored locally in SQLite. The Light Trading Terminal theme uses light gray panels, thin borders, subtle blue highlights, and green/red financial movement colors.
+Theme preference is stored locally in SQLite. The Light Trading View theme uses light gray panels, thin borders, subtle blue highlights, and green/red financial movement colors.
 
 Date fields use compact calendar picker controls and are stored in SQLite as `YYYY-MM-DD` text. Manual date entry remains available, but invalid dates are rejected before saving.
 
@@ -84,7 +84,7 @@ Watchlists can be organized into named local groups. Existing watchlist items mi
 
 Two active watchlists can be assigned to the morning sidebar as Sidebar Watchlist 1 and Sidebar Watchlist 2. The sidebar uses the assigned watchlist names as section titles and shows up to 10 rows from each selected watchlist. Sidebar assignment is stored locally in SQLite and only affects display.
 
-Watchlist price signals are personal saved levels. The Watchlist page can refresh either the selected watchlist or all active watchlists, and the Research menu can explicitly refresh watchlist prices through the same market data provider used by Stock Research. The Watchlist page can also refresh daily historical OHLCV cache rows for selected or all active watchlist symbols and calculate optional RSI/MACD/volume context. Refreshes update local watchlist price metadata and show simplified `Buy`, `Sell`, or `Hold` user signals. Buy and Sell rows sort above Hold rows on the Watchlist page and in sidebar watchlists. Technical indicators do not change these signals. These signals are not recommendations, trading advice, brokerage actions, or money movement.
+Watchlist price signals are personal saved levels. The Watchlist page can refresh either the selected watchlist or all active watchlists, and the Research menu can explicitly refresh watchlist prices through the same market data provider used by Stock Research. The Watchlist page can also refresh daily historical OHLCV cache rows for selected or all active watchlist symbols and calculate optional RSI/MACD/volume context. Refreshes update local watchlist price metadata and show simplified `Buy`, `Sell`, or `Hold` user signals. A Buy signal requires the saved buy price target plus RSI 40-60 and a positive MACD histogram from cached technical indicators. Sell remains based on the saved sell price target. These signals are not recommendations, trading advice, brokerage actions, or money movement.
 
 Database backups are local-only. Configure a backup folder in Settings, then use `Back Up Now` from Settings or the sidebar database area to create a timestamped SQLite backup file. Backup reminders are stored locally and shown inside the app; there are no OS notifications, cloud backup, or sync features.
 
