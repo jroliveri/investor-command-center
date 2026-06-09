@@ -4,6 +4,11 @@
 #include "app/AppState.hpp"
 #include "repositories/AppSettingsRepository.hpp"
 #include "repositories/CapitalGainAllocationRepository.hpp"
+<<<<<<< Updated upstream
+=======
+#include "services/DatabaseBackupService.hpp"
+#include "services/SignalRulesService.hpp"
+>>>>>>> Stashed changes
 #include "ui/UiTheme.hpp"
 #include "util/Money.hpp"
 
@@ -25,6 +30,15 @@ void disabledAction(const char* label, const char* note)
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::TextColored(UiTheme::MutedText, "%s", note);
+}
+
+void signalRuleSummaryLine(const char* label, const std::string& value, ImVec4 color)
+{
+    ImGui::TextColored(UiTheme::MutedText, "%s", label);
+    ImGui::SameLine(210.0f);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+    ImGui::TextColored(color, "%s", value.c_str());
+    ImGui::PopTextWrapPos();
 }
 
 double activeAllocationTotal(const std::vector<CapitalGainAllocationRule>& rules)
@@ -163,6 +177,9 @@ void SettingsView::render(AppState& state,
     ImGui::EndChild();
 
     ImGui::Spacing();
+    renderSignalRules(state, settingsRepository);
+
+    ImGui::Spacing();
     renderCapitalGainAllocation(state, allocationRepository, reloadData);
 
     ImGui::Spacing();
@@ -177,6 +194,150 @@ void SettingsView::render(AppState& state,
     disabledAction("Export Goals CSV", "Planned local file export");
     disabledAction("Export Watchlist CSV", "Planned local file export");
     ImGui::EndChild();
+}
+
+void SettingsView::renderSignalRules(AppState& state, AppSettingsRepository& settingsRepository)
+{
+    if (!signalRulesDraftInitialized_ || (!signalRulesDraftDirty_ && !(signalRulesDraft_ == state.signalRules))) {
+        signalRulesDraft_ = state.signalRules;
+        signalRulesDraftInitialized_ = true;
+        signalRulesDraftDirty_ = false;
+    }
+
+    UiTheme::pushPanelStyle();
+    ImGui::BeginChild("SignalRules", ImVec2(0.0f, 470.0f), true);
+    ImGui::Text("Signal Rules");
+    ImGui::Separator();
+    ImGui::TextWrapped("Review and fine-tune the thresholds used by the existing Watchlist Buy/Sell/Hold signal engine. Defaults match the original hardcoded behavior.");
+
+    ImGui::Spacing();
+    const std::string rsiRange = Money::formatNumber(signalRulesDraft_.rsiBuyMin, 1) + " to " + Money::formatNumber(signalRulesDraft_.rsiBuyMax, 1);
+    const std::string macdRule = "MACD histogram greater than " + Money::formatNumber(signalRulesDraft_.macdHistogramMin, 4);
+    signalRuleSummaryLine("Buy rule", "Price is at or below Buy Level, RSI is within " + rsiRange + ", and " + macdRule + ".", UiTheme::Gain);
+    signalRuleSummaryLine("Sell rule", "Price is at or above Sell Level. Sell remains price-only.", UiTheme::Loss);
+    signalRuleSummaryLine("Hold rule", "Current price is missing, levels are not reached, indicators are missing, or technical confirmation is not met.", UiTheme::ElectricCyan);
+    const std::string momentumLabel = "Momentum " + std::to_string(signalRulesDraft_.momentumLookbackSessions) + "D";
+    signalRuleSummaryLine(momentumLabel.c_str(), "Watchlist display-only: latest close is compared with the close from the configured lookback. It does not change Buy/Sell/Hold.", UiTheme::TextSecondary);
+
+    ImGui::Spacing();
+    UiTheme::pushTableStyle();
+    if (ImGui::BeginTable("SignalRulesInputs", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("RSI");
+        ImGui::TableSetupColumn("MACD");
+        ImGui::TableSetupColumn("Momentum");
+        ImGui::TableNextRow();
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(UiTheme::TextPrimary, "RSI Rule");
+        ImGui::TextWrapped("Buy confirmation accepts RSI only inside this range.");
+        ImGui::SetNextItemWidth(140.0f);
+        if (ImGui::InputDouble("Lower##SignalRulesRsiLower", &signalRulesDraft_.rsiBuyMin, 0.0, 0.0, "%.1f")) {
+            signalRulesDraftDirty_ = true;
+            signalRulesMessage_.clear();
+        }
+        ImGui::SetNextItemWidth(140.0f);
+        if (ImGui::InputDouble("Upper##SignalRulesRsiUpper", &signalRulesDraft_.rsiBuyMax, 0.0, 0.0, "%.1f")) {
+            signalRulesDraftDirty_ = true;
+            signalRulesMessage_.clear();
+        }
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(UiTheme::TextPrimary, "MACD Rule");
+        ImGui::TextWrapped("Buy confirmation uses the MACD histogram threshold, not the MACD signal line.");
+        ImGui::SetNextItemWidth(170.0f);
+        if (ImGui::InputDouble("Histogram Minimum##SignalRulesMacdHistogram", &signalRulesDraft_.macdHistogramMin, 0.0, 0.0, "%.4f")) {
+            signalRulesDraftDirty_ = true;
+            signalRulesMessage_.clear();
+        }
+        ImGui::TextColored(UiTheme::MutedText, "Default 0.0000 means histogram must be positive.");
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(UiTheme::TextPrimary, "Momentum Rule");
+        ImGui::TextWrapped("Watchlist Momentum 7D is display-only by default and uses historical closes.");
+        ImGui::SetNextItemWidth(170.0f);
+        if (ImGui::InputInt("Lookback Sessions##SignalRulesMomentumLookback", &signalRulesDraft_.momentumLookbackSessions)) {
+            signalRulesDraftDirty_ = true;
+            signalRulesMessage_.clear();
+        }
+        ImGui::TextColored(UiTheme::MutedText, "Rising when latest close is greater than the comparison close.");
+
+        ImGui::EndTable();
+    }
+    UiTheme::popTableStyle();
+
+    ImGui::Spacing();
+    signalRuleSummaryLine("Signal output", "Buy, Sell, and Hold labels keep the same decision structure. Saved watchlist signal statuses update on the next Watchlist price refresh.", UiTheme::TextSecondary);
+
+    std::string validationMessage;
+    const bool draftValid = SignalRulesService::validate(signalRulesDraft_, validationMessage);
+    if (!signalRulesMessage_.empty()) {
+        ImGui::TextColored(signalRulesMessageIsError_ ? UiTheme::Loss : UiTheme::Gain, "%s", signalRulesMessage_.c_str());
+    } else if (signalRulesDraftDirty_ && !draftValid) {
+        ImGui::TextColored(UiTheme::Loss, "%s", validationMessage.c_str());
+    } else if (signalRulesDraftDirty_) {
+        ImGui::TextColored(UiTheme::Amber, "Unsaved signal rule changes.");
+    } else {
+        ImGui::TextColored(UiTheme::MutedText, "Active signal rules are saved locally in app settings.");
+    }
+
+    ImGui::Spacing();
+    const bool hasChanges = signalRulesDraftDirty_ && !(signalRulesDraft_ == state.signalRules);
+    if (!hasChanges) {
+        ImGui::BeginDisabled();
+    }
+    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
+    if (ImGui::Button("Save Changes", ImVec2(140.0f, 0.0f))) {
+        std::string error;
+        if (SignalRulesService::save(settingsRepository, signalRulesDraft_, error)) {
+            state.signalRules = signalRulesDraft_;
+            signalRulesDraftDirty_ = false;
+            signalRulesMessage_ = "Signal rules saved. Watchlist badges use them immediately; stored statuses update on the next price refresh.";
+            signalRulesMessageIsError_ = false;
+            state.setStatus("Signal rules saved locally.");
+        } else {
+            signalRulesMessage_ = error;
+            signalRulesMessageIsError_ = true;
+        }
+    }
+    UiTheme::popButtonStyle();
+    if (!hasChanges) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    if (!hasChanges) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
+        signalRulesDraft_ = state.signalRules;
+        signalRulesDraftDirty_ = false;
+        signalRulesMessage_ = "Signal rule changes discarded.";
+        signalRulesMessageIsError_ = false;
+    }
+    if (!hasChanges) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
+    if (ImGui::Button("Reset to Defaults", ImVec2(160.0f, 0.0f))) {
+        std::string error;
+        if (SignalRulesService::resetToDefaults(settingsRepository, error)) {
+            signalRulesDraft_ = SignalRulesService::defaults();
+            state.signalRules = signalRulesDraft_;
+            signalRulesDraftDirty_ = false;
+            signalRulesMessage_ = "Signal rules reset to defaults. Watchlist badges use them immediately; stored statuses update on the next price refresh.";
+            signalRulesMessageIsError_ = false;
+            state.setStatus("Signal rules reset to defaults.");
+        } else {
+            signalRulesMessage_ = error;
+            signalRulesMessageIsError_ = true;
+        }
+    }
+    UiTheme::popButtonStyle();
+
+    ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAllocationRepository& allocationRepository, const std::function<void()>& reloadData)

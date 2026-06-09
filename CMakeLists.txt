@@ -92,6 +92,11 @@ set(APP_SOURCES
     src/models/ImportBatch.hpp
     src/models/MarketQuote.hpp
     src/models/PortfolioSnapshot.hpp
+<<<<<<< Updated upstream
+=======
+    src/models/SignalRules.hpp
+    src/models/TechnicalIndicatorSnapshot.hpp
+>>>>>>> Stashed changes
     src/models/Transaction.hpp
     src/models/Dividend.hpp
     src/models/Goal.hpp
@@ -145,6 +150,15 @@ set(APP_SOURCES
     src/services/MarketDataProvider.cpp
     src/services/MarketDataService.hpp
     src/services/MarketDataService.cpp
+<<<<<<< Updated upstream
+=======
+    src/services/SignalRulesService.hpp
+    src/services/SignalRulesService.cpp
+    src/services/TechnicalIndicatorService.hpp
+    src/services/TechnicalIndicatorService.cpp
+    src/services/WatchlistIndicatorDisplay.hpp
+    src/services/WatchlistIndicatorDisplay.cpp
+>>>>>>> Stashed changes
     src/services/WatchlistSignalService.hpp
     src/services/WatchlistSignalService.cpp
     src/services/YahooFinanceProvider.hpp
@@ -215,3 +229,60 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source" FILES ${APP_
 set_property(TARGET InvestorCommandCenter PROPERTY
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+
+enable_testing()
+
+add_executable(InvestorCommandCenterTests
+    tests/WatchlistIndicatorDisplayTests.cpp
+    src/db/Database.hpp
+    src/db/Database.cpp
+    src/db/Migrations.hpp
+    src/db/Migrations.cpp
+    src/models/MarketPriceHistory.hpp
+    src/models/MarketQuote.hpp
+    src/models/SignalRules.hpp
+    src/models/TechnicalIndicatorSnapshot.hpp
+    src/models/Watchlist.hpp
+    src/models/WatchlistItem.hpp
+    src/models/WatchlistPriceRefresh.hpp
+    src/repositories/MarketPriceHistoryRepository.hpp
+    src/repositories/MarketPriceHistoryRepository.cpp
+    src/repositories/AppSettingsRepository.hpp
+    src/repositories/AppSettingsRepository.cpp
+    src/repositories/MarketQuoteCacheRepository.hpp
+    src/repositories/MarketQuoteCacheRepository.cpp
+    src/repositories/TechnicalIndicatorCacheRepository.hpp
+    src/repositories/TechnicalIndicatorCacheRepository.cpp
+    src/repositories/WatchlistRepository.hpp
+    src/repositories/WatchlistRepository.cpp
+    src/services/MarketDataProvider.hpp
+    src/services/MarketDataProvider.cpp
+    src/services/MarketDataService.hpp
+    src/services/MarketDataService.cpp
+    src/services/SignalRulesService.hpp
+    src/services/SignalRulesService.cpp
+    src/services/TechnicalIndicatorService.hpp
+    src/services/TechnicalIndicatorService.cpp
+    src/services/WatchlistIndicatorDisplay.hpp
+    src/services/WatchlistIndicatorDisplay.cpp
+    src/services/WatchlistSignalService.hpp
+    src/services/WatchlistSignalService.cpp
+    src/util/Date.hpp
+    src/util/Date.cpp
+    src/util/Money.hpp
+    src/util/Money.cpp
+)
+
+target_include_directories(InvestorCommandCenterTests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+
+target_link_libraries(InvestorCommandCenterTests PRIVATE
+    sqlite3
+)
+
+if(MSVC)
+    target_compile_options(InvestorCommandCenterTests PRIVATE /W4 /permissive- /utf-8)
+endif()
+
+add_test(NAME InvestorCommandCenterTests COMMAND InvestorCommandCenterTests)

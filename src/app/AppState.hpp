@@ -11,6 +11,7 @@
 #include "models/DashboardChartSetting.hpp"
 #include "models/MarketQuote.hpp"
 #include "models/PortfolioSnapshot.hpp"
+#include "models/SignalRules.hpp"
 #include "models/Transaction.hpp"
 #include "models/WatchlistItem.hpp"
 #include "models/WatchlistPriceRefresh.hpp"
@@ -74,6 +75,11 @@ public:
     std::vector<DashboardPriceOverride> dashboardPriceOverrides;
     DashboardPriceRefreshStatus dashboardPriceRefreshStatus;
     WatchlistPriceRefreshStatus watchlistPriceRefreshStatus;
+<<<<<<< Updated upstream
+=======
+    SignalRules signalRules;
+    DatabaseBackupSettings databaseBackupSettings;
+>>>>>>> Stashed changes
     std::vector<CapitalGainAllocationRule> capitalGainAllocationRules;
     std::string themeKey = "dark_command_center";
     std::string statusMessage;
