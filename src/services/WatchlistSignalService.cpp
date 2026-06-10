@@ -3,12 +3,15 @@
 
 #include "repositories/WatchlistRepository.hpp"
 #include "services/MarketDataService.hpp"
+#include "services/TechnicalIndicatorService.hpp"
 #include "util/Date.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <iomanip>
 #include <map>
 #include <set>
+#include <sstream>
 #include <utility>
 
 namespace {
@@ -57,31 +60,37 @@ void appendWarning(std::string& warning, const std::string& addition)
     warning += addition;
 }
 
-}
-
-std::string WatchlistSignalService::calculateSignalStatus(double currentPrice, double buySignalPrice, double sellSignalPrice)
+std::string formatNumber(double value, int decimals = 1)
 {
-    if (currentPrice <= 0.0) {
-        return "No Price";
-    }
-
-    const bool buyTriggered = buySignalPrice > 0.0 && currentPrice <= buySignalPrice;
-    const bool sellTriggered = sellSignalPrice > 0.0 && currentPrice >= sellSignalPrice;
-    if (buyTriggered && sellTriggered) {
-        return "Check Signals";
-    }
-    if (buyTriggered) {
-        return "Buy Signal";
-    }
-    if (sellTriggered) {
-        return "Sell Signal";
-    }
-    return "No Signal";
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(decimals) << value;
+    return stream.str();
 }
 
-WatchlistPriceRefreshStatus WatchlistSignalService::refreshPrices(
+std::string waitingForTechnicalReason(const WatchlistSignalResult& result, const SignalRules& rules)
+{
+    if (!result.hasRsi && !result.hasMacd) {
+        return "Hold: price target reached, waiting for RSI/MACD data.";
+    }
+    if (!result.hasRsi) {
+        return "Hold: price target reached, waiting for RSI data.";
+    }
+    if (!result.hasMacd) {
+        return "Hold: price target reached, waiting for MACD data.";
+    }
+    if (!result.rsiConditionMet) {
+        return "Hold: price target reached, waiting for RSI " + formatNumber(rules.rsiBuyMin) + "-" + formatNumber(rules.rsiBuyMax) + ".";
+    }
+    if (!result.macdConditionMet) {
+        return "Hold: price target reached, RSI OK, MACD histogram below " + formatNumber(rules.macdHistogramMin, 4) + ".";
+    }
+    return "Hold: price target reached, waiting for RSI/MACD confirmation.";
+}
+
+WatchlistPriceRefreshStatus refreshPricesWithIndicators(
     const std::vector<WatchlistItem>& items,
     MarketDataService& marketDataService,
+    TechnicalIndicatorService* technicalIndicatorService,
     WatchlistRepository& repository,
     std::string& error)
 {
@@ -138,7 +147,13 @@ WatchlistPriceRefreshStatus WatchlistSignalService::refreshPrices(
         updated.currentPrice = *result.quote.currentPrice;
         updated.lastPriceRefreshAt = result.quote.fetchedAt.empty() ? status.lastRefreshedAt : result.quote.fetchedAt;
         updated.priceSource = result.fromCache ? "Cached Yahoo Finance" : "Yahoo Finance";
-        updated.signalStatus = calculateSignalStatus(updated.currentPrice, updated.buySignalPrice, updated.sellSignalPrice);
+
+        std::optional<TechnicalIndicatorSnapshot> indicators;
+        if (technicalIndicatorService != nullptr) {
+            std::string indicatorError;
+            indicators = technicalIndicatorService->cachedSnapshot(symbol, result.quote.provider.empty() ? marketDataService.providerName() : result.quote.provider, indicatorError);
+        }
+        updated.signalStatus = WatchlistSignalService::calculateSignalStatus(updated, indicators);
 
         std::string updateError;
         if (repository.update(updated, updateError)) {
@@ -163,4 +178,138 @@ WatchlistPriceRefreshStatus WatchlistSignalService::refreshPrices(
     }
 
     return status;
+}
+
+}
+
+WatchlistSignalResult WatchlistSignalService::calculateSignal(
+    double currentPrice,
+    double buySignalPrice,
+    double sellSignalPrice,
+    const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators)
+{
+    return calculateSignal(currentPrice, buySignalPrice, sellSignalPrice, technicalIndicators, SignalRules {});
+}
+
+WatchlistSignalResult WatchlistSignalService::calculateSignal(
+    double currentPrice,
+    double buySignalPrice,
+    double sellSignalPrice,
+    const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators,
+    const SignalRules& rules)
+{
+    WatchlistSignalResult result;
+    result.hasCurrentPrice = currentPrice > 0.0;
+    result.priceConditionMet = result.hasCurrentPrice && buySignalPrice > 0.0 && currentPrice <= buySignalPrice;
+    result.sellConditionMet = result.hasCurrentPrice && sellSignalPrice > 0.0 && currentPrice >= sellSignalPrice;
+    result.hasRsi = technicalIndicators.has_value() && technicalIndicators->rsi14.has_value();
+    result.hasMacd = technicalIndicators.has_value() && technicalIndicators->macdHistogram.has_value();
+    result.rsiConditionMet = result.hasRsi && *technicalIndicators->rsi14 >= rules.rsiBuyMin && *technicalIndicators->rsi14 <= rules.rsiBuyMax;
+    result.macdConditionMet = result.hasMacd && *technicalIndicators->macdHistogram >= rules.macdHistogramMin;
+
+    if (currentPrice <= 0.0) {
+        result.reasonText = "Hold: current price unavailable.";
+        return result;
+    }
+
+    if (result.priceConditionMet && result.rsiConditionMet && result.macdConditionMet) {
+        result.signal = "Buy";
+        result.reasonText = "Buy: price target reached, RSI " + formatNumber(*technicalIndicators->rsi14) +
+            ", MACD histogram " + formatNumber(*technicalIndicators->macdHistogram, 4) + ".";
+        return result;
+    }
+
+    if (result.sellConditionMet) {
+        result.signal = "Sell";
+        result.reasonText = "Sell: sell signal price reached.";
+        return result;
+    }
+
+    if (result.priceConditionMet) {
+        result.reasonText = waitingForTechnicalReason(result, rules);
+        return result;
+    }
+
+    if (buySignalPrice <= 0.0) {
+        result.reasonText = "Hold: buy signal price is not set.";
+    } else {
+        result.reasonText = "Hold: buy price target not reached.";
+    }
+    return result;
+}
+
+WatchlistSignalResult WatchlistSignalService::calculateSignal(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators)
+{
+    return calculateSignal(item.currentPrice, item.buySignalPrice, item.sellSignalPrice, technicalIndicators);
+}
+
+WatchlistSignalResult WatchlistSignalService::calculateSignal(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators, const SignalRules& rules)
+{
+    return calculateSignal(item.currentPrice, item.buySignalPrice, item.sellSignalPrice, technicalIndicators, rules);
+}
+
+std::string WatchlistSignalService::calculateSignalStatus(double currentPrice, double buySignalPrice, double sellSignalPrice)
+{
+    return calculateSignal(currentPrice, buySignalPrice, sellSignalPrice, std::nullopt).signal;
+}
+
+std::string WatchlistSignalService::calculateSignalStatus(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators)
+{
+    return calculateSignal(item, technicalIndicators).signal;
+}
+
+int WatchlistSignalService::signalSortRank(const std::string& signalStatus)
+{
+    if (signalStatus == "Buy" || signalStatus == "Buy Signal") {
+        return 0;
+    }
+    if (signalStatus == "Sell" || signalStatus == "Sell Signal") {
+        return 1;
+    }
+    return 2;
+}
+
+int WatchlistSignalService::signalSortRank(const WatchlistItem& item)
+{
+    return signalSortRank(calculateSignalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice));
+}
+
+int WatchlistSignalService::signalSortRank(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators)
+{
+    return signalSortRank(calculateSignalStatus(item, technicalIndicators));
+}
+
+bool WatchlistSignalService::hasSignalWarning(double currentPrice, double buySignalPrice, double sellSignalPrice)
+{
+    if (currentPrice <= 0.0) {
+        return false;
+    }
+
+    const bool buyTriggered = buySignalPrice > 0.0 && currentPrice <= buySignalPrice;
+    const bool sellTriggered = sellSignalPrice > 0.0 && currentPrice >= sellSignalPrice;
+    return buyTriggered && sellTriggered;
+}
+
+bool WatchlistSignalService::hasSignalWarning(const WatchlistItem& item)
+{
+    return hasSignalWarning(item.currentPrice, item.buySignalPrice, item.sellSignalPrice);
+}
+
+WatchlistPriceRefreshStatus WatchlistSignalService::refreshPrices(
+    const std::vector<WatchlistItem>& items,
+    MarketDataService& marketDataService,
+    WatchlistRepository& repository,
+    std::string& error)
+{
+    return refreshPricesWithIndicators(items, marketDataService, nullptr, repository, error);
+}
+
+WatchlistPriceRefreshStatus WatchlistSignalService::refreshPrices(
+    const std::vector<WatchlistItem>& items,
+    MarketDataService& marketDataService,
+    TechnicalIndicatorService& technicalIndicatorService,
+    WatchlistRepository& repository,
+    std::string& error)
+{
+    return refreshPricesWithIndicators(items, marketDataService, &technicalIndicatorService, repository, error);
 }

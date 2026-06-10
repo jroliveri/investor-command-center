@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
 #include "services/MarketDataService.hpp"
 
+#include "repositories/MarketPriceHistoryRepository.hpp"
 #include "repositories/MarketQuoteCacheRepository.hpp"
 #include "services/MarketDataProvider.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <utility>
 
-MarketDataService::MarketDataService(MarketDataProvider& provider, MarketQuoteCacheRepository& cacheRepository)
+MarketDataService::MarketDataService(MarketDataProvider& provider, MarketQuoteCacheRepository& cacheRepository, MarketPriceHistoryRepository& historyRepository)
     : provider_(provider)
     , cacheRepository_(cacheRepository)
+    , historyRepository_(historyRepository)
 {
 }
 
@@ -58,6 +61,51 @@ MarketQuoteResult MarketDataService::fetchQuote(const std::string& symbol)
         cachedResult.staleCache = true;
         cachedResult.error = "Online fetch failed: " + result.error + " Showing the latest cached quote.";
         memoryCache_[normalizedSymbol] = *cached;
+        return cachedResult;
+    }
+
+    if (!cacheError.empty()) {
+        result.error += " Cache lookup also failed: " + cacheError;
+    }
+    return result;
+}
+
+HistoricalPriceResult MarketDataService::fetchHistoricalPrices(const std::string& symbol, const std::string& range, const std::string& interval)
+{
+    const std::string normalizedSymbol = normalizeSymbol(symbol);
+    if (normalizedSymbol.empty()) {
+        HistoricalPriceResult result;
+        result.error = "Ticker is required.";
+        result.range = range;
+        result.interval = interval;
+        return result;
+    }
+
+    HistoricalPriceResult result = provider_.fetchHistoricalPrices(normalizedSymbol, range, interval);
+    if (result.success) {
+        result.symbol = normalizeSymbol(result.symbol);
+        int rowsStored = 0;
+        std::string cacheError;
+        if (!historyRepository_.upsertMany(result.rows, rowsStored, cacheError)) {
+            result.error = "Historical prices fetched, but cache could not be updated: " + cacheError;
+        }
+        result.rowsStored = rowsStored;
+        return result;
+    }
+
+    std::string cacheError;
+    std::vector<MarketPriceHistoryRow> cachedRows = historyRepository_.listBySymbol(normalizedSymbol, provider_.providerName(), cacheError);
+    if (!cachedRows.empty()) {
+        HistoricalPriceResult cachedResult;
+        cachedResult.success = true;
+        cachedResult.symbol = normalizedSymbol;
+        cachedResult.provider = provider_.providerName();
+        cachedResult.range = range;
+        cachedResult.interval = interval;
+        cachedResult.rows = std::move(cachedRows);
+        cachedResult.fromCache = true;
+        cachedResult.staleCache = true;
+        cachedResult.error = "Online history fetch failed: " + result.error + " Showing cached daily history.";
         return cachedResult;
     }
 

@@ -459,7 +459,140 @@ WHERE buy_signal_price = 0 AND target_buy_price > 0;
 CREATE INDEX IF NOT EXISTS idx_watchlist_signal_status ON watchlist(signal_status);
 )sql";
 
-    return executeMigration(database, 17, "add_watchlist_price_signals", watchlistSignalsMigration, error);
+    if (!executeMigration(database, 17, "add_watchlist_price_signals", watchlistSignalsMigration, error)) {
+        return false;
+    }
+
+    const char* multipleWatchlistsMigration = R"sql(
+CREATE TABLE IF NOT EXISTS watchlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    sort_order INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+INSERT INTO watchlists(name, description, sort_order, is_active, created_at, updated_at)
+SELECT 'Main Watchlist', 'Default watchlist for existing items.', 0, 1, datetime('now'), datetime('now')
+WHERE NOT EXISTS (
+    SELECT 1 FROM watchlists WHERE name = 'Main Watchlist'
+);
+
+ALTER TABLE watchlist ADD COLUMN watchlist_id INTEGER;
+
+UPDATE watchlist
+SET watchlist_id = (
+    SELECT id FROM watchlists WHERE name = 'Main Watchlist' ORDER BY id LIMIT 1
+)
+WHERE watchlist_id IS NULL OR watchlist_id = 0;
+
+CREATE INDEX IF NOT EXISTS idx_watchlists_active_order ON watchlists(is_active, sort_order, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlists_active_name_unique
+    ON watchlists(name COLLATE NOCASE)
+    WHERE is_active = 1;
+CREATE INDEX IF NOT EXISTS idx_watchlist_watchlist_id ON watchlist(watchlist_id);
+)sql";
+
+    if (!executeMigration(database, 18, "create_multiple_watchlists", multipleWatchlistsMigration, error)) {
+        return false;
+    }
+
+    const char* watchlistSidebarAssignmentMigration = R"sql(
+ALTER TABLE watchlists ADD COLUMN show_in_sidebar INTEGER DEFAULT 0;
+ALTER TABLE watchlists ADD COLUMN sidebar_slot INTEGER DEFAULT 0;
+
+UPDATE watchlists
+SET show_in_sidebar = 0, sidebar_slot = 0
+WHERE show_in_sidebar IS NULL OR sidebar_slot IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_watchlists_sidebar_slot
+    ON watchlists(show_in_sidebar, sidebar_slot, is_active);
+)sql";
+
+    if (!executeMigration(database, 19, "add_watchlist_sidebar_assignment", watchlistSidebarAssignmentMigration, error)) {
+        return false;
+    }
+
+    const char* watchlistSignalSimplificationMigration = R"sql(
+UPDATE watchlist
+SET signal_status = 'Buy'
+WHERE signal_status = 'Buy Signal';
+
+UPDATE watchlist
+SET signal_status = 'Sell'
+WHERE signal_status = 'Sell Signal';
+
+UPDATE watchlist
+SET signal_status = 'Hold'
+WHERE signal_status IS NULL
+   OR signal_status = ''
+   OR signal_status = 'None'
+   OR signal_status = 'Watch'
+   OR signal_status = 'No Signal'
+   OR signal_status = 'No Price'
+   OR signal_status = 'Check Signals';
+)sql";
+
+    if (!executeMigration(database, 20, "simplify_watchlist_signal_status", watchlistSignalSimplificationMigration, error)) {
+        return false;
+    }
+
+    const char* marketPriceHistoryMigration = R"sql(
+CREATE TABLE IF NOT EXISTS market_price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    price_date TEXT NOT NULL,
+    open_price REAL,
+    high_price REAL,
+    low_price REAL,
+    close_price REAL,
+    adjusted_close_price REAL,
+    volume REAL,
+    fetched_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_market_price_history_symbol_provider_date
+    ON market_price_history(symbol, provider, price_date);
+CREATE INDEX IF NOT EXISTS idx_market_price_history_symbol_date
+    ON market_price_history(symbol, price_date);
+)sql";
+
+    if (!executeMigration(database, 21, "create_market_price_history", marketPriceHistoryMigration, error)) {
+        return false;
+    }
+
+    const char* technicalIndicatorCacheMigration = R"sql(
+CREATE TABLE IF NOT EXISTS technical_indicator_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    calculated_for_date TEXT NOT NULL,
+    rsi_14 REAL,
+    macd_line REAL,
+    macd_signal REAL,
+    macd_histogram REAL,
+    latest_volume REAL,
+    avg_volume_20 REAL,
+    avg_volume_50 REAL,
+    volume_vs_avg_20_percent REAL,
+    source_history_rows INTEGER DEFAULT 0,
+    calculated_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_technical_indicator_cache_symbol_provider_date
+    ON technical_indicator_cache(symbol, provider, calculated_for_date);
+CREATE INDEX IF NOT EXISTS idx_technical_indicator_cache_symbol_date
+    ON technical_indicator_cache(symbol, calculated_for_date);
+)sql";
+
+    return executeMigration(database, 22, "create_technical_indicator_cache", technicalIndicatorCacheMigration, error);
 }
 
 }

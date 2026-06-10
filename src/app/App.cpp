@@ -253,7 +253,9 @@ bool App::initialize()
     dividendRepository_ = std::make_unique<DividendRepository>(database_);
     goalRepository_ = std::make_unique<GoalRepository>(database_);
     watchlistRepository_ = std::make_unique<WatchlistRepository>(database_);
+    marketPriceHistoryRepository_ = std::make_unique<MarketPriceHistoryRepository>(database_);
     marketQuoteCacheRepository_ = std::make_unique<MarketQuoteCacheRepository>(database_);
+    technicalIndicatorCacheRepository_ = std::make_unique<TechnicalIndicatorCacheRepository>(database_);
     portfolioSnapshotRepository_ = std::make_unique<PortfolioSnapshotRepository>(database_);
     dashboardLayoutRepository_ = std::make_unique<DashboardLayoutRepository>(database_);
     dashboardChartSettingsRepository_ = std::make_unique<DashboardChartSettingsRepository>(database_);
@@ -261,7 +263,8 @@ bool App::initialize()
     capitalGainAllocationRepository_ = std::make_unique<CapitalGainAllocationRepository>(database_);
     csvImportService_ = std::make_unique<CsvImportService>(database_, *holdingRepository_, *importBatchRepository_, *portfolioSnapshotRepository_);
     yahooFinanceProvider_ = std::make_unique<YahooFinanceProvider>();
-    marketDataService_ = std::make_unique<MarketDataService>(*yahooFinanceProvider_, *marketQuoteCacheRepository_);
+    marketDataService_ = std::make_unique<MarketDataService>(*yahooFinanceProvider_, *marketQuoteCacheRepository_, *marketPriceHistoryRepository_);
+    technicalIndicatorService_ = std::make_unique<TechnicalIndicatorService>(*marketPriceHistoryRepository_, *technicalIndicatorCacheRepository_);
 
     std::string layoutError;
     if (!dashboardLayoutRepository_->ensureDefaults(layoutError)) {
@@ -499,6 +502,12 @@ void App::reloadData()
         return;
     }
 
+    state_.watchlists = watchlistRepository_->listWatchlists(true, error);
+    if (!error.empty()) {
+        state_.setStatus("Could not load watchlists: " + error, true);
+        return;
+    }
+
     state_.watchlist = watchlistRepository_->listAll(error);
     if (!error.empty()) {
         state_.setStatus("Could not load watchlist: " + error, true);
@@ -680,7 +689,7 @@ void App::refreshDashboardPrices()
 void App::refreshWatchlistPrices()
 {
     std::string error;
-    WatchlistPriceRefreshStatus refreshStatus = WatchlistSignalService::refreshPrices(state_.watchlist, *marketDataService_, *watchlistRepository_, error);
+    WatchlistPriceRefreshStatus refreshStatus = WatchlistSignalService::refreshPrices(state_.watchlist, *marketDataService_, *technicalIndicatorService_, *watchlistRepository_, error);
     reloadData();
     state_.watchlistPriceRefreshStatus = refreshStatus;
     navigateTo(AppSection::Watchlist);
@@ -1024,7 +1033,46 @@ void App::renderPortfolioSummaryCard()
 
 void App::renderWatchlistPanel()
 {
-    std::vector<SidebarModel::WatchlistGroup> groups = SidebarModel::defaultWatchlistGroups(state_.watchlist);
+    std::vector<Watchlist> sidebarWatchlists;
+    for (const Watchlist& watchlist : state_.watchlists) {
+        if (watchlist.isActive && watchlist.showInSidebar) {
+            sidebarWatchlists.push_back(watchlist);
+        }
+    }
+    std::sort(sidebarWatchlists.begin(), sidebarWatchlists.end(), [](const Watchlist& left, const Watchlist& right) {
+        if (left.sidebarSlot != right.sidebarSlot) {
+            return left.sidebarSlot < right.sidebarSlot;
+        }
+        if (left.sortOrder != right.sortOrder) {
+            return left.sortOrder < right.sortOrder;
+        }
+        return left.name < right.name;
+    });
+
+    if (sidebarWatchlists.empty()) {
+        for (const Watchlist& watchlist : state_.watchlists) {
+            if (watchlist.isActive) {
+                sidebarWatchlists.push_back(watchlist);
+            }
+        }
+    }
+
+    std::vector<SidebarModel::WatchlistGroup> groups;
+    for (const Watchlist& watchlist : sidebarWatchlists) {
+        SidebarModel::WatchlistGroup group;
+        group.name = watchlist.name;
+        for (const WatchlistItem& item : state_.watchlist) {
+            if (item.watchlistId == watchlist.id) {
+                group.items.push_back(item);
+            }
+        }
+        groups.push_back(group);
+    }
+
+    if (groups.empty()) {
+        groups = SidebarModel::defaultWatchlistGroups(state_.watchlist);
+    }
+
     std::vector<MarketQuote> cachedQuotes;
     cachedQuotes.reserve(state_.watchlist.size());
     for (const WatchlistItem& item : state_.watchlist) {
@@ -1180,7 +1228,7 @@ void App::renderCurrentSection()
         goalsView_.render(state_, *goalRepository_, reload);
         break;
     case AppSection::Watchlist:
-        watchlistView_.render(state_, *watchlistRepository_, *marketDataService_, reload);
+        watchlistView_.render(state_, *watchlistRepository_, *marketDataService_, *technicalIndicatorService_, reload);
         break;
     case AppSection::ImportCsv:
         importCsvView_.render(state_, *csvImportService_, reload);

@@ -86,7 +86,7 @@ std::string macdLineHistogramDisplayText(const std::optional<TechnicalIndicatorS
 std::string momentumDisplayText(const std::optional<WatchlistMomentum7D>& momentum)
 {
     if (!momentum.has_value()) {
-        return "—";
+        return "N/A";
     }
 
     const char* label = momentum->flat ? "Flat" : (momentum->rising ? "Rising" : "Falling");
