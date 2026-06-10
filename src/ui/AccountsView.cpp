@@ -88,20 +88,26 @@ void AccountsView::render(AppState& state, AccountRepository& repository, const 
 {
     UiTheme::sectionHeading("Accounts", "Cash is entered manually; total balance is calculated from holdings plus cash.");
 
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Add Account")) {
         openCreate();
         openEditorPopup_ = true;
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
     ImGui::InputTextWithHint("##AccountSearch", "Search accounts", &searchText_);
 
     ImGui::Spacing();
 
+    UiTheme::pushPanelStyle();
+    ImGui::BeginChild("AccountsTablePanel", ImVec2(0.0f, 0.0f), true);
     int visibleRows = 0;
     if (state.accounts.empty()) {
         UiTheme::emptyState("No accounts yet", "Add one account to start tracking balances and holdings.");
-    } else if (ImGui::BeginTable("AccountsTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp)) {
+    } else {
+        UiTheme::pushTableStyle();
+        if (ImGui::BeginTable("AccountsTable", 9, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 1.3f);
         ImGui::TableSetupColumn("Type");
         ImGui::TableSetupColumn("Institution");
@@ -128,23 +134,26 @@ void AccountsView::render(AppState& state, AccountRepository& repository, const 
             ImGui::TableNextColumn();
             ImGui::Text("%s", account.institutionName.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(metrics.calculatedBalance).c_str());
+            UiTheme::textRightAligned(Money::format(metrics.calculatedBalance).c_str());
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::MutedText, "%s", Money::format(metrics.holdingsMarketValue).c_str());
+            UiTheme::textRightAligned(Money::format(metrics.holdingsMarketValue).c_str(), UiTheme::TextSecondary);
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(account.cashBalance).c_str());
+            UiTheme::textRightAligned(Money::format(account.cashBalance).c_str(), UiTheme::ElectricCyan);
             ImGui::TableNextColumn();
-            ImGui::TextColored(account.status == "Active" ? UiTheme::Gain : UiTheme::MutedText, "%s", account.status.c_str());
+            UiTheme::badge(account.status.c_str(), account.status == "Active" ? UiTheme::Gain : UiTheme::TextMuted);
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", account.updatedAt.c_str());
             ImGui::TableNextColumn();
             const std::string editButtonId = "Edit##edit_button_" + std::to_string(account.id);
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(account);
                 openEditorPopup_ = true;
             }
+            UiTheme::popButtonStyle();
             ImGui::SameLine();
             const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(account.id);
+            UiTheme::pushButtonStyle(UiTheme::Loss);
             if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = account.id;
                 deleteHoldingCount_ = holdingCountForAccount(state, account.id);
@@ -152,13 +161,18 @@ void AccountsView::render(AppState& state, AccountRepository& repository, const 
                 deletePopupId_ = accountDeletePopupId(account.id);
                 openDeletePopup_ = true;
             }
+            UiTheme::popButtonStyle();
         }
 
         ImGui::EndTable();
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No accounts match the current search.");
         }
+        }
+        UiTheme::popTableStyle();
     }
+    ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     if (openEditorPopup_) {
         ImGui::OpenPopup(editorPopupId_.empty() ? AccountEditorPopup : editorPopupId_.c_str());

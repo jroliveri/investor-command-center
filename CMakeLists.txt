@@ -94,11 +94,6 @@ set(APP_SOURCES
     src/models/ImportBatch.hpp
     src/models/MarketQuote.hpp
     src/models/PortfolioSnapshot.hpp
-<<<<<<< Updated upstream
-=======
-    src/models/SignalRules.hpp
-    src/models/TechnicalIndicatorSnapshot.hpp
->>>>>>> Stashed changes
     src/models/Transaction.hpp
     src/models/Dividend.hpp
     src/models/Goal.hpp
@@ -152,15 +147,6 @@ set(APP_SOURCES
     src/services/MarketDataProvider.cpp
     src/services/MarketDataService.hpp
     src/services/MarketDataService.cpp
-<<<<<<< Updated upstream
-=======
-    src/services/SignalRulesService.hpp
-    src/services/SignalRulesService.cpp
-    src/services/TechnicalIndicatorService.hpp
-    src/services/TechnicalIndicatorService.cpp
-    src/services/WatchlistIndicatorDisplay.hpp
-    src/services/WatchlistIndicatorDisplay.cpp
->>>>>>> Stashed changes
     src/services/WatchlistSignalService.hpp
     src/services/WatchlistSignalService.cpp
     src/services/YahooFinanceProvider.hpp
@@ -240,21 +226,14 @@ add_executable(InvestorCommandCenterTests
     src/db/Database.cpp
     src/db/Migrations.hpp
     src/db/Migrations.cpp
-    src/models/MarketPriceHistory.hpp
     src/models/MarketQuote.hpp
     src/models/SignalRules.hpp
-    src/models/TechnicalIndicatorSnapshot.hpp
-    src/models/Watchlist.hpp
     src/models/WatchlistItem.hpp
     src/models/WatchlistPriceRefresh.hpp
-    src/repositories/MarketPriceHistoryRepository.hpp
-    src/repositories/MarketPriceHistoryRepository.cpp
     src/repositories/AppSettingsRepository.hpp
     src/repositories/AppSettingsRepository.cpp
     src/repositories/MarketQuoteCacheRepository.hpp
     src/repositories/MarketQuoteCacheRepository.cpp
-    src/repositories/TechnicalIndicatorCacheRepository.hpp
-    src/repositories/TechnicalIndicatorCacheRepository.cpp
     src/repositories/WatchlistRepository.hpp
     src/repositories/WatchlistRepository.cpp
     src/services/MarketDataProvider.hpp
@@ -263,10 +242,6 @@ add_executable(InvestorCommandCenterTests
     src/services/MarketDataService.cpp
     src/services/SignalRulesService.hpp
     src/services/SignalRulesService.cpp
-    src/services/TechnicalIndicatorService.hpp
-    src/services/TechnicalIndicatorService.cpp
-    src/services/WatchlistIndicatorDisplay.hpp
-    src/services/WatchlistIndicatorDisplay.cpp
     src/services/WatchlistSignalService.hpp
     src/services/WatchlistSignalService.cpp
     src/util/Date.hpp

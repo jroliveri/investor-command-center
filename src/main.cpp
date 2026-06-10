@@ -10,6 +10,11 @@
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+DECLARE_HANDLE(DPI_AWARENESS_CONTEXT);
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT)-4)
+#endif
+
 static ID3D11Device* g_d3dDevice = nullptr;
 static ID3D11DeviceContext* g_d3dDeviceContext = nullptr;
 static IDXGISwapChain* g_swapChain = nullptr;
@@ -19,12 +24,15 @@ bool createDeviceD3D(HWND window);
 void cleanupDeviceD3D();
 void createRenderTarget();
 void cleanupRenderTarget();
+void enableHighDpiAwareness();
 LRESULT WINAPI wndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
 {
+    enableHighDpiAwareness();
+
     WNDCLASSEXW windowClass = {
         sizeof(windowClass),
         CS_CLASSDC,
@@ -67,6 +75,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    UiTheme::configureFonts(io);
 
     ImGui_ImplWin32_Init(window);
     ImGui_ImplDX11_Init(g_d3dDevice, g_d3dDeviceContext);
@@ -126,6 +135,28 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
     UnregisterClassW(windowClass.lpszClassName, windowClass.hInstance);
 
     return 0;
+}
+
+void enableHighDpiAwareness()
+{
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (user32 == nullptr) {
+        return;
+    }
+
+    using SetProcessDpiAwarenessContextFn = BOOL(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    auto setProcessDpiAwarenessContext = reinterpret_cast<SetProcessDpiAwarenessContextFn>(
+        GetProcAddress(user32, "SetProcessDpiAwarenessContext"));
+    if (setProcessDpiAwarenessContext != nullptr &&
+        setProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
+        return;
+    }
+
+    using SetProcessDPIAwareFn = BOOL(WINAPI*)();
+    auto setProcessDPIAware = reinterpret_cast<SetProcessDPIAwareFn>(GetProcAddress(user32, "SetProcessDPIAware"));
+    if (setProcessDPIAware != nullptr) {
+        setProcessDPIAware();
+    }
 }
 
 bool createDeviceD3D(HWND window)

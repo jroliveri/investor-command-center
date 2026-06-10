@@ -2,8 +2,6 @@
 #pragma once
 
 #include "models/CapitalGainAllocationRule.hpp"
-#include "models/SignalRules.hpp"
-
 #include <functional>
 #include <string>
 
@@ -16,24 +14,19 @@ public:
     void render(AppState& state,
         AppSettingsRepository& settingsRepository,
         CapitalGainAllocationRepository& allocationRepository,
-        const std::string& databasePath,
+        const std::string& activeDatabasePath,
         const char* appVersion,
+        const std::function<bool(const std::string&, std::string&)>& saveDatabasePath,
         const std::function<void()>& reloadData);
 
 private:
-<<<<<<< Updated upstream
-=======
-    void renderDatabaseLocation(const std::string& activeDatabasePath, const std::function<bool(const std::string&, std::string&)>& moveDatabaseToFolder);
-    void renderDatabaseBackup(AppState& state, AppSettingsRepository& settingsRepository, const std::function<void()>& backupNow);
-    void renderSignalRules(AppState& state, AppSettingsRepository& settingsRepository);
->>>>>>> Stashed changes
+    void renderDatabaseLocation(const std::string& activeDatabasePath, const std::function<bool(const std::string&, std::string&)>& saveDatabasePath);
     void renderCapitalGainAllocation(AppState& state, CapitalGainAllocationRepository& allocationRepository, const std::function<void()>& reloadData);
 
-    SignalRules signalRulesDraft_;
-    bool signalRulesDraftInitialized_ = false;
-    bool signalRulesDraftDirty_ = false;
-    std::string signalRulesMessage_;
-    bool signalRulesMessageIsError_ = false;
     std::string allocationMessage_;
     bool allocationMessageIsError_ = false;
+    std::string databasePathDraft_;
+    bool databasePathDraftInitialized_ = false;
+    std::string databaseLocationMessage_;
+    bool databaseLocationMessageIsError_ = false;
 };

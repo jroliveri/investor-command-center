@@ -103,20 +103,26 @@ void GoalsView::render(AppState& state, GoalRepository& repository, const std::f
 {
     UiTheme::sectionHeading("Goals", "Milestones for long-term progress.");
 
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Add Goal")) {
         openCreate();
         openEditorPopup_ = true;
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
     ImGui::InputTextWithHint("##GoalSearch", "Search goals", &searchText_);
 
     ImGui::Spacing();
 
+    UiTheme::pushPanelStyle();
+    ImGui::BeginChild("GoalsTablePanel", ImVec2(0.0f, 0.0f), true);
     int visibleRows = 0;
     if (state.goals.empty()) {
         UiTheme::emptyState("No goals yet", "Add a milestone to track progress over time.");
-    } else if (ImGui::BeginTable("GoalsTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
+    } else {
+        UiTheme::pushTableStyle();
+        if (ImGui::BeginTable("GoalsTable", 8, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
         ImGui::TableSetupColumn("Goal", ImGuiTableColumnFlags_WidthStretch, 1.3f);
         ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 120.0f);
         ImGui::TableSetupColumn("Target", ImGuiTableColumnFlags_WidthFixed, 112.0f);
@@ -141,41 +147,52 @@ void GoalsView::render(AppState& state, GoalRepository& repository, const std::f
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", goal.category.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(goal.targetAmount).c_str());
+            UiTheme::textRightAligned(Money::format(goal.targetAmount).c_str());
             ImGui::TableNextColumn();
-            ImGui::TextColored(metrics.missingLinkedAccount ? UiTheme::Loss : UiTheme::MutedText, "%s", Money::format(metrics.effectiveCurrentAmount).c_str());
+            UiTheme::textRightAligned(Money::format(metrics.effectiveCurrentAmount).c_str(), metrics.missingLinkedAccount ? UiTheme::Loss : UiTheme::TextSecondary);
             if (goal.useAccountValue && ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("%s", metrics.missingLinkedAccount
                     ? "Linked account is missing; using 0.00."
                     : accountNameFor(state, goal.linkedAccountId));
             }
             ImGui::TableNextColumn();
-            ImGui::TextColored(metrics.remainingAmount == 0.0 ? UiTheme::Gain : UiTheme::Amber, "%s", Money::format(metrics.remainingAmount).c_str());
+            UiTheme::textRightAligned(Money::format(metrics.remainingAmount).c_str(), metrics.remainingAmount == 0.0 ? UiTheme::Gain : UiTheme::Amber);
             ImGui::TableNextColumn();
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, UiTheme::withAlpha(UiTheme::ElectricCyan, 0.72f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, UiTheme::withAlpha(UiTheme::SurfaceMain, 0.80f));
             ImGui::ProgressBar(static_cast<float>(metrics.progressPercent / 100.0), ImVec2(-1.0f, 0.0f), Money::formatPercent(metrics.progressPercent).c_str());
+            ImGui::PopStyleColor(2);
             ImGui::TableNextColumn();
             DatePicker::drawTableDate(goal.targetDate, true);
             ImGui::TableNextColumn();
             const std::string editButtonId = "Edit##edit_button_" + std::to_string(goal.id);
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton(editButtonId.c_str())) {
                 openEdit(goal);
                 openEditorPopup_ = true;
             }
+            UiTheme::popButtonStyle();
             ImGui::SameLine();
             const std::string deleteButtonId = "Delete##delete_button_" + std::to_string(goal.id);
+            UiTheme::pushButtonStyle(UiTheme::Loss);
             if (ImGui::SmallButton(deleteButtonId.c_str())) {
                 deleteId_ = goal.id;
                 deleteName_ = goal.goalName;
                 deletePopupId_ = goalDeletePopupId(goal.id);
                 openDeletePopup_ = true;
             }
+            UiTheme::popButtonStyle();
         }
 
         ImGui::EndTable();
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No goals match the current search.");
         }
+        }
+        UiTheme::popTableStyle();
     }
+    ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     if (openEditorPopup_) {
         ImGui::OpenPopup(editorPopupId_.empty() ? GoalEditorPopup : editorPopupId_.c_str());

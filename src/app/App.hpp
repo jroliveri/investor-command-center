@@ -43,6 +43,10 @@ public:
     bool shouldExit() const { return shouldExit_; }
 
 private:
+    bool openStartupDatabase();
+    bool openDatabaseAtPath(const std::string& databasePath, std::string& error);
+    bool writeDatabasePathSettingToFile(const std::string& databasePath, const std::string& configuredPath, std::string& error);
+    bool saveConfiguredDatabasePath(const std::string& configuredPath, std::string& message);
     void reloadData();
     void navigateTo(AppSection section);
     bool menuSectionItem(AppSection section, const char* label);
@@ -52,6 +56,8 @@ private:
     void refreshDashboardPrices();
     void refreshWatchlistPrices();
     void renderTopMenuBar();
+    void renderShellHeader();
+    void renderTopNavigationTabs();
     void renderAccountColumn();
     void renderPortfolioSummaryCard();
     void renderWatchlistPanel();
@@ -91,6 +97,8 @@ private:
     StockResearchView stockResearchView_;
     SettingsView settingsView_;
     std::string startupError_;
+    std::string startupDatabaseWarning_;
+    std::string activeDatabasePath_;
     bool shouldExit_ = false;
     bool showAboutPopup_ = false;
     bool showPrivacyPopup_ = false;

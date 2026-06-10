@@ -4,21 +4,25 @@
 #include "app/AppState.hpp"
 #include "repositories/AppSettingsRepository.hpp"
 #include "repositories/CapitalGainAllocationRepository.hpp"
-<<<<<<< Updated upstream
-=======
-#include "services/DatabaseBackupService.hpp"
-#include "services/SignalRulesService.hpp"
->>>>>>> Stashed changes
 #include "ui/UiTheme.hpp"
 #include "util/Money.hpp"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <commdlg.h>
+#endif
+
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
 #include <filesystem>
+#include <optional>
 #include <string>
 
 namespace {
@@ -30,15 +34,6 @@ void disabledAction(const char* label, const char* note)
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::TextColored(UiTheme::MutedText, "%s", note);
-}
-
-void signalRuleSummaryLine(const char* label, const std::string& value, ImVec4 color)
-{
-    ImGui::TextColored(UiTheme::MutedText, "%s", label);
-    ImGui::SameLine(210.0f);
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
-    ImGui::TextColored(color, "%s", value.c_str());
-    ImGui::PopTextWrapPos();
 }
 
 double activeAllocationTotal(const std::vector<CapitalGainAllocationRule>& rules)
@@ -61,17 +56,78 @@ int nextSortOrder(const std::vector<CapitalGainAllocationRule>& rules)
     return next;
 }
 
+std::filesystem::path absolutePath(const std::string& path)
+{
+    std::error_code error;
+    const std::filesystem::path absolute = std::filesystem::absolute(std::filesystem::path(path), error);
+    return error ? std::filesystem::path(path) : absolute.lexically_normal();
+}
+
+bool isPathInside(const std::filesystem::path& child, const std::filesystem::path& parent)
+{
+    const std::filesystem::path normalizedChild = absolutePath(child.string()).lexically_normal();
+    const std::filesystem::path normalizedParent = absolutePath(parent.string()).lexically_normal();
+
+    auto childIterator = normalizedChild.begin();
+    auto parentIterator = normalizedParent.begin();
+    for (; parentIterator != normalizedParent.end(); ++parentIterator, ++childIterator) {
+        if (childIterator == normalizedChild.end() || *childIterator != *parentIterator) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool isPathInsideWorkingTree(const std::string& path)
+{
+    std::error_code error;
+    const std::filesystem::path workingDirectory = std::filesystem::current_path(error);
+    if (error || path.empty()) {
+        return false;
+    }
+
+    return isPathInside(absolutePath(path), workingDirectory);
+}
+
+std::optional<std::string> chooseDatabaseFile(std::string& error)
+{
+    error.clear();
+
+#ifdef _WIN32
+    wchar_t selectedPath[MAX_PATH] = L"";
+    OPENFILENAMEW dialog {};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.lpstrFile = selectedPath;
+    dialog.nMaxFile = MAX_PATH;
+    dialog.lpstrFilter = L"SQLite database files\0*.db;*.sqlite;*.sqlite3\0All files\0*.*\0";
+    dialog.lpstrTitle = L"Choose Investor Command Center Database";
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (GetOpenFileNameW(&dialog)) {
+        return std::filesystem::path(selectedPath).string();
+    }
+
+    if (CommDlgExtendedError() != 0) {
+        error = "Could not open the Windows database file picker.";
+    }
+    return std::nullopt;
+#else
+    error = "Database file picker is only available in the Windows desktop build.";
+    return std::nullopt;
+#endif
+}
+
 }
 
 void SettingsView::render(AppState& state,
     AppSettingsRepository& settingsRepository,
     CapitalGainAllocationRepository& allocationRepository,
-    const std::string& databasePath,
+    const std::string& activeDatabasePath,
     const char* appVersion,
+    const std::function<bool(const std::string&, std::string&)>& saveDatabasePath,
     const std::function<void()>& reloadData)
 {
-    const std::string absoluteDatabasePath = std::filesystem::absolute(databasePath).string();
-
     UiTheme::sectionHeading("Settings", "Local storage, privacy, exports, and maintenance reminders.");
 
     const float availableWidth = ImGui::GetContentRegionAvail().x;
@@ -122,13 +178,7 @@ void SettingsView::render(AppState& state,
 
     ImGui::SameLine();
 
-    ImGui::BeginChild("DatabaseLocation", ImVec2(panelWidth, 260.0f), true);
-    ImGui::Text("Database Location");
-    ImGui::Separator();
-    ImGui::TextWrapped("%s", absoluteDatabasePath.c_str());
-    ImGui::Spacing();
-    ImGui::TextColored(UiTheme::MutedText, "The app reads and writes this local database file. Move or back it up only while the app is closed.");
-    ImGui::EndChild();
+    renderDatabaseLocation(activeDatabasePath, saveDatabasePath);
 
     ImGui::Spacing();
 
@@ -177,9 +227,6 @@ void SettingsView::render(AppState& state,
     ImGui::EndChild();
 
     ImGui::Spacing();
-    renderSignalRules(state, settingsRepository);
-
-    ImGui::Spacing();
     renderCapitalGainAllocation(state, allocationRepository, reloadData);
 
     ImGui::Spacing();
@@ -196,148 +243,76 @@ void SettingsView::render(AppState& state,
     ImGui::EndChild();
 }
 
-void SettingsView::renderSignalRules(AppState& state, AppSettingsRepository& settingsRepository)
+void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath, const std::function<bool(const std::string&, std::string&)>& saveDatabasePath)
 {
-    if (!signalRulesDraftInitialized_ || (!signalRulesDraftDirty_ && !(signalRulesDraft_ == state.signalRules))) {
-        signalRulesDraft_ = state.signalRules;
-        signalRulesDraftInitialized_ = true;
-        signalRulesDraftDirty_ = false;
+    const std::filesystem::path activePath = absolutePath(activeDatabasePath);
+    if (!databasePathDraftInitialized_) {
+        databasePathDraft_ = activePath.string();
+        databasePathDraftInitialized_ = true;
     }
 
-    UiTheme::pushPanelStyle();
-    ImGui::BeginChild("SignalRules", ImVec2(0.0f, 470.0f), true);
-    ImGui::Text("Signal Rules");
+    ImGui::BeginChild("DatabaseLocation", ImVec2(0.0f, 260.0f), true);
+    ImGui::Text("Database Location");
     ImGui::Separator();
-    ImGui::TextWrapped("Review and fine-tune the thresholds used by the existing Watchlist Buy/Sell/Hold signal engine. Defaults match the original hardcoded behavior.");
 
-    ImGui::Spacing();
-    const std::string rsiRange = Money::formatNumber(signalRulesDraft_.rsiBuyMin, 1) + " to " + Money::formatNumber(signalRulesDraft_.rsiBuyMax, 1);
-    const std::string macdRule = "MACD histogram greater than " + Money::formatNumber(signalRulesDraft_.macdHistogramMin, 4);
-    signalRuleSummaryLine("Buy rule", "Price is at or below Buy Level, RSI is within " + rsiRange + ", and " + macdRule + ".", UiTheme::Gain);
-    signalRuleSummaryLine("Sell rule", "Price is at or above Sell Level. Sell remains price-only.", UiTheme::Loss);
-    signalRuleSummaryLine("Hold rule", "Current price is missing, levels are not reached, indicators are missing, or technical confirmation is not met.", UiTheme::ElectricCyan);
-    const std::string momentumLabel = "Momentum " + std::to_string(signalRulesDraft_.momentumLookbackSessions) + "D";
-    signalRuleSummaryLine(momentumLabel.c_str(), "Watchlist display-only: latest close is compared with the close from the configured lookback. It does not change Buy/Sell/Hold.", UiTheme::TextSecondary);
-
-    ImGui::Spacing();
-    UiTheme::pushTableStyle();
-    if (ImGui::BeginTable("SignalRulesInputs", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("RSI");
-        ImGui::TableSetupColumn("MACD");
-        ImGui::TableSetupColumn("Momentum");
-        ImGui::TableNextRow();
-
-        ImGui::TableNextColumn();
-        ImGui::TextColored(UiTheme::TextPrimary, "RSI Rule");
-        ImGui::TextWrapped("Buy confirmation accepts RSI only inside this range.");
-        ImGui::SetNextItemWidth(140.0f);
-        if (ImGui::InputDouble("Lower##SignalRulesRsiLower", &signalRulesDraft_.rsiBuyMin, 0.0, 0.0, "%.1f")) {
-            signalRulesDraftDirty_ = true;
-            signalRulesMessage_.clear();
-        }
-        ImGui::SetNextItemWidth(140.0f);
-        if (ImGui::InputDouble("Upper##SignalRulesRsiUpper", &signalRulesDraft_.rsiBuyMax, 0.0, 0.0, "%.1f")) {
-            signalRulesDraftDirty_ = true;
-            signalRulesMessage_.clear();
-        }
-
-        ImGui::TableNextColumn();
-        ImGui::TextColored(UiTheme::TextPrimary, "MACD Rule");
-        ImGui::TextWrapped("Buy confirmation uses the MACD histogram threshold, not the MACD signal line.");
-        ImGui::SetNextItemWidth(170.0f);
-        if (ImGui::InputDouble("Histogram Minimum##SignalRulesMacdHistogram", &signalRulesDraft_.macdHistogramMin, 0.0, 0.0, "%.4f")) {
-            signalRulesDraftDirty_ = true;
-            signalRulesMessage_.clear();
-        }
-        ImGui::TextColored(UiTheme::MutedText, "Default 0.0000 means histogram must be positive.");
-
-        ImGui::TableNextColumn();
-        ImGui::TextColored(UiTheme::TextPrimary, "Momentum Rule");
-        ImGui::TextWrapped("Watchlist Momentum 7D is display-only by default and uses historical closes.");
-        ImGui::SetNextItemWidth(170.0f);
-        if (ImGui::InputInt("Lookback Sessions##SignalRulesMomentumLookback", &signalRulesDraft_.momentumLookbackSessions)) {
-            signalRulesDraftDirty_ = true;
-            signalRulesMessage_.clear();
-        }
-        ImGui::TextColored(UiTheme::MutedText, "Rising when latest close is greater than the comparison close.");
-
-        ImGui::EndTable();
+    ImGui::TextColored(UiTheme::MutedText, "Active database path");
+    ImGui::TextWrapped("%s", activePath.string().c_str());
+    if (isPathInsideWorkingTree(activePath.string())) {
+        ImGui::TextColored(UiTheme::TextWarning, "This database is inside the current working tree. Personal databases should stay ignored by Git.");
     }
-    UiTheme::popTableStyle();
 
     ImGui::Spacing();
-    signalRuleSummaryLine("Signal output", "Buy, Sell, and Hold labels keep the same decision structure. Saved watchlist signal statuses update on the next Watchlist price refresh.", UiTheme::TextSecondary);
+    ImGui::TextColored(UiTheme::MutedText, "Database file for next launch");
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputText("##DatabasePathDraft", &databasePathDraft_);
 
-    std::string validationMessage;
-    const bool draftValid = SignalRulesService::validate(signalRulesDraft_, validationMessage);
-    if (!signalRulesMessage_.empty()) {
-        ImGui::TextColored(signalRulesMessageIsError_ ? UiTheme::Loss : UiTheme::Gain, "%s", signalRulesMessage_.c_str());
-    } else if (signalRulesDraftDirty_ && !draftValid) {
-        ImGui::TextColored(UiTheme::Loss, "%s", validationMessage.c_str());
-    } else if (signalRulesDraftDirty_) {
-        ImGui::TextColored(UiTheme::Amber, "Unsaved signal rule changes.");
+    if (databasePathDraft_.empty()) {
+        ImGui::TextColored(UiTheme::TextMuted, "Empty path means the default local database will be used after restart.");
     } else {
-        ImGui::TextColored(UiTheme::MutedText, "Active signal rules are saved locally in app settings.");
-    }
-
-    ImGui::Spacing();
-    const bool hasChanges = signalRulesDraftDirty_ && !(signalRulesDraft_ == state.signalRules);
-    if (!hasChanges) {
-        ImGui::BeginDisabled();
-    }
-    UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
-    if (ImGui::Button("Save Changes", ImVec2(140.0f, 0.0f))) {
-        std::string error;
-        if (SignalRulesService::save(settingsRepository, signalRulesDraft_, error)) {
-            state.signalRules = signalRulesDraft_;
-            signalRulesDraftDirty_ = false;
-            signalRulesMessage_ = "Signal rules saved. Watchlist badges use them immediately; stored statuses update on the next price refresh.";
-            signalRulesMessageIsError_ = false;
-            state.setStatus("Signal rules saved locally.");
+        const std::filesystem::path draftPath = absolutePath(databasePathDraft_);
+        std::error_code filesystemError;
+        const bool exists = std::filesystem::exists(draftPath, filesystemError) && !filesystemError;
+        const bool isDirectory = std::filesystem::is_directory(draftPath, filesystemError) && !filesystemError;
+        if (!exists || isDirectory) {
+            ImGui::TextColored(UiTheme::TextWarning, "Choose an existing SQLite database file.");
+        } else if (isPathInsideWorkingTree(draftPath.string())) {
+            ImGui::TextColored(UiTheme::TextWarning, "Selected database is inside the current working tree.");
         } else {
-            signalRulesMessage_ = error;
-            signalRulesMessageIsError_ = true;
+            ImGui::TextColored(UiTheme::TextMuted, "Restart required after saving a different path.");
         }
     }
-    UiTheme::popButtonStyle();
-    if (!hasChanges) {
-        ImGui::EndDisabled();
+
+    if (ImGui::Button("Choose Database File", ImVec2(180.0f, 0.0f))) {
+        std::string error;
+        const std::optional<std::string> chosenPath = chooseDatabaseFile(error);
+        if (chosenPath.has_value()) {
+            databasePathDraft_ = absolutePath(*chosenPath).string();
+            databaseLocationMessage_.clear();
+        } else if (!error.empty()) {
+            databaseLocationMessage_ = error;
+            databaseLocationMessageIsError_ = true;
+        }
     }
 
     ImGui::SameLine();
-    if (!hasChanges) {
-        ImGui::BeginDisabled();
-    }
-    if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
-        signalRulesDraft_ = state.signalRules;
-        signalRulesDraftDirty_ = false;
-        signalRulesMessage_ = "Signal rule changes discarded.";
-        signalRulesMessageIsError_ = false;
-    }
-    if (!hasChanges) {
-        ImGui::EndDisabled();
+    if (ImGui::Button("Use Default On Restart", ImVec2(190.0f, 0.0f))) {
+        databasePathDraft_.clear();
+        databaseLocationMessage_.clear();
     }
 
-    ImGui::SameLine();
-    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
-    if (ImGui::Button("Reset to Defaults", ImVec2(160.0f, 0.0f))) {
-        std::string error;
-        if (SignalRulesService::resetToDefaults(settingsRepository, error)) {
-            signalRulesDraft_ = SignalRulesService::defaults();
-            state.signalRules = signalRulesDraft_;
-            signalRulesDraftDirty_ = false;
-            signalRulesMessage_ = "Signal rules reset to defaults. Watchlist badges use them immediately; stored statuses update on the next price refresh.";
-            signalRulesMessageIsError_ = false;
-            state.setStatus("Signal rules reset to defaults.");
-        } else {
-            signalRulesMessage_ = error;
-            signalRulesMessageIsError_ = true;
-        }
+    if (ImGui::Button("Save Path For Restart", ImVec2(180.0f, 0.0f))) {
+        std::string message;
+        const bool saved = saveDatabasePath(databasePathDraft_.empty() ? std::string {} : absolutePath(databasePathDraft_).string(), message);
+        databaseLocationMessage_ = message;
+        databaseLocationMessageIsError_ = !saved;
     }
-    UiTheme::popButtonStyle();
 
+    if (!databaseLocationMessage_.empty()) {
+        ImGui::TextColored(databaseLocationMessageIsError_ ? UiTheme::Loss : UiTheme::Gain, "%s", databaseLocationMessage_.c_str());
+    }
+
+    ImGui::TextColored(UiTheme::MutedText, "Saving a database path does not copy, move, delete, or overwrite database files.");
     ImGui::EndChild();
-    UiTheme::popPanelStyle();
 }
 
 void SettingsView::renderCapitalGainAllocation(AppState& state, CapitalGainAllocationRepository& allocationRepository, const std::function<void()>& reloadData)

@@ -12,15 +12,27 @@ CMakeUserPresets.json
 data/*.db
 data/*.sqlite
 data/*.sqlite3
+*.db
+*.sqlite
+*.sqlite3
 data/*.db-journal
 data/*.sqlite-journal
 data/*.sqlite3-journal
+*.db-journal
+*.sqlite-journal
+*.sqlite3-journal
 data/*.db-wal
 data/*.sqlite-wal
 data/*.sqlite3-wal
+*.db-wal
+*.sqlite-wal
+*.sqlite3-wal
 data/*.db-shm
 data/*.sqlite-shm
 data/*.sqlite3-shm
+*.db-shm
+*.sqlite-shm
+*.sqlite3-shm
 
 # Keep the placeholder directory marker trackable
 !data/.gitkeep

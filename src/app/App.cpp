@@ -4,7 +4,6 @@
 #include "app/SidebarModel.hpp"
 #include "db/Migrations.hpp"
 #include "services/DashboardService.hpp"
-#include "services/SignalRulesService.hpp"
 #include "services/WatchlistSignalService.hpp"
 #include "ui/UiTheme.hpp"
 #include "util/Date.hpp"
@@ -12,7 +11,9 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <filesystem>
 #include <optional>
 #include <set>
 #include <string>
@@ -26,17 +27,99 @@ constexpr float AccountColumnWidth = 340.0f;
 constexpr float SidebarValueColumnX = 170.0f;
 constexpr ImGuiWindowFlags SidebarCardFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 constexpr const char* ThemeSettingKey = "theme";
+constexpr const char* DatabasePathSettingKey = "database.path";
 
-void compactMetric(const char* label, const std::string& value, ImVec4 color)
+void compactMetric(const char* label, const std::string& value, ImVec4 color, bool numericValue = true)
 {
     ImGui::TextColored(UiTheme::MutedText, "%s", label);
     ImGui::SameLine(SidebarValueColumnX);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+    if (numericValue) {
+        UiTheme::pushNumericFont();
+    }
     ImGui::TextColored(color, "%s", value.c_str());
+    if (numericValue) {
+        UiTheme::popNumericFont();
+    }
+    ImGui::PopTextWrapPos();
+}
+
+void drawPanelChrome(const char* title, ImVec4 accent)
+{
+    const ImVec2 min = ImGui::GetWindowPos();
+    const ImVec2 size = ImGui::GetWindowSize();
+    const ImVec2 max(min.x + size.x, min.y + size.y);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    drawList->AddRectFilled(min, ImVec2(max.x, min.y + 36.0f), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::SurfaceElevated, 0.16f)), 14.0f, ImDrawFlags_RoundCornersTop);
+    drawList->AddRectFilled(ImVec2(min.x + 13.0f, min.y + 9.0f), ImVec2(min.x + 58.0f, min.y + 11.0f), ImGui::GetColorU32(UiTheme::withAlpha(accent, 0.38f)), 2.0f);
+    drawList->AddRect(min, max, ImGui::GetColorU32(UiTheme::withAlpha(accent, 0.10f)), 14.0f);
+
+    ImGui::TextColored(UiTheme::TextSecondary, "%s", title);
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x;
+    drawList->AddRectFilled(cursor, ImVec2(cursor.x + width, cursor.y + 1.0f), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::BorderSubtle, 0.08f)));
+    ImGui::Dummy(ImVec2(width, 7.0f));
+}
+
+void beginFinancePanel(const char* id, const char* title, ImVec2 size, ImVec4 accent, ImGuiWindowFlags flags = 0)
+{
+    UiTheme::pushPanelStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(13.0f, 11.0f));
+    ImGui::BeginChild(id, size, true, flags);
+    ImGui::PopStyleVar();
+    drawPanelChrome(title, accent);
+}
+
+void endFinancePanel()
+{
+    ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 float sidebarRowHeight()
 {
     return std::max(18.0f, ImGui::GetTextLineHeightWithSpacing());
+}
+
+bool isPortfolioShellSection(AppSection section)
+{
+    return section == AppSection::Accounts ||
+        section == AppSection::Holdings ||
+        section == AppSection::Transactions ||
+        section == AppSection::Dividends ||
+        section == AppSection::Goals ||
+        section == AppSection::ImportCsv;
+}
+
+const char* sectionSubtitle(AppSection section)
+{
+    switch (section) {
+    case AppSection::Dashboard:
+        return "Portfolio overview, performance, and dashboard intelligence.";
+    case AppSection::Accounts:
+        return "Account balances, status, and local brokerage records.";
+    case AppSection::Holdings:
+        return "Open positions, cost basis, and market value.";
+    case AppSection::Transactions:
+        return "Activity ledger for buys, sells, deposits, withdrawals, and adjustments.";
+    case AppSection::Dividends:
+        return "Dividend income, payment history, and yield tracking.";
+    case AppSection::Goals:
+        return "Long-term portfolio targets and progress monitoring.";
+    case AppSection::Watchlist:
+        return "Tracked symbols and saved price signals.";
+    case AppSection::ImportCsv:
+        return "CSV import workflow for local portfolio updates.";
+    case AppSection::StockResearch:
+        return "Symbol research and explicit market data refreshes.";
+    case AppSection::Reports:
+        return "Local reporting workspace for portfolio records.";
+    case AppSection::Settings:
+        return "Application preferences and local data controls.";
+    }
+
+    return "Local-first portfolio intelligence.";
 }
 
 ImVec4 sidebarToneColor(const SidebarModel::MetricRow& metric)
@@ -132,8 +215,6 @@ const Account* accountForHolding(const std::vector<Account>& accounts, int accou
     return nullptr;
 }
 
-<<<<<<< Updated upstream
-=======
 std::filesystem::path absolutePath(const std::string& path)
 {
     std::error_code error;
@@ -152,58 +233,15 @@ bool pathsEquivalent(const std::filesystem::path& left, const std::filesystem::p
     if (std::filesystem::equivalent(left, right, error)) {
         return true;
     }
+
     return absolutePath(left.string()).lexically_normal() == absolutePath(right.string()).lexically_normal();
 }
 
-bool isPathInside(const std::filesystem::path& child, const std::filesystem::path& parent)
-{
-    const std::filesystem::path normalizedChild = absolutePath(child.string()).lexically_normal();
-    const std::filesystem::path normalizedParent = absolutePath(parent.string()).lexically_normal();
-
-    auto childIterator = normalizedChild.begin();
-    auto parentIterator = normalizedParent.begin();
-    for (; parentIterator != normalizedParent.end(); ++parentIterator, ++childIterator) {
-        if (childIterator == normalizedChild.end() || *childIterator != *parentIterator) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool isPathInsideRepository(const std::string& path)
-{
-    std::error_code error;
-    const std::filesystem::path repositoryRoot = std::filesystem::current_path(error);
-    if (error) {
-        return false;
-    }
-    return isPathInside(absolutePath(path), repositoryRoot);
-}
-
-bool isRepositoryRoot(const std::string& path)
-{
-    std::error_code error;
-    const std::filesystem::path repositoryRoot = std::filesystem::current_path(error);
-    if (error) {
-        return false;
-    }
-    return pathsEquivalent(absolutePath(path), repositoryRoot);
-}
-
->>>>>>> Stashed changes
 }
 
 bool App::initialize()
 {
-    if (!database_.open(DatabasePath)) {
-        startupError_ = database_.lastError();
-        return false;
-    }
-
-    std::string migrationError;
-    if (!Migrations::run(database_, migrationError)) {
-        startupError_ = migrationError;
+    if (!openStartupDatabase()) {
         return false;
     }
 
@@ -244,7 +282,140 @@ bool App::initialize()
     }
 
     reloadData();
+    if (!startupDatabaseWarning_.empty()) {
+        state_.setStatus(startupDatabaseWarning_, true);
+    }
 
+    return true;
+}
+
+bool App::openStartupDatabase()
+{
+    std::string error;
+    if (!openDatabaseAtPath(DatabasePath, error)) {
+        startupError_ = error;
+        return false;
+    }
+
+    AppSettingsRepository bootstrapSettings(database_);
+    std::string settingsError;
+    const std::string configuredPath = bootstrapSettings.getString(DatabasePathSettingKey, "", settingsError);
+    if (!settingsError.empty()) {
+        startupDatabaseWarning_ = "Could not read configured database path. Using the default local database.";
+        return true;
+    }
+
+    if (configuredPath.empty()) {
+        return true;
+    }
+
+    const std::filesystem::path configuredAbsolutePath = absolutePath(configuredPath);
+    const std::filesystem::path activeAbsolutePath = absolutePath(activeDatabasePath_);
+    if (pathsEquivalent(configuredAbsolutePath, activeAbsolutePath)) {
+        activeDatabasePath_ = activeAbsolutePath.string();
+        return true;
+    }
+
+    std::error_code filesystemError;
+    if (!std::filesystem::exists(configuredAbsolutePath, filesystemError) ||
+        filesystemError ||
+        std::filesystem::is_directory(configuredAbsolutePath, filesystemError)) {
+        startupDatabaseWarning_ = "Configured database path was not found. Using the default local database.";
+        return true;
+    }
+
+    database_.close();
+    if (openDatabaseAtPath(configuredAbsolutePath.string(), error)) {
+        return true;
+    }
+
+    startupDatabaseWarning_ = "Configured database could not be opened. Using the default local database. " + error;
+    database_.close();
+    if (!openDatabaseAtPath(DatabasePath, error)) {
+        startupError_ = error;
+        return false;
+    }
+
+    return true;
+}
+
+bool App::openDatabaseAtPath(const std::string& databasePath, std::string& error)
+{
+    error.clear();
+    if (!database_.open(databasePath)) {
+        error = database_.lastError();
+        return false;
+    }
+
+    std::string migrationError;
+    if (!Migrations::run(database_, migrationError)) {
+        error = migrationError;
+        return false;
+    }
+
+    activeDatabasePath_ = absolutePathString(databasePath);
+    return true;
+}
+
+bool App::writeDatabasePathSettingToFile(const std::string& databasePath, const std::string& configuredPath, std::string& error)
+{
+    error.clear();
+
+    Database targetDatabase;
+    if (!targetDatabase.open(databasePath)) {
+        error = targetDatabase.lastError();
+        return false;
+    }
+
+    std::string migrationError;
+    if (!Migrations::run(targetDatabase, migrationError)) {
+        error = migrationError;
+        return false;
+    }
+
+    AppSettingsRepository targetSettings(targetDatabase);
+    return targetSettings.setString(DatabasePathSettingKey, configuredPath, error);
+}
+
+bool App::saveConfiguredDatabasePath(const std::string& configuredPath, std::string& message)
+{
+    message.clear();
+
+    std::string normalizedPath;
+    if (!configuredPath.empty()) {
+        const std::filesystem::path absoluteConfiguredPath = absolutePath(configuredPath);
+        std::error_code filesystemError;
+        if (!std::filesystem::exists(absoluteConfiguredPath, filesystemError) ||
+            filesystemError ||
+            std::filesystem::is_directory(absoluteConfiguredPath, filesystemError)) {
+            message = "Choose an existing SQLite database file, or clear the path to use the default database.";
+            return false;
+        }
+
+        normalizedPath = absoluteConfiguredPath.string();
+    }
+
+    if (appSettingsRepository_ == nullptr) {
+        message = "Application settings are not available yet.";
+        return false;
+    }
+
+    std::string error;
+    const std::filesystem::path defaultPath = absolutePath(DatabasePath);
+    const bool activeIsDefault = !activeDatabasePath_.empty() && pathsEquivalent(activeDatabasePath_, defaultPath);
+    if (!activeIsDefault && !writeDatabasePathSettingToFile(defaultPath.string(), normalizedPath, error)) {
+        message = "Could not update the startup database pointer: " + error;
+        return false;
+    }
+
+    if (!appSettingsRepository_->setString(DatabasePathSettingKey, normalizedPath, error)) {
+        message = "Could not save the database path setting: " + error;
+        return false;
+    }
+
+    message = normalizedPath.empty()
+        ? "Default database path saved. Restart Investor Command Center to use the default database."
+        : "Database path saved. Restart Investor Command Center to use: " + normalizedPath;
     return true;
 }
 
@@ -254,6 +425,7 @@ void App::render()
     renderTopMenuBar();
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    UiTheme::drawAppBackdrop(viewport->WorkPos, viewport->WorkSize);
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
 
@@ -263,19 +435,23 @@ void App::render()
         ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoNavFocus;
+        ImGuiWindowFlags_NoNavFocus |
+        ImGuiWindowFlags_NoBackground;
 
     ImGui::Begin("Investor Command Center", nullptr, windowFlags);
+
+    renderShellHeader();
+    ImGui::Spacing();
 
     renderAccountColumn();
     ImGui::SameLine();
 
-    ImGui::BeginChild("Content", ImVec2(0.0f, 0.0f), false);
-    ImGui::Text("%s", sectionTitle(state_.currentSection));
-    ImGui::SameLine();
-    ImGui::TextColored(UiTheme::MutedText, "Investor Command Center - top menu navigation - local personal investing tracker");
-    ImGui::Separator();
-    ImGui::Spacing();
+    UiTheme::pushPanelStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+    ImGui::BeginChild("Content", ImVec2(0.0f, 0.0f), true);
+    ImGui::PopStyleVar();
+
+    UiTheme::sectionHeading(sectionTitle(state_.currentSection), sectionSubtitle(state_.currentSection));
 
     const float statusHeight = state_.statusMessage.empty() ? 0.0f : 38.0f;
     ImGui::BeginChild("PageContent", ImVec2(0.0f, -statusHeight), false);
@@ -285,6 +461,7 @@ void App::render()
     renderStatusBar();
 
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
     renderAppPopups();
     ImGui::End();
 }
@@ -364,11 +541,6 @@ void App::reloadData()
         error.clear();
     }
 
-    state_.signalRules = SignalRulesService::load(*appSettingsRepository_, error);
-    if (!error.empty()) {
-        state_.setStatus("Could not load signal rules: " + error, true);
-        error.clear();
-    }
 }
 
 void App::navigateTo(AppSection section)
@@ -508,11 +680,7 @@ void App::refreshDashboardPrices()
 void App::refreshWatchlistPrices()
 {
     std::string error;
-<<<<<<< Updated upstream
     WatchlistPriceRefreshStatus refreshStatus = WatchlistSignalService::refreshPrices(state_.watchlist, *marketDataService_, *watchlistRepository_, error);
-=======
-    WatchlistPriceRefreshStatus refreshStatus = WatchlistSignalService::refreshPrices(state_.watchlist, *marketDataService_, *technicalIndicatorService_, *watchlistRepository_, error, state_.signalRules);
->>>>>>> Stashed changes
     reloadData();
     state_.watchlistPriceRefreshStatus = refreshStatus;
     navigateTo(AppSection::Watchlist);
@@ -527,7 +695,10 @@ void App::refreshWatchlistPrices()
 
 void App::renderTopMenuBar()
 {
+    ImGui::PushStyleColor(ImGuiCol_MenuBarBg, UiTheme::withAlpha(UiTheme::SurfaceMain, 0.96f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, UiTheme::withAlpha(UiTheme::GlassPanel, 0.98f));
     if (!ImGui::BeginMainMenuBar()) {
+        ImGui::PopStyleColor(2);
         return;
     }
 
@@ -651,15 +822,143 @@ void App::renderTopMenuBar()
     }
 
     ImGui::EndMainMenuBar();
+    ImGui::PopStyleColor(2);
+}
+
+void App::renderShellHeader()
+{
+    constexpr float HeaderHeight = 104.0f;
+
+    UiTheme::pushPanelStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 14.0f));
+    ImGui::BeginChild("AppShellHeader", ImVec2(0.0f, HeaderHeight), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+
+    const ImVec2 min = ImGui::GetWindowPos();
+    const ImVec2 size = ImGui::GetWindowSize();
+    const ImVec2 max(min.x + size.x, min.y + size.y);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(min, max, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::GlassPanel, 0.92f)), 18.0f);
+    drawList->AddRectFilled(min, ImVec2(max.x, min.y + 44.0f), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::SurfaceElevated, 0.24f)), 18.0f, ImDrawFlags_RoundCornersTop);
+    drawList->AddRectFilled(ImVec2(min.x + 18.0f, min.y + 10.0f), ImVec2(min.x + 128.0f, min.y + 12.0f), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::ElectricCyan, 0.34f)), 2.0f);
+    drawList->AddRect(min, max, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::BorderSubtle, 0.08f)), 18.0f);
+
+    ImGui::SetWindowFontScale(1.20f);
+    ImGui::TextColored(UiTheme::TextPrimary, "Investor Command Center");
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::TextColored(UiTheme::TextSecondary, "Advanced Portfolio Intelligence");
+
+    if (size.x > 820.0f) {
+        const bool databaseConnected = database_.handle() != nullptr;
+        const float statusWidth = 390.0f;
+        ImGui::SetCursorPos(ImVec2(size.x - statusWidth - 18.0f, 18.0f));
+        UiTheme::badge(databaseConnected ? "SQLite Connected" : "SQLite Disconnected", databaseConnected ? UiTheme::Gain : UiTheme::Loss);
+        ImGui::SameLine(0.0f, 10.0f);
+        ImGui::TextColored(UiTheme::TextMuted, "Market Data: %s", marketDataService_ == nullptr ? "N/A" : marketDataService_->providerName());
+    }
+
+    ImGui::SetCursorPos(ImVec2(18.0f, 60.0f));
+    renderTopNavigationTabs();
+
+    ImGui::EndChild();
+    UiTheme::popPanelStyle();
+}
+
+void App::renderTopNavigationTabs()
+{
+    struct TopTab {
+        const char* label;
+        AppSection target;
+        bool enabled;
+        bool portfolioGroup;
+        const char* unavailableMessage;
+    };
+
+    static constexpr std::array<TopTab, 8> Tabs {{
+        { "Dashboard", AppSection::Dashboard, true, false, nullptr },
+        { "Portfolio", AppSection::Holdings, true, true, nullptr },
+        { "Watchlist", AppSection::Watchlist, true, false, nullptr },
+        { "Research", AppSection::StockResearch, true, false, nullptr },
+        { "Import", AppSection::ImportCsv, true, false, nullptr },
+        { "Reports", AppSection::Reports, true, false, nullptr },
+        { "Settings", AppSection::Settings, true, false, nullptr },
+        { "Analytics", AppSection::Dashboard, false, false, "Analytics is currently shown inside Dashboard." },
+    }};
+
+    const float rowStartX = ImGui::GetCursorPosX();
+    const float rowEndX = ImGui::GetWindowContentRegionMax().x;
+    bool firstTab = true;
+
+    for (const TopTab& tab : Tabs) {
+        const ImVec2 textSize = ImGui::CalcTextSize(tab.label);
+        const ImVec2 tabSize(std::max(78.0f, textSize.x + 30.0f), 34.0f);
+
+        if (!firstTab) {
+            ImGui::SameLine(0.0f, 8.0f);
+        }
+        if (ImGui::GetCursorPosX() + tabSize.x > rowEndX && ImGui::GetCursorPosX() > rowStartX) {
+            ImGui::NewLine();
+            ImGui::SetCursorPosX(rowStartX);
+        }
+
+        const bool selected = tab.enabled && (tab.portfolioGroup ? isPortfolioShellSection(state_.currentSection) : state_.currentSection == tab.target);
+        ImGui::PushID(tab.label);
+        if (!tab.enabled) {
+            ImGui::BeginDisabled();
+        }
+        const ImVec2 min = ImGui::GetCursorScreenPos();
+        const bool clicked = ImGui::InvisibleButton("TopNavTab", tabSize);
+        const bool hovered = ImGui::IsItemHovered();
+        const bool focused = ImGui::IsItemFocused();
+        if (!tab.enabled) {
+            ImGui::EndDisabled();
+        }
+
+        const ImVec2 max(min.x + tabSize.x, min.y + tabSize.y);
+        const ImVec4 fill = selected
+            ? UiTheme::withAlpha(UiTheme::SurfaceElevated, 0.40f)
+            : hovered ? UiTheme::withAlpha(UiTheme::ElectricCyan, 0.07f) : UiTheme::withAlpha(UiTheme::SurfaceMain, 0.04f);
+        const ImVec4 border = selected
+            ? UiTheme::withAlpha(UiTheme::NeonMagenta, 0.20f)
+            : focused ? UiTheme::FocusRing : hovered ? UiTheme::withAlpha(UiTheme::ElectricCyan, 0.12f) : UiTheme::withAlpha(UiTheme::BorderSubtle, 0.04f);
+        const ImVec4 text = !tab.enabled
+            ? UiTheme::withAlpha(UiTheme::TextMuted, 0.52f)
+            : selected ? UiTheme::TextPrimary : hovered ? UiTheme::TextSecondary : UiTheme::TextMuted;
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), 10.0f);
+        drawList->AddRect(min, max, ImGui::GetColorU32(border), 10.0f);
+        if (selected) {
+            drawList->AddRectFilled(ImVec2(min.x + 14.0f, max.y - 3.0f), ImVec2(max.x - 14.0f, max.y - 1.0f), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::NeonMagenta, 0.72f)), 2.0f);
+        } else if (hovered && tab.enabled) {
+            drawList->AddRectFilled(ImVec2(min.x + 18.0f, max.y - 2.0f), ImVec2(max.x - 18.0f, max.y - 1.0f), ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::ElectricCyan, 0.28f)), 2.0f);
+        }
+        drawList->AddText(ImVec2(min.x + (tabSize.x - textSize.x) * 0.5f, min.y + (tabSize.y - textSize.y) * 0.5f), ImGui::GetColorU32(text), tab.label);
+
+        if (tab.enabled && clicked) {
+            navigateTo(tab.target);
+        }
+        if (!tab.enabled && hovered && tab.unavailableMessage != nullptr) {
+            ImGui::SetTooltip("%s", tab.unavailableMessage);
+        }
+        ImGui::PopID();
+        firstTab = false;
+    }
 }
 
 void App::renderAccountColumn()
 {
+    UiTheme::pushPanelStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
     ImGui::BeginChild("AccountColumn", ImVec2(AccountColumnWidth, 0.0f), true);
+    ImGui::PopStyleVar();
     renderPortfolioSummaryCard();
+    ImGui::Spacing();
     renderWatchlistPanel();
+    ImGui::Spacing();
     renderDataStatusCard();
     ImGui::EndChild();
+    UiTheme::popPanelStyle();
 }
 
 void App::renderPortfolioSummaryCard()
@@ -680,11 +979,11 @@ void App::renderPortfolioSummaryCard()
         static_cast<float>(std::max(visibleAccountCount, 1)) * rowHeight +
         (hasMoreAccounts ? rowHeight + 6.0f : 0.0f);
 
-    ImGui::BeginChild("PortfolioSummaryCard", ImVec2(0.0f, cardHeight), true, SidebarCardFlags);
-    ImGui::TextColored(UiTheme::Accent, "%s", card.title.c_str());
-    ImGui::Separator();
+    beginFinancePanel("PortfolioSummaryCard", card.title.c_str(), ImVec2(0.0f, cardHeight), UiTheme::ElectricCyan, SidebarCardFlags);
     ImGui::SetWindowFontScale(1.18f);
-    ImGui::TextColored(UiTheme::Gain, "%s", card.totalValue.c_str());
+    UiTheme::pushNumericFont();
+    ImGui::TextColored(UiTheme::TextPrimary, "%s", card.totalValue.c_str());
+    UiTheme::popNumericFont();
     ImGui::SetWindowFontScale(1.0f);
     ImGui::TextColored(UiTheme::MutedText, "%s", card.subtitle.c_str());
     ImGui::Spacing();
@@ -720,7 +1019,7 @@ void App::renderPortfolioSummaryCard()
         }
     }
 
-    ImGui::EndChild();
+    endFinancePanel();
 }
 
 void App::renderWatchlistPanel()
@@ -744,9 +1043,7 @@ void App::renderWatchlistPanel()
         static_cast<float>(std::max(initialVisibleSymbolCount, 1)) * rowHeight +
         (initialHasMoreSymbols ? rowHeight : 0.0f);
 
-    ImGui::BeginChild("SidebarWatchlistsCard", ImVec2(0.0f, cardHeight), true, SidebarCardFlags);
-    ImGui::TextColored(UiTheme::Accent, "%s", card.title.c_str());
-    ImGui::Separator();
+    beginFinancePanel("SidebarWatchlistsCard", card.title.c_str(), ImVec2(0.0f, cardHeight), UiTheme::NeonMagenta, SidebarCardFlags);
 
     const float tabLineRight = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
     for (int index = 0; index < static_cast<int>(card.tabs.size()); ++index) {
@@ -759,15 +1056,16 @@ void App::renderWatchlistPanel()
 
         const bool selected = index == selectedSidebarWatchlistTab_;
         if (selected) {
-            ImGui::PushStyleColor(ImGuiCol_Button, UiTheme::Accent);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UiTheme::Accent);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, UiTheme::Accent);
+            ImGui::PushStyleColor(ImGuiCol_Button, UiTheme::withAlpha(UiTheme::NeonMagenta, 0.20f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, UiTheme::withAlpha(UiTheme::NeonMagenta, 0.28f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, UiTheme::withAlpha(UiTheme::NeonMagenta, 0.34f));
+            ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(UiTheme::NeonMagenta, 0.35f));
         }
         if (ImGui::SmallButton(label.c_str())) {
             selectedSidebarWatchlistTab_ = index;
         }
         if (selected) {
-            ImGui::PopStyleColor(3);
+            ImGui::PopStyleColor(4);
         }
     }
 
@@ -814,7 +1112,7 @@ void App::renderWatchlistPanel()
         navigateTo(AppSection::Watchlist);
     }
 
-    ImGui::EndChild();
+    endFinancePanel();
 }
 
 void App::renderDataStatusCard()
@@ -826,17 +1124,15 @@ void App::renderDataStatusCard()
         AppVersion,
         startupError_,
         Date::todayIso8601());
-    const float cardHeight = card.abnormal ? 144.0f : 96.0f;
+    const float cardHeight = card.abnormal ? 152.0f : 112.0f;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 3.0f));
-    ImGui::BeginChild("SidebarDataStatusCard", ImVec2(0.0f, cardHeight), true, SidebarCardFlags);
-    ImGui::TextColored(UiTheme::MutedText, "%s", card.title.c_str());
-    ImGui::Separator();
+    beginFinancePanel("SidebarDataStatusCard", card.title.c_str(), ImVec2(0.0f, cardHeight), UiTheme::Amber, SidebarCardFlags);
 
     ImGui::TextColored(card.databaseIssue ? UiTheme::Loss : UiTheme::TextSecondary, "%s", card.connectionLine.c_str());
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("SQLite: %s", DatabasePath);
+        ImGui::SetTooltip("SQLite: %s", activeDatabasePath_.empty() ? DatabasePath : activeDatabasePath_.c_str());
     }
 
     ImGui::TextColored(card.refreshIssue ? UiTheme::Amber : UiTheme::MutedText, "%s", card.lastRefreshLine.c_str());
@@ -851,7 +1147,7 @@ void App::renderDataStatusCard()
         }
     }
 
-    ImGui::EndChild();
+    endFinancePanel();
     ImGui::PopStyleVar(2);
 }
 
@@ -896,7 +1192,10 @@ void App::renderCurrentSection()
         renderPlaceholder("Reports", "Reports will summarize local records without advice or recommendations.");
         break;
     case AppSection::Settings:
-        settingsView_.render(state_, *appSettingsRepository_, *capitalGainAllocationRepository_, DatabasePath, AppVersion, reload);
+        settingsView_.render(state_, *appSettingsRepository_, *capitalGainAllocationRepository_, activeDatabasePath_, AppVersion, [this](const std::string& configuredPath, std::string& message) {
+            return saveConfiguredDatabasePath(configuredPath, message);
+        },
+            reload);
         break;
     }
 }
@@ -986,7 +1285,7 @@ void App::renderPlaceholder(const char* title, const char* note)
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::TextColored(UiTheme::MutedText, "CSV export placeholder");
-    ImGui::EndChild();
+    endFinancePanel();
 }
 
 void App::renderStatusBar()

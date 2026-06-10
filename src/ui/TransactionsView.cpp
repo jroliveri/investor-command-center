@@ -75,6 +75,46 @@ bool isSell(const Transaction& transaction)
     return transaction.transactionType == "Sell";
 }
 
+bool isCashOutflow(const Transaction& transaction)
+{
+    return transaction.transactionType == "Buy" ||
+        transaction.transactionType == "Withdrawal" ||
+        transaction.transactionType == "Fee";
+}
+
+bool isCashInflow(const Transaction& transaction)
+{
+    return transaction.transactionType == "Sell" ||
+        transaction.transactionType == "Dividend" ||
+        transaction.transactionType == "Contribution" ||
+        transaction.transactionType == "Interest";
+}
+
+ImVec4 transactionBadgeColor(const std::string& transactionType)
+{
+    if (transactionType == "Buy" || transactionType == "Dividend" || transactionType == "Contribution" || transactionType == "Interest") {
+        return UiTheme::Gain;
+    }
+    if (transactionType == "Sell" || transactionType == "Withdrawal" || transactionType == "Fee") {
+        return UiTheme::Loss;
+    }
+    if (transactionType == "Transfer") {
+        return UiTheme::ElectricCyan;
+    }
+    return UiTheme::TextMuted;
+}
+
+ImVec4 transactionAmountColor(const Transaction& transaction)
+{
+    if (transaction.totalAmount < 0.0 || isCashOutflow(transaction)) {
+        return UiTheme::Loss;
+    }
+    if (transaction.totalAmount > 0.0 && isCashInflow(transaction)) {
+        return UiTheme::Gain;
+    }
+    return transaction.totalAmount == 0.0 ? UiTheme::TextMuted : UiTheme::TextSecondary;
+}
+
 std::string allocationSummaryText(const Transaction& transaction, const CapitalGainAllocationResult& result)
 {
     std::ostringstream stream;
@@ -95,20 +135,26 @@ void TransactionsView::render(AppState& state, TransactionService& service, cons
 {
     UiTheme::sectionHeading("Transactions", "Manual buys, sells, deposits, withdrawals, and other account activity.");
 
+    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
     if (ImGui::Button("Add Transaction")) {
         openCreate();
         ImGui::OpenPopup(TransactionEditorPopup);
     }
+    UiTheme::popButtonStyle();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(300.0f);
     ImGui::InputTextWithHint("##TransactionSearch", "Search transactions", &searchText_);
 
     ImGui::Spacing();
 
+    UiTheme::pushPanelStyle();
+    ImGui::BeginChild("TransactionsLedgerPanel", ImVec2(0.0f, 0.0f), true);
     int visibleRows = 0;
     if (state.transactions.empty()) {
         UiTheme::emptyState("No transactions yet", "Add manual activity to build a useful account feed.");
-    } else if (ImGui::BeginTable("TransactionsTable", 12, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
+    } else {
+        UiTheme::pushTableStyle();
+        if (ImGui::BeginTable("TransactionsTable", 12, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
         ImGui::TableSetupColumn("Date", ImGuiTableColumnFlags_WidthFixed, 100.0f);
         ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 105.0f);
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 76.0f);
@@ -134,7 +180,7 @@ void TransactionsView::render(AppState& state, TransactionService& service, cons
             ImGui::TableNextColumn();
             DatePicker::drawTableDate(transaction.transactionDate);
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::Amber, "%s", transaction.transactionType.c_str());
+            UiTheme::badge(transaction.transactionType.c_str(), transactionBadgeColor(transaction.transactionType));
             ImGui::TableNextColumn();
             ImGui::Text("%s", transaction.ticker.c_str());
             ImGui::TableNextColumn();
@@ -142,22 +188,24 @@ void TransactionsView::render(AppState& state, TransactionService& service, cons
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::MutedText, "%s", accountName);
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::formatQuantity(transaction.quantity).c_str());
+            UiTheme::textRightAligned(Money::formatQuantity(transaction.quantity).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(transaction.price).c_str());
+            UiTheme::textRightAligned(Money::format(transaction.price).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(transaction.fees).c_str());
+            UiTheme::textRightAligned(Money::format(transaction.fees).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", Money::format(transaction.totalAmount).c_str());
+            UiTheme::textRightAligned(Money::format(transaction.totalAmount).c_str(), transactionAmountColor(transaction));
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::moneyColor(transaction.realizedGainDollar), "%s", isSell(transaction) ? Money::format(transaction.realizedGainDollar).c_str() : "-");
+            UiTheme::textRightAligned(isSell(transaction) ? Money::format(transaction.realizedGainDollar).c_str() : "-", UiTheme::moneyColor(transaction.realizedGainDollar));
             ImGui::TableNextColumn();
-            ImGui::TextColored(UiTheme::moneyColor(transaction.realizedGainDollar), "%s", isSell(transaction) ? Money::formatPercent(transaction.realizedGainPercent, true).c_str() : "-");
+            UiTheme::textRightAligned(isSell(transaction) ? Money::formatPercent(transaction.realizedGainPercent, true).c_str() : "-", UiTheme::moneyColor(transaction.realizedGainDollar));
             ImGui::TableNextColumn();
             ImGui::PushID(transaction.id);
+            UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
             if (ImGui::SmallButton("Menu")) {
                 ImGui::OpenPopup("TransactionRowMenu");
             }
+            UiTheme::popButtonStyle();
             if (ImGui::BeginPopup("TransactionRowMenu")) {
                 const bool sellTransaction = isSell(transaction);
                 if (!sellTransaction) {
@@ -192,7 +240,11 @@ void TransactionsView::render(AppState& state, TransactionService& service, cons
         if (visibleRows == 0) {
             ImGui::TextColored(UiTheme::MutedText, "No transactions match the current search.");
         }
+        }
+        UiTheme::popTableStyle();
     }
+    ImGui::EndChild();
+    UiTheme::popPanelStyle();
 
     if (openEditorPopup_) {
         ImGui::OpenPopup(TransactionEditorPopup);
@@ -390,8 +442,9 @@ void TransactionsView::drawAllocationPopup(const AppState& state)
         } else if (result.lines.empty()) {
             ImGui::TextColored(UiTheme::Amber, "No active allocation rules are available. Add categories in Settings.");
         } else {
+            UiTheme::pushTableStyle();
             if (ImGui::BeginTable("CapitalGainAllocationPopupTable", 3,
-                    ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit,
+                    ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit,
                     ImVec2(520.0f, 0.0f))) {
                 ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch, 1.0f);
                 ImGui::TableSetupColumn("Percentage", ImGuiTableColumnFlags_WidthFixed, 120.0f);
@@ -403,13 +456,14 @@ void TransactionsView::drawAllocationPopup(const AppState& state)
                     ImGui::TableNextColumn();
                     ImGui::Text("%s", line.category.c_str());
                     ImGui::TableNextColumn();
-                    ImGui::Text("%s", Money::formatPercent(line.percentage).c_str());
+                    UiTheme::textRightAligned(Money::formatPercent(line.percentage).c_str());
                     ImGui::TableNextColumn();
-                    ImGui::Text("%s", Money::format(line.amount).c_str());
+                    UiTheme::textRightAligned(Money::format(line.amount).c_str(), UiTheme::Gain);
                 }
 
                 ImGui::EndTable();
             }
+            UiTheme::popTableStyle();
 
             if (result.totalPercentage < 99.99) {
                 ImGui::Spacing();
