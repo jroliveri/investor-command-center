@@ -53,9 +53,9 @@ private:
     void refreshWatchlistPrices();
     void renderTopMenuBar();
     void renderAccountColumn();
-    void renderAccountInfoPanel();
-    void renderAccountsPanel();
+    void renderPortfolioSummaryCard();
     void renderWatchlistPanel();
+    void renderDataStatusCard();
     void renderAppPopups();
     void renderCurrentSection();
     void renderPlaceholder(const char* title, const char* note);
@@ -96,4 +96,5 @@ private:
     bool showPrivacyPopup_ = false;
     bool showResearchDisclaimerPopup_ = false;
     bool showManualSnapshotReplacePopup_ = false;
+    int selectedSidebarWatchlistTab_ = 0;
 };

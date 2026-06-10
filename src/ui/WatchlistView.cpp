@@ -390,12 +390,21 @@ void drawRightAlignedTechnical(const std::string& value, ImVec4 color, const std
 
 void showGlassTooltip(const std::string& text)
 {
+    constexpr float TooltipMinWidth = 240.0f;
+    constexpr float TooltipMaxWidth = 360.0f;
+
     ImGui::PushStyleColor(ImGuiCol_PopupBg, UiTheme::withAlpha(UiTheme::GlassPanel, 0.96f));
     ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(UiTheme::ElectricCyan, 0.42f));
     ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
+    ImGui::SetNextWindowSizeConstraints(
+        ImVec2(TooltipMinWidth, 0.0f),
+        ImVec2(TooltipMaxWidth, ImGui::GetIO().DisplaySize.y));
     ImGui::BeginTooltip();
-    ImGui::TextWrapped("%s", text.c_str());
+    const float wrapWidth = TooltipMaxWidth - ImGui::GetStyle().WindowPadding.x * 2.0f;
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrapWidth);
+    ImGui::TextUnformatted(text.c_str());
+    ImGui::PopTextWrapPos();
     ImGui::EndTooltip();
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);
