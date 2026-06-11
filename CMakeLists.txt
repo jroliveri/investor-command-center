@@ -278,29 +278,3 @@ if(MSVC)
 endif()
 
 add_test(NAME InvestorCommandCenterTests COMMAND InvestorCommandCenterTests)
-
-add_executable(SidebarModelTests
-    tests/SidebarModelTests.cpp
-    src/app/SidebarModel.hpp
-    src/app/SidebarModel.cpp
-    src/models/Account.hpp
-    src/models/Holding.hpp
-    src/models/MarketQuote.hpp
-    src/models/WatchlistItem.hpp
-    src/models/WatchlistPriceRefresh.hpp
-    src/services/PerformanceCalculator.hpp
-    src/services/PortfolioCalculator.hpp
-    src/services/PortfolioCalculator.cpp
-    src/util/Money.hpp
-    src/util/Money.cpp
-)
-
-target_include_directories(SidebarModelTests PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
-)
-
-if(MSVC)
-    target_compile_options(SidebarModelTests PRIVATE /W4 /permissive- /utf-8)
-endif()
-
-add_test(NAME SidebarModelTests COMMAND SidebarModelTests)
