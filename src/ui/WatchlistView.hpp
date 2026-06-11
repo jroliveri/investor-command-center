@@ -2,10 +2,12 @@
 #pragma once
 
 #include "models/TechnicalIndicatorSnapshot.hpp"
+#include "models/TechnicalIndicatorSettings.hpp"
 #include "models/Watchlist.hpp"
 #include "models/WatchlistItem.hpp"
 
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -34,6 +36,7 @@ private:
     void refreshHistory(AppState& state, MarketDataService& marketDataService, TechnicalIndicatorService& technicalIndicatorService, const std::vector<WatchlistItem>& items, const std::string& watchlistName);
     void drawPriorityBadge(const std::string& priority) const;
     void drawSignalBadge(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators);
+    const TechnicalIndicatorEvaluation& technicalEvaluationFor(TechnicalIndicatorService& technicalIndicatorService, const WatchlistItem& item, const TechnicalIndicatorSettings& settings);
     void drawSignalNoticePopup();
     void ensureSelectedWatchlist(const AppState& state);
     bool hasSignalLevelError(const WatchlistItem& item) const;
@@ -48,7 +51,6 @@ private:
     bool openEditorPopup_ = false;
     bool openDeletePopup_ = false;
     bool openSignalNoticePopup_ = false;
-    bool showTechnicals_ = false;
     int selectedWatchlistId_ = 0;
     int deactivateWatchlistId_ = 0;
     int deactivateWatchlistItemCount_ = 0;
@@ -66,5 +68,6 @@ private:
     std::string watchlistFormError_;
     std::string formError_;
     std::string searchText_;
+    std::map<std::string, TechnicalIndicatorEvaluation> technicalEvaluationCache_;
     bool historyRefreshIsError_ = false;
 };

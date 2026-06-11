@@ -2,23 +2,20 @@
 #include "services/TechnicalIndicatorService.hpp"
 
 #include "models/MarketPriceHistory.hpp"
-#include "models/SignalRules.hpp"
 #include "repositories/MarketPriceHistoryRepository.hpp"
 #include "repositories/TechnicalIndicatorCacheRepository.hpp"
+#include "services/TechnicalIndicatorSettingsService.hpp"
 #include "util/Date.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <numeric>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace {
-
-constexpr int RsiPeriod = 14;
-constexpr int MacdFastPeriod = 12;
-constexpr int MacdSlowPeriod = 26;
-constexpr int MacdSignalPeriod = 9;
 
 struct MacdCalculation {
     std::optional<double> line;
@@ -26,15 +23,55 @@ struct MacdCalculation {
     std::optional<double> histogram;
 };
 
-std::optional<double> calculateRsi(const std::vector<double>& closes)
+bool isUsablePrice(double value)
 {
-    if (static_cast<int>(closes.size()) <= RsiPeriod) {
+    return std::isfinite(value) && value > 0.0;
+}
+
+std::vector<double> closingPrices(const std::vector<MarketPriceHistoryRow>& rows)
+{
+    std::vector<double> closes;
+    closes.reserve(rows.size());
+    for (const MarketPriceHistoryRow& row : rows) {
+        if (row.closePrice.has_value() && isUsablePrice(*row.closePrice)) {
+            closes.push_back(*row.closePrice);
+        }
+    }
+    return closes;
+}
+
+std::vector<double> volumeValues(const std::vector<MarketPriceHistoryRow>& rows)
+{
+    std::vector<double> volumes;
+    volumes.reserve(rows.size());
+    for (const MarketPriceHistoryRow& row : rows) {
+        if (row.volume.has_value() && std::isfinite(*row.volume) && *row.volume >= 0.0) {
+            volumes.push_back(*row.volume);
+        }
+    }
+    return volumes;
+}
+
+void appendUnavailableReason(std::string& reason, const std::string& addition)
+{
+    if (addition.empty()) {
+        return;
+    }
+    if (!reason.empty()) {
+        reason += " ";
+    }
+    reason += addition;
+}
+
+std::optional<double> calculateRsi(const std::vector<double>& closes, int period)
+{
+    if (period <= 1 || static_cast<int>(closes.size()) <= period) {
         return std::nullopt;
     }
 
     double averageGain = 0.0;
     double averageLoss = 0.0;
-    for (int index = 1; index <= RsiPeriod; ++index) {
+    for (int index = 1; index <= period; ++index) {
         const double change = closes[static_cast<std::size_t>(index)] - closes[static_cast<std::size_t>(index - 1)];
         if (change >= 0.0) {
             averageGain += change;
@@ -43,15 +80,15 @@ std::optional<double> calculateRsi(const std::vector<double>& closes)
         }
     }
 
-    averageGain /= static_cast<double>(RsiPeriod);
-    averageLoss /= static_cast<double>(RsiPeriod);
+    averageGain /= static_cast<double>(period);
+    averageLoss /= static_cast<double>(period);
 
-    for (std::size_t index = static_cast<std::size_t>(RsiPeriod + 1); index < closes.size(); ++index) {
+    for (std::size_t index = static_cast<std::size_t>(period + 1); index < closes.size(); ++index) {
         const double change = closes[index] - closes[index - 1];
         const double gain = change > 0.0 ? change : 0.0;
         const double loss = change < 0.0 ? -change : 0.0;
-        averageGain = ((averageGain * static_cast<double>(RsiPeriod - 1)) + gain) / static_cast<double>(RsiPeriod);
-        averageLoss = ((averageLoss * static_cast<double>(RsiPeriod - 1)) + loss) / static_cast<double>(RsiPeriod);
+        averageGain = ((averageGain * static_cast<double>(period - 1)) + gain) / static_cast<double>(period);
+        averageLoss = ((averageLoss * static_cast<double>(period - 1)) + loss) / static_cast<double>(period);
     }
 
     if (averageGain == 0.0 && averageLoss == 0.0) {
@@ -62,13 +99,17 @@ std::optional<double> calculateRsi(const std::vector<double>& closes)
     }
 
     const double relativeStrength = averageGain / averageLoss;
-    return 100.0 - (100.0 / (1.0 + relativeStrength));
+    const double rsi = 100.0 - (100.0 / (1.0 + relativeStrength));
+    if (!std::isfinite(rsi)) {
+        return std::nullopt;
+    }
+    return std::clamp(rsi, 0.0, 100.0);
 }
 
 std::vector<std::optional<double>> calculateEmaSeries(const std::vector<double>& values, int period)
 {
     std::vector<std::optional<double>> series(values.size(), std::nullopt);
-    if (period <= 0 || static_cast<int>(values.size()) < period) {
+    if (period <= 1 || static_cast<int>(values.size()) < period) {
         return series;
     }
 
@@ -85,15 +126,16 @@ std::vector<std::optional<double>> calculateEmaSeries(const std::vector<double>&
     return series;
 }
 
-MacdCalculation calculateMacd(const std::vector<double>& closes)
+MacdCalculation calculateMacd(const std::vector<double>& closes, int fastPeriod, int slowPeriod, int signalPeriod)
 {
     MacdCalculation calculation;
-    if (static_cast<int>(closes.size()) < MacdSlowPeriod + MacdSignalPeriod - 1) {
+    if (fastPeriod <= 1 || slowPeriod <= fastPeriod || signalPeriod <= 1 ||
+        static_cast<int>(closes.size()) < slowPeriod + signalPeriod - 1) {
         return calculation;
     }
 
-    const std::vector<std::optional<double>> fastEma = calculateEmaSeries(closes, MacdFastPeriod);
-    const std::vector<std::optional<double>> slowEma = calculateEmaSeries(closes, MacdSlowPeriod);
+    const std::vector<std::optional<double>> fastEma = calculateEmaSeries(closes, fastPeriod);
+    const std::vector<std::optional<double>> slowEma = calculateEmaSeries(closes, slowPeriod);
 
     std::vector<double> macdValues;
     for (std::size_t index = 0; index < closes.size(); ++index) {
@@ -102,20 +144,41 @@ MacdCalculation calculateMacd(const std::vector<double>& closes)
         }
     }
 
-    if (static_cast<int>(macdValues.size()) < MacdSignalPeriod) {
+    if (static_cast<int>(macdValues.size()) < signalPeriod) {
         return calculation;
     }
 
-    const std::vector<std::optional<double>> signalSeries = calculateEmaSeries(macdValues, MacdSignalPeriod);
+    const std::vector<std::optional<double>> signalSeries = calculateEmaSeries(macdValues, signalPeriod);
     const std::optional<double>& latestSignal = signalSeries.back();
     if (!latestSignal.has_value()) {
         return calculation;
     }
 
-    calculation.line = macdValues.back();
-    calculation.signal = *latestSignal;
-    calculation.histogram = *calculation.line - *calculation.signal;
+    const double line = macdValues.back();
+    const double signal = *latestSignal;
+    const double histogram = line - signal;
+    if (std::isfinite(line) && std::isfinite(signal) && std::isfinite(histogram)) {
+        calculation.line = line;
+        calculation.signal = signal;
+        calculation.histogram = histogram;
+    }
     return calculation;
+}
+
+std::optional<double> calculateMomentumPercent(const std::vector<double>& closes, int lookbackDays)
+{
+    if (lookbackDays <= 0 || static_cast<int>(closes.size()) <= lookbackDays) {
+        return std::nullopt;
+    }
+
+    const double latestClose = closes.back();
+    const double comparisonClose = closes[closes.size() - 1 - static_cast<std::size_t>(lookbackDays)];
+    if (!isUsablePrice(latestClose) || !isUsablePrice(comparisonClose)) {
+        return std::nullopt;
+    }
+
+    const double momentum = ((latestClose - comparisonClose) / comparisonClose) * 100.0;
+    return std::isfinite(momentum) ? std::optional<double> { momentum } : std::nullopt;
 }
 
 std::optional<double> averageTrailing(const std::vector<double>& values, int period)
@@ -128,7 +191,102 @@ std::optional<double> averageTrailing(const std::vector<double>& values, int per
     return std::accumulate(begin, values.end(), 0.0) / static_cast<double>(period);
 }
 
-TechnicalIndicatorSnapshot calculateSnapshot(const std::string& symbol, const std::string& provider, const std::vector<MarketPriceHistoryRow>& rows)
+std::string classifyRsi(const std::optional<double>& rsi, const TechnicalIndicatorSettings& settings)
+{
+    if (!rsi.has_value()) {
+        return "N/A";
+    }
+    if (*rsi <= settings.rsiOversoldThreshold) {
+        return "Oversold";
+    }
+    if (*rsi >= settings.rsiOverboughtThreshold) {
+        return "Overbought";
+    }
+    return "Neutral";
+}
+
+std::string classifyMacd(const std::optional<double>& histogram)
+{
+    if (!histogram.has_value()) {
+        return "N/A";
+    }
+    if (*histogram > 0.0) {
+        return "Bullish";
+    }
+    if (*histogram < 0.0) {
+        return "Bearish";
+    }
+    return "Neutral";
+}
+
+std::string classifyMomentum(const std::optional<double>& momentumPercent, const TechnicalIndicatorSettings& settings)
+{
+    if (!momentumPercent.has_value()) {
+        return "N/A";
+    }
+    if (*momentumPercent >= settings.momentumPositiveThresholdPercent) {
+        return "Rising";
+    }
+    if (*momentumPercent <= settings.momentumNegativeThresholdPercent) {
+        return "Falling";
+    }
+    return "Flat";
+}
+
+TechnicalIndicatorEvaluation calculateEvaluation(const std::vector<MarketPriceHistoryRow>& rows, const TechnicalIndicatorSettings& settings)
+{
+    TechnicalIndicatorEvaluation evaluation;
+    const std::vector<double> closes = closingPrices(rows);
+    if (closes.empty()) {
+        evaluation.unavailableReason = "No valid historical close prices are available.";
+        return evaluation;
+    }
+
+    evaluation.rsi = calculateRsi(closes, settings.rsiPeriod);
+    const MacdCalculation macd = calculateMacd(closes, settings.macdFastPeriod, settings.macdSlowPeriod, settings.macdSignalPeriod);
+    evaluation.macdLine = macd.line;
+    evaluation.macdSignal = macd.signal;
+    evaluation.macdHistogram = macd.histogram;
+    evaluation.momentumPercent = calculateMomentumPercent(closes, settings.momentumLookbackDays);
+
+    evaluation.rsiClassification = classifyRsi(evaluation.rsi, settings);
+    evaluation.macdClassification = classifyMacd(evaluation.macdHistogram);
+    evaluation.momentumClassification = classifyMomentum(evaluation.momentumPercent, settings);
+
+    if (!evaluation.rsi.has_value()) {
+        appendUnavailableReason(evaluation.unavailableReason, "Insufficient history for RSI period " + std::to_string(settings.rsiPeriod) + ".");
+    }
+    if (!evaluation.macdLine.has_value() || !evaluation.macdSignal.has_value() || !evaluation.macdHistogram.has_value()) {
+        appendUnavailableReason(evaluation.unavailableReason,
+            "Insufficient history for MACD periods " + std::to_string(settings.macdFastPeriod) + "/" +
+                std::to_string(settings.macdSlowPeriod) + "/" + std::to_string(settings.macdSignalPeriod) + ".");
+    }
+    if (!evaluation.momentumPercent.has_value()) {
+        appendUnavailableReason(evaluation.unavailableReason, "Insufficient history for Momentum lookback " + std::to_string(settings.momentumLookbackDays) + ".");
+    }
+
+    return evaluation;
+}
+
+TechnicalIndicatorEvaluation evaluateSnapshot(const TechnicalIndicatorSnapshot& snapshot, const TechnicalIndicatorSettings& settings)
+{
+    TechnicalIndicatorEvaluation evaluation;
+    evaluation.rsi = snapshot.rsi14;
+    evaluation.macdLine = snapshot.macdLine;
+    evaluation.macdSignal = snapshot.macdSignal;
+    evaluation.macdHistogram = snapshot.macdHistogram;
+    evaluation.rsiClassification = classifyRsi(evaluation.rsi, settings);
+    evaluation.macdClassification = classifyMacd(evaluation.macdHistogram);
+    evaluation.momentumClassification = "N/A";
+    evaluation.unavailableReason = "Momentum requires local historical close prices and is not stored in the technical cache.";
+    return evaluation;
+}
+
+TechnicalIndicatorSnapshot calculateSnapshot(
+    const std::string& symbol,
+    const std::string& provider,
+    const std::vector<MarketPriceHistoryRow>& rows,
+    const TechnicalIndicatorEvaluation& evaluation)
 {
     TechnicalIndicatorSnapshot snapshot;
     snapshot.symbol = symbol;
@@ -139,26 +297,12 @@ TechnicalIndicatorSnapshot calculateSnapshot(const std::string& symbol, const st
         snapshot.calculatedForDate = rows.back().priceDate;
     }
 
-    std::vector<double> closes;
-    std::vector<double> volumes;
-    closes.reserve(rows.size());
-    volumes.reserve(rows.size());
+    snapshot.rsi14 = evaluation.rsi;
+    snapshot.macdLine = evaluation.macdLine;
+    snapshot.macdSignal = evaluation.macdSignal;
+    snapshot.macdHistogram = evaluation.macdHistogram;
 
-    for (const MarketPriceHistoryRow& row : rows) {
-        if (row.closePrice.has_value()) {
-            closes.push_back(*row.closePrice);
-        }
-        if (row.volume.has_value()) {
-            volumes.push_back(*row.volume);
-        }
-    }
-
-    snapshot.rsi14 = calculateRsi(closes);
-    const MacdCalculation macd = calculateMacd(closes);
-    snapshot.macdLine = macd.line;
-    snapshot.macdSignal = macd.signal;
-    snapshot.macdHistogram = macd.histogram;
-
+    const std::vector<double> volumes = volumeValues(rows);
     if (!volumes.empty()) {
         snapshot.latestVolume = volumes.back();
     }
@@ -181,6 +325,20 @@ TechnicalIndicatorService::TechnicalIndicatorService(MarketPriceHistoryRepositor
 
 TechnicalIndicatorResult TechnicalIndicatorService::calculateAndCache(const std::string& symbol, const std::string& provider) const
 {
+    return calculateAndCache(symbol, provider, TechnicalIndicatorSettings {});
+}
+
+TechnicalIndicatorResult TechnicalIndicatorService::calculateAndCache(
+    const std::string& symbol,
+    const std::string& provider,
+    const TechnicalIndicatorSettings& settings) const
+{
+    TechnicalIndicatorSettings effectiveSettings = settings;
+    std::string settingsError;
+    if (!TechnicalIndicatorSettingsService::validate(effectiveSettings, settingsError)) {
+        effectiveSettings = TechnicalIndicatorSettingsService::defaults();
+    }
+
     TechnicalIndicatorResult result;
     const std::string normalizedSymbol = normalizeSymbol(symbol);
     const std::string normalizedProvider = provider.empty() ? "Yahoo Finance" : provider;
@@ -197,6 +355,7 @@ TechnicalIndicatorResult TechnicalIndicatorService::calculateAndCache(const std:
         if (cached.has_value()) {
             result.success = true;
             result.snapshot = *cached;
+            result.evaluation = evaluateSnapshot(*cached, effectiveSettings);
             result.fromCache = true;
             result.staleCache = true;
             result.error = "No local historical rows were available. Showing cached technical indicators.";
@@ -212,7 +371,8 @@ TechnicalIndicatorResult TechnicalIndicatorService::calculateAndCache(const std:
         return result;
     }
 
-    result.snapshot = calculateSnapshot(normalizedSymbol, normalizedProvider, historyRows);
+    result.evaluation = calculateEvaluation(historyRows, effectiveSettings);
+    result.snapshot = calculateSnapshot(normalizedSymbol, normalizedProvider, historyRows, result.evaluation);
     if (result.snapshot.calculatedForDate.empty()) {
         result.error = "Historical rows did not include a usable price date for " + normalizedSymbol + ".";
         return result;
@@ -228,6 +388,38 @@ TechnicalIndicatorResult TechnicalIndicatorService::calculateAndCache(const std:
     return result;
 }
 
+TechnicalIndicatorEvaluation TechnicalIndicatorService::evaluate(const std::string& symbol, const std::string& provider, const TechnicalIndicatorSettings& settings) const
+{
+    TechnicalIndicatorSettings effectiveSettings = settings;
+    std::string settingsError;
+    if (!TechnicalIndicatorSettingsService::validate(effectiveSettings, settingsError)) {
+        effectiveSettings = TechnicalIndicatorSettingsService::defaults();
+    }
+
+    const std::string normalizedSymbol = normalizeSymbol(symbol);
+    if (normalizedSymbol.empty()) {
+        TechnicalIndicatorEvaluation evaluation;
+        evaluation.unavailableReason = "Ticker is required.";
+        return evaluation;
+    }
+
+    std::string historyError;
+    const std::vector<MarketPriceHistoryRow> historyRows = historyRepository_.listBySymbol(normalizedSymbol, provider.empty() ? "Yahoo Finance" : provider, historyError);
+    if (!historyError.empty()) {
+        TechnicalIndicatorEvaluation evaluation;
+        evaluation.unavailableReason = historyError;
+        return evaluation;
+    }
+
+    if (historyRows.empty()) {
+        TechnicalIndicatorEvaluation evaluation;
+        evaluation.unavailableReason = "No local historical rows are available for " + normalizedSymbol + ". Refresh history first.";
+        return evaluation;
+    }
+
+    return calculateEvaluation(historyRows, effectiveSettings);
+}
+
 std::optional<TechnicalIndicatorSnapshot> TechnicalIndicatorService::cachedSnapshot(const std::string& symbol, const std::string& provider, std::string& error) const
 {
     return cacheRepository_.findLatestBySymbol(normalizeSymbol(symbol), provider.empty() ? "Yahoo Finance" : provider, error);
@@ -235,7 +427,7 @@ std::optional<TechnicalIndicatorSnapshot> TechnicalIndicatorService::cachedSnaps
 
 std::optional<WatchlistMomentum7D> TechnicalIndicatorService::watchlistMomentum7D(const std::string& symbol, const std::string& provider, std::string& error) const
 {
-    return watchlistMomentum(symbol, provider, SignalRulesDefaults::MomentumLookbackSessions, error);
+    return watchlistMomentum(symbol, provider, TechnicalIndicatorSettingsDefaults::MomentumLookbackDays, error);
 }
 
 std::optional<WatchlistMomentum7D> TechnicalIndicatorService::watchlistMomentum(const std::string& symbol, const std::string& provider, int lookbackSessions, std::string& error) const
@@ -246,6 +438,20 @@ std::optional<WatchlistMomentum7D> TechnicalIndicatorService::watchlistMomentum(
         return std::nullopt;
     }
     return WatchlistIndicatorDisplay::calculateMomentum(rows, lookbackSessions);
+}
+
+std::optional<WatchlistMomentum7D> TechnicalIndicatorService::watchlistMomentum(
+    const std::string& symbol,
+    const std::string& provider,
+    const TechnicalIndicatorSettings& settings,
+    std::string& error) const
+{
+    TechnicalIndicatorSettings effectiveSettings = settings;
+    std::string settingsError;
+    if (!TechnicalIndicatorSettingsService::validate(effectiveSettings, settingsError)) {
+        effectiveSettings = TechnicalIndicatorSettingsService::defaults();
+    }
+    return watchlistMomentum(symbol, provider, effectiveSettings.momentumLookbackDays, error);
 }
 
 std::string TechnicalIndicatorService::normalizeSymbol(std::string symbol)

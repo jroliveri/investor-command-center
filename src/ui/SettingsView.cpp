@@ -4,6 +4,7 @@
 #include "app/AppState.hpp"
 #include "repositories/AppSettingsRepository.hpp"
 #include "repositories/CapitalGainAllocationRepository.hpp"
+#include "services/TechnicalIndicatorSettingsService.hpp"
 #include "ui/UiTheme.hpp"
 #include "util/Money.hpp"
 
@@ -227,6 +228,9 @@ void SettingsView::render(AppState& state,
     ImGui::EndChild();
 
     ImGui::Spacing();
+    renderTechnicalIndicatorSettings(state, settingsRepository);
+
+    ImGui::Spacing();
     renderCapitalGainAllocation(state, allocationRepository, reloadData);
 
     ImGui::Spacing();
@@ -312,6 +316,163 @@ void SettingsView::renderDatabaseLocation(const std::string& activeDatabasePath,
     }
 
     ImGui::TextColored(UiTheme::MutedText, "Saving a database path does not copy, move, delete, or overwrite database files.");
+    ImGui::EndChild();
+}
+
+void SettingsView::renderTechnicalIndicatorSettings(AppState& state, AppSettingsRepository& settingsRepository)
+{
+    if (!technicalSettingsDraftInitialized_ || (!technicalSettingsDraftDirty_ && !(technicalSettingsDraft_ == state.technicalIndicatorSettings))) {
+        technicalSettingsDraft_ = state.technicalIndicatorSettings;
+        technicalSettingsDraftInitialized_ = true;
+        technicalSettingsDraftDirty_ = false;
+    }
+
+    ImGui::BeginChild("WatchlistTechnicalSettings", ImVec2(0.0f, 330.0f), true);
+    ImGui::Text("Watchlist Technical Indicators");
+    ImGui::Separator();
+    ImGui::TextWrapped("These settings define RSI, MACD, Momentum, and extra technical column defaults for the Watchlist page. Saved values are stored locally.");
+
+    ImGui::Spacing();
+    if (ImGui::BeginTable("WatchlistTechnicalSettingsInputs", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("RSI");
+        ImGui::TableSetupColumn("MACD");
+        ImGui::TableSetupColumn("Momentum");
+        ImGui::TableSetupColumn("Display");
+        ImGui::TableNextRow();
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(UiTheme::TextPrimary, "RSI");
+        ImGui::TextWrapped("Period and threshold bounds.");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputInt("Period##TechnicalRsiPeriod", &technicalSettingsDraft_.rsiPeriod)) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputDouble("Oversold##TechnicalRsiOversold", &technicalSettingsDraft_.rsiOversoldThreshold, 0.0, 0.0, "%.2f")) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputDouble("Overbought##TechnicalRsiOverbought", &technicalSettingsDraft_.rsiOverboughtThreshold, 0.0, 0.0, "%.2f")) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(UiTheme::TextPrimary, "MACD");
+        ImGui::TextWrapped("EMA periods for the MACD calculation.");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputInt("Fast EMA##TechnicalMacdFast", &technicalSettingsDraft_.macdFastPeriod)) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputInt("Slow EMA##TechnicalMacdSlow", &technicalSettingsDraft_.macdSlowPeriod)) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputInt("Signal EMA##TechnicalMacdSignal", &technicalSettingsDraft_.macdSignalPeriod)) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(UiTheme::TextPrimary, "Momentum");
+        ImGui::TextWrapped("Lookback and percent thresholds.");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputInt("Lookback Days##TechnicalMomentumLookback", &technicalSettingsDraft_.momentumLookbackDays)) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputDouble("Positive %##TechnicalMomentumPositive", &technicalSettingsDraft_.momentumPositiveThresholdPercent, 0.0, 0.0, "%.2f")) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputDouble("Negative %##TechnicalMomentumNegative", &technicalSettingsDraft_.momentumNegativeThresholdPercent, 0.0, 0.0, "%.2f")) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+
+        ImGui::TableNextColumn();
+        ImGui::TextColored(UiTheme::TextPrimary, "Display");
+        ImGui::TextWrapped("Watchlist page display defaults.");
+        if (ImGui::Checkbox("Show extra technical columns", &technicalSettingsDraft_.showExtraTechnicals)) {
+            technicalSettingsDraftDirty_ = true;
+            technicalSettingsMessage_.clear();
+        }
+        ImGui::TextColored(UiTheme::MutedText, "Default is on.");
+
+        ImGui::EndTable();
+    }
+
+    ImGui::Spacing();
+    std::string validationMessage;
+    const bool draftValid = TechnicalIndicatorSettingsService::validate(technicalSettingsDraft_, validationMessage);
+    if (!technicalSettingsMessage_.empty()) {
+        ImGui::TextColored(technicalSettingsMessageIsError_ ? UiTheme::Loss : UiTheme::Gain, "%s", technicalSettingsMessage_.c_str());
+    } else if (technicalSettingsDraftDirty_ && !draftValid) {
+        ImGui::TextColored(UiTheme::Loss, "%s", validationMessage.c_str());
+    } else if (technicalSettingsDraftDirty_) {
+        ImGui::TextColored(UiTheme::Amber, "Unsaved technical indicator settings.");
+    } else {
+        ImGui::TextColored(UiTheme::MutedText, "Active technical indicator settings are saved locally in app settings.");
+    }
+
+    const bool hasChanges = technicalSettingsDraftDirty_ && !(technicalSettingsDraft_ == state.technicalIndicatorSettings);
+    if (!hasChanges || !draftValid) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Save Technical Settings", ImVec2(190.0f, 0.0f))) {
+        std::string error;
+        if (TechnicalIndicatorSettingsService::save(settingsRepository, technicalSettingsDraft_, error)) {
+            state.technicalIndicatorSettings = technicalSettingsDraft_;
+            technicalSettingsDraftDirty_ = false;
+            technicalSettingsMessage_ = "Technical indicator settings saved.";
+            technicalSettingsMessageIsError_ = false;
+            state.setStatus("Technical indicator settings saved locally.");
+        } else {
+            technicalSettingsMessage_ = error;
+            technicalSettingsMessageIsError_ = true;
+        }
+    }
+    if (!hasChanges || !draftValid) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    if (!hasChanges) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
+        technicalSettingsDraft_ = state.technicalIndicatorSettings;
+        technicalSettingsDraftDirty_ = false;
+        technicalSettingsMessage_ = "Technical indicator setting changes discarded.";
+        technicalSettingsMessageIsError_ = false;
+    }
+    if (!hasChanges) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Reset Technical Defaults", ImVec2(190.0f, 0.0f))) {
+        std::string error;
+        if (TechnicalIndicatorSettingsService::resetToDefaults(settingsRepository, error)) {
+            technicalSettingsDraft_ = TechnicalIndicatorSettingsService::defaults();
+            state.technicalIndicatorSettings = technicalSettingsDraft_;
+            technicalSettingsDraftDirty_ = false;
+            technicalSettingsMessage_ = "Technical indicator settings reset to defaults.";
+            technicalSettingsMessageIsError_ = false;
+            state.setStatus("Technical indicator settings reset to defaults.");
+        } else {
+            technicalSettingsMessage_ = error;
+            technicalSettingsMessageIsError_ = true;
+        }
+    }
+
     ImGui::EndChild();
 }
 

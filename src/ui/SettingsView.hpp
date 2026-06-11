@@ -2,6 +2,7 @@
 #pragma once
 
 #include "models/CapitalGainAllocationRule.hpp"
+#include "models/TechnicalIndicatorSettings.hpp"
 #include <functional>
 #include <string>
 
@@ -21,8 +22,14 @@ public:
 
 private:
     void renderDatabaseLocation(const std::string& activeDatabasePath, const std::function<bool(const std::string&, std::string&)>& saveDatabasePath);
+    void renderTechnicalIndicatorSettings(AppState& state, AppSettingsRepository& settingsRepository);
     void renderCapitalGainAllocation(AppState& state, CapitalGainAllocationRepository& allocationRepository, const std::function<void()>& reloadData);
 
+    TechnicalIndicatorSettings technicalSettingsDraft_;
+    bool technicalSettingsDraftInitialized_ = false;
+    bool technicalSettingsDraftDirty_ = false;
+    std::string technicalSettingsMessage_;
+    bool technicalSettingsMessageIsError_ = false;
     std::string allocationMessage_;
     bool allocationMessageIsError_ = false;
     std::string databasePathDraft_;

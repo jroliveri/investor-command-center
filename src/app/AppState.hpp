@@ -11,6 +11,7 @@
 #include "models/DashboardChartSetting.hpp"
 #include "models/MarketQuote.hpp"
 #include "models/PortfolioSnapshot.hpp"
+#include "models/TechnicalIndicatorSettings.hpp"
 #include "models/Transaction.hpp"
 #include "models/Watchlist.hpp"
 #include "models/WatchlistItem.hpp"
@@ -76,6 +77,7 @@ public:
     std::vector<DashboardPriceOverride> dashboardPriceOverrides;
     DashboardPriceRefreshStatus dashboardPriceRefreshStatus;
     WatchlistPriceRefreshStatus watchlistPriceRefreshStatus;
+    TechnicalIndicatorSettings technicalIndicatorSettings;
     std::vector<CapitalGainAllocationRule> capitalGainAllocationRules;
     std::string themeKey = "dark_command_center";
     std::string statusMessage;

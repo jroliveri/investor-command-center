@@ -16,7 +16,7 @@ std::vector<double> closingPrices(const std::vector<MarketPriceHistoryRow>& rows
     std::vector<double> closes;
     closes.reserve(rows.size());
     for (const MarketPriceHistoryRow& row : rows) {
-        if (row.closePrice.has_value() && *row.closePrice > 0.0) {
+        if (row.closePrice.has_value() && std::isfinite(*row.closePrice) && *row.closePrice > 0.0) {
             closes.push_back(*row.closePrice);
         }
     }

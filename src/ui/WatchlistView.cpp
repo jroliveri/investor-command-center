@@ -21,7 +21,9 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -33,6 +35,8 @@ constexpr const char* DeleteWatchlistPopup = "Delete Watchlist Item";
 constexpr const char* SignalNoticePopup = "Watchlist Price Signal";
 constexpr const char* NewWatchlistGroupEditorPopup = "Watchlist Manager###watchlist_group_edit_popup_new";
 constexpr const char* NewWatchlistEditorPopup = "Watchlist Editor###watchlist_edit_popup_new";
+
+void showGlassTooltip(const std::string& text);
 
 std::string watchlistGroupEditorPopupId(int watchlistId)
 {
@@ -121,6 +125,40 @@ std::string optionalNumberText(const std::optional<double>& value, int decimals 
     return value.has_value() ? Money::formatNumber(*value, decimals) : "N/A";
 }
 
+std::string technicalSettingsKey(const TechnicalIndicatorSettings& settings)
+{
+    std::ostringstream stream;
+    stream << settings.rsiPeriod << '|'
+           << settings.rsiOversoldThreshold << '|'
+           << settings.rsiOverboughtThreshold << '|'
+           << settings.macdFastPeriod << '|'
+           << settings.macdSlowPeriod << '|'
+           << settings.macdSignalPeriod << '|'
+           << settings.momentumLookbackDays << '|'
+           << settings.momentumPositiveThresholdPercent << '|'
+           << settings.momentumNegativeThresholdPercent;
+    return stream.str();
+}
+
+std::string normalizedTechnicalKeyTicker(std::string ticker)
+{
+    ticker.erase(ticker.begin(), std::find_if(ticker.begin(), ticker.end(), [](unsigned char character) {
+        return std::isspace(character) == 0;
+    }));
+    ticker.erase(std::find_if(ticker.rbegin(), ticker.rend(), [](unsigned char character) {
+        return std::isspace(character) == 0;
+    }).base(), ticker.end());
+    std::transform(ticker.begin(), ticker.end(), ticker.begin(), [](unsigned char character) {
+        return static_cast<char>(std::toupper(character));
+    });
+    return ticker;
+}
+
+std::string technicalEvaluationCacheKey(const WatchlistItem& item, const TechnicalIndicatorSettings& settings)
+{
+    return normalizedTechnicalKeyTicker(item.ticker) + "|Yahoo Finance|" + technicalSettingsKey(settings);
+}
+
 std::string compactLargeNumber(const std::optional<double>& value)
 {
     if (!value.has_value()) {
@@ -144,13 +182,120 @@ std::string compactLargeNumber(const std::optional<double>& value)
     return Money::formatNumber(scaled, absoluteValue >= 1'000.0 ? 1 : 0) + suffix;
 }
 
-std::string macdText(const std::optional<TechnicalIndicatorSnapshot>& snapshot)
+ImVec4 rsiColor(const TechnicalIndicatorEvaluation& evaluation)
 {
-    if (!snapshot.has_value() || !snapshot->macdLine.has_value() || !snapshot->macdHistogram.has_value()) {
+    if (!evaluation.rsi.has_value()) {
+        return UiTheme::TextMuted;
+    }
+    if (evaluation.rsiClassification == "Oversold") {
+        return UiTheme::Amber;
+    }
+    if (evaluation.rsiClassification == "Overbought") {
+        return UiTheme::Loss;
+    }
+    return UiTheme::ElectricCyan;
+}
+
+ImVec4 macdColor(const TechnicalIndicatorEvaluation& evaluation)
+{
+    if (!evaluation.macdHistogram.has_value()) {
+        return UiTheme::TextMuted;
+    }
+    if (evaluation.macdClassification == "Bullish") {
+        return UiTheme::Gain;
+    }
+    if (evaluation.macdClassification == "Bearish") {
+        return UiTheme::Loss;
+    }
+    return UiTheme::ElectricCyan;
+}
+
+ImVec4 momentumColor(const TechnicalIndicatorEvaluation& evaluation)
+{
+    if (!evaluation.momentumPercent.has_value()) {
+        return UiTheme::TextMuted;
+    }
+    if (evaluation.momentumClassification == "Rising") {
+        return UiTheme::Gain;
+    }
+    if (evaluation.momentumClassification == "Falling") {
+        return UiTheme::Loss;
+    }
+    return UiTheme::ElectricCyan;
+}
+
+std::string rsiText(const TechnicalIndicatorEvaluation& evaluation)
+{
+    return optionalNumberText(evaluation.rsi, 1);
+}
+
+std::string macdText(const TechnicalIndicatorEvaluation& evaluation)
+{
+    if (!evaluation.macdHistogram.has_value()) {
         return "N/A";
     }
+    return evaluation.macdClassification;
+}
 
-    return "MACD " + Money::formatNumber(*snapshot->macdLine, 3) + " / Hist " + Money::formatNumber(*snapshot->macdHistogram, 3);
+std::string momentumText(const TechnicalIndicatorEvaluation& evaluation)
+{
+    return evaluation.momentumPercent.has_value()
+        ? Money::formatPercent(*evaluation.momentumPercent, true)
+        : "N/A";
+}
+
+std::string rsiTooltip(const TechnicalIndicatorEvaluation& evaluation, const TechnicalIndicatorSettings& settings)
+{
+    std::ostringstream stream;
+    stream << "RSI: " << rsiText(evaluation) << "\n"
+           << "State: " << evaluation.rsiClassification << "\n"
+           << "Period: " << settings.rsiPeriod << "\n"
+           << "Oversold at or below " << Money::formatNumber(settings.rsiOversoldThreshold, 1) << "\n"
+           << "Overbought at or above " << Money::formatNumber(settings.rsiOverboughtThreshold, 1) << "\n"
+           << "Informational technical tracking indicator.";
+    if (!evaluation.rsi.has_value() && !evaluation.unavailableReason.empty()) {
+        stream << "\n" << evaluation.unavailableReason;
+    }
+    return stream.str();
+}
+
+std::string macdTooltip(const TechnicalIndicatorEvaluation& evaluation, const TechnicalIndicatorSettings& settings)
+{
+    std::ostringstream stream;
+    stream << "MACD: " << macdText(evaluation) << "\n"
+           << "Fast / slow / signal periods: "
+           << settings.macdFastPeriod << " / " << settings.macdSlowPeriod << " / " << settings.macdSignalPeriod << "\n"
+           << "MACD line: " << optionalNumberText(evaluation.macdLine, 4) << "\n"
+           << "Signal line: " << optionalNumberText(evaluation.macdSignal, 4) << "\n"
+           << "Histogram: " << optionalNumberText(evaluation.macdHistogram, 4) << "\n"
+           << "Informational technical tracking indicator.";
+    if (!evaluation.macdHistogram.has_value() && !evaluation.unavailableReason.empty()) {
+        stream << "\n" << evaluation.unavailableReason;
+    }
+    return stream.str();
+}
+
+std::string momentumTooltip(const TechnicalIndicatorEvaluation& evaluation, const TechnicalIndicatorSettings& settings)
+{
+    std::ostringstream stream;
+    stream << "Momentum " << settings.momentumLookbackDays << "D: " << momentumText(evaluation) << "\n"
+           << "State: " << evaluation.momentumClassification << "\n"
+           << "Rising at or above " << Money::formatPercent(settings.momentumPositiveThresholdPercent, true) << "\n"
+           << "Falling at or below " << Money::formatPercent(settings.momentumNegativeThresholdPercent, true) << "\n"
+           << "Formula: latest close compared with the configured lookback close.\n"
+           << "Informational technical tracking indicator.";
+    if (!evaluation.momentumPercent.has_value() && !evaluation.unavailableReason.empty()) {
+        stream << "\n" << evaluation.unavailableReason;
+    }
+    return stream.str();
+}
+
+void drawTechnicalValue(const std::string& value, ImVec4 color, const std::string& tooltip)
+{
+    ImGui::TextColored(color, "%s", value.c_str());
+    if (ImGui::IsItemHovered() && !tooltip.empty()) {
+        showGlassTooltip(tooltip);
+    }
 }
 
 std::string volumeText(const std::optional<TechnicalIndicatorSnapshot>& snapshot)
@@ -624,7 +769,10 @@ void WatchlistView::drawWatchlistItems(AppState& state,
     }
     UiTheme::popButtonStyle();
     ImGui::SameLine();
-    ImGui::Checkbox("Show Technicals", &showTechnicals_);
+    bool showTechnicals = state.technicalIndicatorSettings.showExtraTechnicals;
+    if (ImGui::Checkbox("Show Technicals", &showTechnicals)) {
+        state.technicalIndicatorSettings.showExtraTechnicals = showTechnicals;
+    }
 
     const WatchlistPriceRefreshStatus& refreshStatus = state.watchlistPriceRefreshStatus;
     if (refreshStatus.hasRun) {
@@ -646,11 +794,12 @@ void WatchlistView::drawWatchlistItems(AppState& state,
 
     ImGui::Spacing();
     int visibleRows = 0;
+    const std::string momentumHeader = "Momentum " + std::to_string(state.technicalIndicatorSettings.momentumLookbackDays) + "D";
     if (selectedItems.empty()) {
         UiTheme::emptyState("No items in this watchlist", "Add symbols to this named watchlist when you want to monitor them manually.");
     } else {
         UiTheme::pushTableStyle();
-        if (ImGui::BeginTable("WatchlistTable", showTechnicals_ ? 13 : 10, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
+        if (ImGui::BeginTable("WatchlistTable", showTechnicals ? 13 : 10, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollX)) {
         ImGui::TableSetupColumn("Ticker", ImGuiTableColumnFlags_WidthFixed, 76.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 1.3f);
         ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthFixed, 76.0f);
@@ -658,10 +807,10 @@ void WatchlistView::drawWatchlistItems(AppState& state,
         ImGui::TableSetupColumn("Buy Level", ImGuiTableColumnFlags_WidthFixed, 112.0f);
         ImGui::TableSetupColumn("Sell Level", ImGuiTableColumnFlags_WidthFixed, 112.0f);
         ImGui::TableSetupColumn("Signal", ImGuiTableColumnFlags_WidthFixed, 128.0f);
-        if (showTechnicals_) {
+        if (showTechnicals) {
             ImGui::TableSetupColumn("RSI", ImGuiTableColumnFlags_WidthFixed, 82.0f);
-            ImGui::TableSetupColumn("MACD", ImGuiTableColumnFlags_WidthFixed, 184.0f);
-            ImGui::TableSetupColumn("Volume", ImGuiTableColumnFlags_WidthFixed, 178.0f);
+            ImGui::TableSetupColumn("MACD", ImGuiTableColumnFlags_WidthFixed, 104.0f);
+            ImGui::TableSetupColumn(momentumHeader.c_str(), ImGuiTableColumnFlags_WidthFixed, 126.0f);
         }
         ImGui::TableSetupColumn("Last Refresh", ImGuiTableColumnFlags_WidthFixed, 166.0f);
         ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthFixed, 144.0f);
@@ -692,19 +841,23 @@ void WatchlistView::drawWatchlistItems(AppState& state,
             ImGui::TableNextColumn();
             const std::optional<TechnicalIndicatorSnapshot> indicators = cachedIndicatorsFor(technicalIndicatorService, item);
             drawSignalBadge(item, indicators);
-            if (showTechnicals_) {
+            if (showTechnicals) {
+                const TechnicalIndicatorEvaluation& technicalEvaluation = technicalEvaluationFor(technicalIndicatorService, item, state.technicalIndicatorSettings);
                 ImGui::TableNextColumn();
-                ImGui::TextColored(indicators.has_value() && indicators->rsi14.has_value() ? UiTheme::ElectricCyan : UiTheme::TextMuted,
-                    "%s",
-                    indicators.has_value() ? optionalNumberText(indicators->rsi14, 1).c_str() : "N/A");
+                drawTechnicalValue(
+                    rsiText(technicalEvaluation),
+                    rsiColor(technicalEvaluation),
+                    rsiTooltip(technicalEvaluation, state.technicalIndicatorSettings));
                 ImGui::TableNextColumn();
-                ImGui::TextColored(indicators.has_value() && indicators->macdHistogram.has_value() ? UiTheme::moneyColor(*indicators->macdHistogram) : UiTheme::TextMuted,
-                    "%s",
-                    macdText(indicators).c_str());
+                drawTechnicalValue(
+                    macdText(technicalEvaluation),
+                    macdColor(technicalEvaluation),
+                    macdTooltip(technicalEvaluation, state.technicalIndicatorSettings));
                 ImGui::TableNextColumn();
-                ImGui::TextColored(indicators.has_value() && indicators->volumeVsAvg20Percent.has_value() ? UiTheme::moneyColor(*indicators->volumeVsAvg20Percent) : UiTheme::TextMuted,
-                    "%s",
-                    volumeText(indicators).c_str());
+                drawTechnicalValue(
+                    momentumText(technicalEvaluation),
+                    momentumColor(technicalEvaluation),
+                    momentumTooltip(technicalEvaluation, state.technicalIndicatorSettings));
             }
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::TextMuted, "%s", emptyIfBlank(item.lastPriceRefreshAt));
@@ -1058,7 +1211,10 @@ void WatchlistView::refreshHistory(AppState& state,
             if (!result.fetchedAt.empty()) {
                 lastRefreshAt = result.fetchedAt;
             }
-            TechnicalIndicatorResult indicatorResult = technicalIndicatorService.calculateAndCache(symbol, result.provider.empty() ? marketDataService.providerName() : result.provider);
+            TechnicalIndicatorResult indicatorResult = technicalIndicatorService.calculateAndCache(
+                symbol,
+                result.provider.empty() ? marketDataService.providerName() : result.provider,
+                state.technicalIndicatorSettings);
             if (indicatorResult.success) {
                 ++indicatorsCalculated;
             } else {
@@ -1094,6 +1250,7 @@ void WatchlistView::refreshHistory(AppState& state,
     message += failedSummary;
     historyRefreshMessage_ = message;
     historyRefreshIsError_ = refreshedSymbols == 0 && failedSymbols > 0;
+    technicalEvaluationCache_.clear();
     state.setStatus(message, historyRefreshIsError_);
 }
 
@@ -1107,6 +1264,22 @@ void WatchlistView::drawPriorityBadge(const std::string& priority) const
     }
 
     UiTheme::badge(priority.c_str(), color);
+}
+
+const TechnicalIndicatorEvaluation& WatchlistView::technicalEvaluationFor(
+    TechnicalIndicatorService& technicalIndicatorService,
+    const WatchlistItem& item,
+    const TechnicalIndicatorSettings& settings)
+{
+    const std::string cacheKey = technicalEvaluationCacheKey(item, settings);
+    const auto existing = technicalEvaluationCache_.find(cacheKey);
+    if (existing != technicalEvaluationCache_.end()) {
+        return existing->second;
+    }
+
+    TechnicalIndicatorEvaluation evaluation = technicalIndicatorService.evaluate(item.ticker, "Yahoo Finance", settings);
+    const auto inserted = technicalEvaluationCache_.emplace(cacheKey, std::move(evaluation));
+    return inserted.first->second;
 }
 
 void WatchlistView::drawSignalBadge(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators)

@@ -96,6 +96,7 @@ set(APP_SOURCES
     src/models/MarketQuote.hpp
     src/models/PortfolioSnapshot.hpp
     src/models/SignalRules.hpp
+    src/models/TechnicalIndicatorSettings.hpp
     src/models/TechnicalIndicatorSnapshot.hpp
     src/models/Transaction.hpp
     src/models/Dividend.hpp
@@ -155,6 +156,8 @@ set(APP_SOURCES
     src/services/MarketDataProvider.cpp
     src/services/MarketDataService.hpp
     src/services/MarketDataService.cpp
+    src/services/TechnicalIndicatorSettingsService.hpp
+    src/services/TechnicalIndicatorSettingsService.cpp
     src/services/TechnicalIndicatorService.hpp
     src/services/TechnicalIndicatorService.cpp
     src/services/WatchlistIndicatorDisplay.hpp

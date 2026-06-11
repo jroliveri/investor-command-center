@@ -4,6 +4,7 @@
 #include "app/SidebarModel.hpp"
 #include "db/Migrations.hpp"
 #include "services/DashboardService.hpp"
+#include "services/TechnicalIndicatorSettingsService.hpp"
 #include "services/WatchlistSignalService.hpp"
 #include "ui/UiTheme.hpp"
 #include "util/Date.hpp"
@@ -547,6 +548,12 @@ void App::reloadData()
     state_.themeKey = appSettingsRepository_->getString(ThemeSettingKey, "dark_command_center", error);
     if (!error.empty()) {
         state_.setStatus("Could not load app settings: " + error, true);
+        error.clear();
+    }
+
+    state_.technicalIndicatorSettings = TechnicalIndicatorSettingsService::load(*appSettingsRepository_, error);
+    if (!error.empty()) {
+        state_.setStatus("Could not load technical indicator settings: " + error, true);
         error.clear();
     }
 
