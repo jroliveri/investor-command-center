@@ -328,9 +328,9 @@ void SettingsView::renderTechnicalIndicatorSettings(AppState& state, AppSettings
     }
 
     ImGui::BeginChild("WatchlistTechnicalSettings", ImVec2(0.0f, 330.0f), true);
-    ImGui::Text("Watchlist Technical Indicators");
+    ImGui::Text("Watchlist Indicator Tuning");
     ImGui::Separator();
-    ImGui::TextWrapped("These settings define RSI, MACD, Momentum, and extra technical column defaults for the Watchlist page. Saved values are stored locally.");
+    ImGui::TextWrapped("These settings define RSI, MACD, Momentum, and extra technical column defaults for the Watchlist page. Saved values are stored locally and update the Watchlist display immediately.");
 
     ImGui::Spacing();
     if (ImGui::BeginTable("WatchlistTechnicalSettingsInputs", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
@@ -419,7 +419,7 @@ void SettingsView::renderTechnicalIndicatorSettings(AppState& state, AppSettings
     } else if (technicalSettingsDraftDirty_) {
         ImGui::TextColored(UiTheme::Amber, "Unsaved technical indicator settings.");
     } else {
-        ImGui::TextColored(UiTheme::MutedText, "Active technical indicator settings are saved locally in app settings.");
+        ImGui::TextColored(UiTheme::MutedText, "Active settings are saved locally. Refresh history to recalculate cached indicator snapshots after changing periods.");
     }
 
     const bool hasChanges = technicalSettingsDraftDirty_ && !(technicalSettingsDraft_ == state.technicalIndicatorSettings);
