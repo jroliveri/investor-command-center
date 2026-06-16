@@ -57,26 +57,6 @@ std::string changeText(const std::optional<MarketQuote>& quote)
     return "N/A";
 }
 
-std::string signalStatus(double currentPrice, double buySignalPrice, double sellSignalPrice)
-{
-    if (currentPrice <= 0.0) {
-        return "No Price";
-    }
-
-    const bool buyTriggered = buySignalPrice > 0.0 && currentPrice <= buySignalPrice;
-    const bool sellTriggered = sellSignalPrice > 0.0 && currentPrice >= sellSignalPrice;
-    if (buyTriggered && sellTriggered) {
-        return "Check Signals";
-    }
-    if (buyTriggered) {
-        return "Buy Signal";
-    }
-    if (sellTriggered) {
-        return "Sell Signal";
-    }
-    return "No Signal";
-}
-
 bool isNormalDashboardRefreshNote(const std::string& warning)
 {
     return warning.find("display only") != std::string::npos || warning.find("display-only") != std::string::npos;
@@ -216,7 +196,7 @@ WatchlistsCard buildWatchlistsCard(
             item.ticker,
             priceText(item, quote),
             changeText(quote),
-            signalStatus(item.currentPrice, item.buySignalPrice, item.sellSignalPrice),
+            item.signalStatus.empty() ? "Hold" : item.signalStatus,
         });
     }
 

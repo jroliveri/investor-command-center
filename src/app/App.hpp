@@ -29,6 +29,7 @@
 #include "ui/GoalsView.hpp"
 #include "ui/HoldingsView.hpp"
 #include "ui/ImportCsvView.hpp"
+#include "ui/ReportsView.hpp"
 #include "ui/SettingsView.hpp"
 #include "ui/StockResearchView.hpp"
 #include "ui/TransactionsView.hpp"
@@ -36,6 +37,10 @@
 
 #include <memory>
 #include <string>
+
+namespace SidebarModel {
+struct DataStatusCard;
+}
 
 class App {
 public:
@@ -64,7 +69,7 @@ private:
     void renderAccountColumn();
     void renderPortfolioSummaryCard();
     void renderWatchlistPanel();
-    void renderDataStatusCard();
+    void renderDataStatusCard(const SidebarModel::DataStatusCard& card);
     void renderAppPopups();
     void renderCurrentSection();
     void renderPlaceholder(const char* title, const char* note);
@@ -100,6 +105,7 @@ private:
     GoalsView goalsView_;
     WatchlistView watchlistView_;
     ImportCsvView importCsvView_;
+    ReportsView reportsView_;
     StockResearchView stockResearchView_;
     SettingsView settingsView_;
     std::string startupError_;

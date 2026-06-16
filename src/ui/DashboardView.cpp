@@ -2,6 +2,7 @@
 #include "ui/DashboardView.hpp"
 
 #include "app/AppState.hpp"
+#include "repositories/AppSettingsRepository.hpp"
 #include "repositories/DashboardChartSettingsRepository.hpp"
 #include "repositories/DashboardLayoutRepository.hpp"
 #include "repositories/PortfolioSnapshotRepository.hpp"
@@ -14,6 +15,7 @@
 #include "util/Money.hpp"
 
 #include <imgui.h>
+#include <imgui_stdlib.h>
 
 #include <algorithm>
 #include <array>
@@ -22,9 +24,12 @@
 #include <cmath>
 #include <ctime>
 #include <functional>
+#include <iomanip>
 #include <map>
 #include <numeric>
+#include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -43,6 +48,134 @@ std::string uppercaseCopy(std::string value)
         return static_cast<char>(std::toupper(character));
     });
     return value;
+}
+
+std::string lowerCopy(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    return value;
+}
+
+std::string trimCopy(const std::string& value)
+{
+    const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char character) {
+        return std::isspace(character) != 0;
+    });
+    if (first == value.end()) {
+        return {};
+    }
+
+    const auto last = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char character) {
+        return std::isspace(character) != 0;
+    }).base();
+    return std::string(first, last);
+}
+
+std::optional<double> parseNonNegativeCurrencyDraft(const std::string& raw)
+{
+    std::string value = trimCopy(raw);
+    if (value.empty()) {
+        return 0.0;
+    }
+
+    value.erase(std::remove(value.begin(), value.end(), ','), value.end());
+    if (!value.empty() && value.front() == '$') {
+        value.erase(value.begin());
+        value = trimCopy(value);
+    }
+
+    try {
+        std::size_t consumed = 0;
+        const double parsed = std::stod(value, &consumed);
+        if (consumed != value.size() || !std::isfinite(parsed) || parsed < 0.0) {
+            return std::nullopt;
+        }
+        return parsed;
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
+    }
+}
+
+std::string formatCurrencyDraft(double value)
+{
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(2) << std::max(0.0, value);
+    return stream.str();
+}
+
+std::tm localTimeForDate(const Date::DateParts& parts)
+{
+    std::tm time {};
+    time.tm_year = parts.year - 1900;
+    time.tm_mon = parts.month - 1;
+    time.tm_mday = parts.day;
+    time.tm_isdst = -1;
+    std::mktime(&time);
+    return time;
+}
+
+std::string offsetDate(const Date::DateParts& parts, int dayOffset)
+{
+    std::tm time = localTimeForDate(parts);
+    time.tm_mday += dayOffset;
+    std::mktime(&time);
+    return Date::formatIsoDate(time.tm_year + 1900, time.tm_mon + 1, time.tm_mday);
+}
+
+int sundayBasedWeekday(const Date::DateParts& parts)
+{
+    return localTimeForDate(parts).tm_wday;
+}
+
+std::string currentWeekStartDate(const Date::DateParts& parts)
+{
+    return offsetDate(parts, -sundayBasedWeekday(parts));
+}
+
+std::string currentMonthStartDate(const Date::DateParts& parts)
+{
+    return Date::formatIsoDate(parts.year, parts.month, 1);
+}
+
+double weekElapsedPercent(const Date::DateParts& parts)
+{
+    // The app stores realized transactions by date, so expected pace uses inclusive calendar days.
+    return (static_cast<double>(sundayBasedWeekday(parts)) + 1.0) / 7.0 * 100.0;
+}
+
+double monthElapsedPercent(const Date::DateParts& parts)
+{
+    // The app stores realized transactions by date, so expected pace uses inclusive calendar days.
+    return static_cast<double>(parts.day) / static_cast<double>(Date::daysInMonth(parts.year, parts.month)) * 100.0;
+}
+
+bool isRealizedCapitalGainTransaction(const Transaction& transaction)
+{
+    return lowerCopy(transaction.transactionType) == "sell";
+}
+
+bool isTransactionInDateRange(const Transaction& transaction, const std::string& startDate, const std::string& endDate)
+{
+    Date::DateParts ignored;
+    return Date::parseIsoDate(transaction.transactionDate, ignored) &&
+        transaction.transactionDate >= startDate &&
+        transaction.transactionDate <= endDate;
+}
+
+double realizedCapitalGainsInRange(const std::vector<Transaction>& transactions, const std::string& startDate, const std::string& endDate)
+{
+    double total = 0.0;
+    for (const Transaction& transaction : transactions) {
+        if (!isRealizedCapitalGainTransaction(transaction) || !isTransactionInDateRange(transaction, startDate, endDate)) {
+            continue;
+        }
+        total += transaction.realizedGainDollar;
+    }
+    return total;
 }
 
 void drawPanelChrome(const char* title, ImVec4 accent)
@@ -950,6 +1083,210 @@ void drawMetricGrid(const std::vector<MetricCardData>& cards)
     ImGui::Spacing();
 }
 
+struct TradingGoalProgress {
+    const char* title = "";
+    const char* realizedLabel = "";
+    double goal = 0.0;
+    double current = 0.0;
+    double remaining = 0.0;
+    double progressPercent = 0.0;
+    double expectedPercent = 0.0;
+    bool goalSet = false;
+    const char* statusLabel = "";
+    ImVec4 statusColor = UiTheme::MutedText;
+};
+
+TradingGoalProgress buildTradingGoalProgress(
+    const char* title,
+    const char* realizedLabel,
+    double goal,
+    double current,
+    double expectedPercent)
+{
+    TradingGoalProgress progress;
+    progress.title = title;
+    progress.realizedLabel = realizedLabel;
+    progress.goal = goal;
+    progress.current = current;
+    progress.expectedPercent = std::clamp(expectedPercent, 0.0, 100.0);
+    progress.goalSet = goal > 0.005;
+    progress.remaining = progress.goalSet ? std::max(0.0, goal - current) : 0.0;
+    progress.progressPercent = progress.goalSet ? (current / goal) * 100.0 : 0.0;
+
+    // Status compares actual progress with date-based expected pace: at pace is green,
+    // less than half pace or negative is red, and the middle zone is watch.
+    if (!progress.goalSet) {
+        progress.statusLabel = "Goal not set";
+        progress.statusColor = UiTheme::MutedText;
+    } else if (current < -0.005) {
+        progress.statusLabel = "Off Track";
+        progress.statusColor = UiTheme::Loss;
+    } else if (progress.progressPercent + 0.5 >= progress.expectedPercent) {
+        progress.statusLabel = "On Track";
+        progress.statusColor = UiTheme::Gain;
+    } else if (progress.current > 0.005 && progress.progressPercent >= progress.expectedPercent * 0.5) {
+        progress.statusLabel = "Watch";
+        progress.statusColor = UiTheme::Amber;
+    } else {
+        progress.statusLabel = "Off Track";
+        progress.statusColor = UiTheme::Loss;
+    }
+
+    return progress;
+}
+
+void drawTradingGoalValue(const char* label, const std::string& value, ImVec4 color)
+{
+    ImGui::TextColored(UiTheme::TextMuted, "%s", label);
+    UiTheme::pushNumericFont();
+    ImGui::TextColored(color, "%s", value.c_str());
+    UiTheme::popNumericFont();
+}
+
+void drawTradingGoalProgressBar(const TradingGoalProgress& goal)
+{
+    const float width = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+    const float height = 12.0f;
+    const ImVec2 barMin = ImGui::GetCursorScreenPos();
+    const ImVec2 barMax(barMin.x + width, barMin.y + height);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    drawList->AddRectFilled(barMin, barMax, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::SurfaceMain, 0.72f)), 6.0f);
+    drawList->AddRect(barMin, barMax, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::BorderSubtle, 0.14f)), 6.0f);
+
+    if (goal.goalSet) {
+        const float fillRatio = static_cast<float>(std::clamp(goal.progressPercent / 100.0, 0.0, 1.0));
+        if (fillRatio > 0.0f) {
+            drawList->AddRectFilled(
+                barMin,
+                ImVec2(barMin.x + width * fillRatio, barMax.y),
+                ImGui::GetColorU32(UiTheme::withAlpha(goal.statusColor, 0.54f)),
+                6.0f);
+        }
+
+        const float expectedRatio = static_cast<float>(std::clamp(goal.expectedPercent / 100.0, 0.0, 1.0));
+        const float expectedX = barMin.x + width * expectedRatio;
+        drawList->AddLine(
+            ImVec2(expectedX, barMin.y - 2.0f),
+            ImVec2(expectedX, barMax.y + 2.0f),
+            ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::TextSecondary, 0.72f)),
+            1.4f);
+    }
+
+    ImGui::Dummy(ImVec2(width, height + 2.0f));
+}
+
+void drawTradingGoalCard(const TradingGoalProgress& goal, const char* id, ImVec2 size, const std::function<void()>& openGoalsEditor)
+{
+    const ImVec4 accent = goal.goalSet ? goal.statusColor : UiTheme::ElectricCyan;
+
+    ImGui::PushID(id);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, UiTheme::withAlpha(UiTheme::SurfaceElevated, 0.34f));
+    ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(accent, 0.18f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 14.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 12.0f));
+    ImGui::BeginChild("TradingGoalCard", size, true, ImGuiWindowFlags_NoScrollbar);
+    ImGui::PopStyleVar(3);
+
+    const ImVec2 min = ImGui::GetWindowPos();
+    const ImVec2 max(min.x + ImGui::GetWindowSize().x, min.y + ImGui::GetWindowSize().y);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(min, max, ImGui::GetColorU32(UiTheme::withAlpha(UiTheme::SurfaceElevated, 0.22f)), 14.0f);
+    drawList->AddRectFilled(min, ImVec2(max.x, min.y + 34.0f), ImGui::GetColorU32(UiTheme::withAlpha(accent, 0.030f)), 14.0f, ImDrawFlags_RoundCornersTop);
+    drawList->AddRectFilled(ImVec2(min.x + 13.0f, min.y + 9.0f), ImVec2(min.x + 58.0f, min.y + 11.0f), ImGui::GetColorU32(UiTheme::withAlpha(accent, 0.44f)), 2.0f);
+
+    const std::string title = uppercaseCopy(goal.title);
+    ImGui::TextColored(UiTheme::TextSecondary, "%s", title.c_str());
+    const float badgeWidth = ImGui::CalcTextSize(goal.statusLabel).x + 18.0f;
+    ImGui::SameLine(std::max(ImGui::GetCursorPosX() + 8.0f, ImGui::GetWindowContentRegionMax().x - badgeWidth));
+    UiTheme::badge(goal.statusLabel, goal.statusColor);
+
+    ImGui::SetWindowFontScale(1.20f);
+    UiTheme::pushNumericFont();
+    ImGui::TextColored(goal.goalSet ? UiTheme::TextPrimary : UiTheme::TextMuted, "%s", goal.goalSet ? Money::format(goal.goal).c_str() : "Goal not set");
+    UiTheme::popNumericFont();
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::TextColored(UiTheme::TextMuted, "Goal Amount");
+
+    ImGui::Spacing();
+    if (!goal.goalSet) {
+        ImGui::TextColored(UiTheme::TextMuted, "No realized gains target is saved for this period.");
+        UiTheme::pushButtonStyle(UiTheme::ElectricCyan);
+        if (ImGui::Button("Set Goal", ImVec2(96.0f, 0.0f))) {
+            openGoalsEditor();
+        }
+        UiTheme::popButtonStyle();
+        ImGui::EndChild();
+        ImGui::PopStyleColor(2);
+        ImGui::PopID();
+        return;
+    }
+
+    if (ImGui::BeginTable("TradingGoalStats", 2, ImGuiTableFlags_SizingStretchSame)) {
+        ImGui::TableNextColumn();
+        drawTradingGoalValue(goal.realizedLabel, Money::format(goal.current), UiTheme::moneyColor(goal.current));
+        ImGui::TableNextColumn();
+        drawTradingGoalValue("Remaining", Money::format(goal.remaining), goal.remaining <= 0.005 ? UiTheme::Gain : UiTheme::TextPrimary);
+        ImGui::TableNextColumn();
+        drawTradingGoalValue("Progress", Money::formatPercent(goal.progressPercent), goal.statusColor);
+        ImGui::TableNextColumn();
+        drawTradingGoalValue("Expected", Money::formatPercent(goal.expectedPercent), UiTheme::TextMuted);
+        ImGui::EndTable();
+    }
+
+    ImGui::Spacing();
+    drawTradingGoalProgressBar(goal);
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor(2);
+    ImGui::PopID();
+}
+
+void drawTradingGoalsSection(const AppState& state, const std::string& today, const std::function<void()>& openGoalsEditor)
+{
+    Date::DateParts todayParts;
+    if (!Date::parseIsoDate(today, todayParts)) {
+        todayParts = Date::todayParts();
+    }
+    const std::string todayForRange = Date::formatIsoDate(todayParts.year, todayParts.month, todayParts.day);
+    const double weeklyRealized = realizedCapitalGainsInRange(state.transactions, currentWeekStartDate(todayParts), todayForRange);
+    const double monthlyRealized = realizedCapitalGainsInRange(state.transactions, currentMonthStartDate(todayParts), todayForRange);
+
+    const TradingGoalProgress weeklyGoal = buildTradingGoalProgress(
+        "Weekly Capital Gains Goal",
+        "Current Week",
+        state.weeklyRealizedCapitalGainsGoal,
+        weeklyRealized,
+        weekElapsedPercent(todayParts));
+    const TradingGoalProgress monthlyGoal = buildTradingGoalProgress(
+        "Monthly Capital Gains Goal",
+        "Current Month",
+        state.monthlyRealizedCapitalGainsGoal,
+        monthlyRealized,
+        monthElapsedPercent(todayParts));
+
+    const float availableWidth = ImGui::GetContentRegionAvail().x;
+    const bool useTwoColumns = availableWidth > 780.0f;
+    const float cardHeight = 218.0f;
+    const float spacingY = ImGui::GetStyle().ItemSpacing.y;
+    const float panelHeight = 64.0f + (useTwoColumns ? cardHeight : cardHeight * 2.0f + spacingY);
+
+    beginDashboardPanel("DashboardTradingGoalsPanel", "Trading Goals", ImVec2(0.0f, panelHeight), UiTheme::ElectricCyan);
+    if (useTwoColumns && ImGui::BeginTable("TradingGoalsGrid", 2, ImGuiTableFlags_SizingStretchSame)) {
+        ImGui::TableNextColumn();
+        drawTradingGoalCard(weeklyGoal, "WeeklyTradingGoal", ImVec2(0.0f, cardHeight), openGoalsEditor);
+        ImGui::TableNextColumn();
+        drawTradingGoalCard(monthlyGoal, "MonthlyTradingGoal", ImVec2(0.0f, cardHeight), openGoalsEditor);
+        ImGui::EndTable();
+    } else {
+        drawTradingGoalCard(weeklyGoal, "WeeklyTradingGoal", ImVec2(0.0f, cardHeight), openGoalsEditor);
+        ImGui::Spacing();
+        drawTradingGoalCard(monthlyGoal, "MonthlyTradingGoal", ImVec2(0.0f, cardHeight), openGoalsEditor);
+    }
+    endDashboardPanel();
+}
+
 std::string movementCaption(bool available)
 {
     return available ? "Local snapshot movement" : "Not enough snapshot data yet";
@@ -1002,23 +1339,138 @@ void drawPriceRefreshStatus(const AppState& state, const std::function<void()>& 
     TerminalPanel::end();
 }
 
-void drawDashboardToolbar(bool customizeMode, const std::function<void()>& toggleCustomize, const std::function<void()>& refreshCurrentPrices)
+bool drawDashboardSettingsButton(const char* id, ImVec2 size)
 {
-    beginDashboardPanel("DashboardToolbarPanel", "Dashboard Controls", ImVec2(0.0f, 86.0f), UiTheme::ElectricCyan, ImGuiWindowFlags_NoScrollbar);
-    UiTheme::pushButtonStyle(customizeMode ? UiTheme::NeonMagenta : UiTheme::ElectricCyan);
-    if (ImGui::Button(customizeMode ? "Done Customizing" : "Customize Dashboard", ImVec2(172.0f, 0.0f))) {
-        toggleCustomize();
+    ImGui::PushID(id);
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    const bool pressed = ImGui::InvisibleButton("SettingsCog", size);
+    const bool hovered = ImGui::IsItemHovered();
+    const bool active = ImGui::IsItemActive();
+    const ImVec2 max(min.x + size.x, min.y + size.y);
+    const ImVec2 center((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    const ImVec4 fill = active
+        ? UiTheme::withAlpha(UiTheme::ElectricCyan, 0.18f)
+        : hovered ? UiTheme::withAlpha(UiTheme::ElectricCyan, 0.12f) : UiTheme::withAlpha(UiTheme::SurfaceElevated, 0.30f);
+    const ImVec4 border = hovered
+        ? UiTheme::withAlpha(UiTheme::ElectricCyan, 0.50f)
+        : UiTheme::withAlpha(UiTheme::BorderSubtle, 0.24f);
+    const ImU32 iconColor = ImGui::GetColorU32(hovered ? UiTheme::ElectricCyan : UiTheme::TextSecondary);
+
+    drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), 8.0f);
+    drawList->AddRect(min, max, ImGui::GetColorU32(border), 8.0f);
+
+    constexpr float Pi = 3.14159265359f;
+    for (int index = 0; index < 8; ++index) {
+        const float angle = (static_cast<float>(index) * Pi) / 4.0f;
+        const ImVec2 inner(center.x + std::cos(angle) * 7.0f, center.y + std::sin(angle) * 7.0f);
+        const ImVec2 outer(center.x + std::cos(angle) * 9.4f, center.y + std::sin(angle) * 9.4f);
+        drawList->AddLine(inner, outer, iconColor, 1.4f);
     }
-    UiTheme::popButtonStyle();
-    ImGui::SameLine();
-    UiTheme::pushButtonStyle(UiTheme::NeonMagenta);
-    if (ImGui::Button("Refresh Current Prices", ImVec2(186.0f, 0.0f))) {
-        refreshCurrentPrices();
+    drawList->AddCircle(center, 6.2f, iconColor, 18, 1.5f);
+    drawList->AddCircleFilled(center, 2.0f, iconColor, 12);
+
+    ImGui::PopID();
+    return pressed;
+}
+
+void drawDashboardSnapshotReplacePopup(bool& showPopup, const std::function<void(bool)>& createSnapshot)
+{
+    constexpr const char* PopupId = "Replace Dashboard Snapshot From Settings";
+
+    if (showPopup) {
+        ImGui::OpenPopup(PopupId);
+        showPopup = false;
     }
-    UiTheme::popButtonStyle();
-    ImGui::SameLine();
-    ImGui::TextColored(UiTheme::TextMuted, "Dashboard data is local; price refreshes are explicit and display-only.");
-    endDashboardPanel();
+
+    if (ImGui::BeginPopupModal(PopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("A snapshot already exists for today.");
+        ImGui::TextColored(UiTheme::MutedText, "Replace it with the current local portfolio totals?");
+        ImGui::Spacing();
+        if (ImGui::Button("Replace Snapshot", ImVec2(150.0f, 0.0f))) {
+            createSnapshot(true);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void drawDashboardSettingsMenu(
+    AppState& state,
+    DashboardLayoutRepository& layoutRepository,
+    bool customizeMode,
+    const std::string& today,
+    const std::function<void()>& toggleCustomize,
+    const std::function<void()>& refreshCurrentPrices,
+    const std::function<void()>& reloadData,
+    const std::function<void(bool)>& createSnapshot,
+    bool& showSnapshotReplacePopup,
+    bool& openCapitalGainsGoalsEditor)
+{
+    constexpr const char* PopupId = "DashboardSettingsMenu";
+    const float buttonSize = 34.0f;
+    const float currentX = ImGui::GetCursorPosX();
+    const float rightX = currentX + ImGui::GetContentRegionAvail().x - buttonSize;
+    ImGui::SetCursorPosX(std::max(currentX, rightX));
+
+    if (drawDashboardSettingsButton("DashboardSettings", ImVec2(buttonSize, buttonSize))) {
+        ImGui::OpenPopup(PopupId);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Dashboard settings");
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, UiTheme::withAlpha(UiTheme::GlassPanel, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(UiTheme::ElectricCyan, 0.34f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+    if (ImGui::BeginPopup(PopupId)) {
+        ImGui::TextColored(UiTheme::TextSecondary, "Dashboard Settings");
+        ImGui::Separator();
+
+        if (ImGui::MenuItem(customizeMode ? "Done Customizing" : "Customize Dashboard")) {
+            toggleCustomize();
+        }
+        if (ImGui::MenuItem("Refresh Current Prices")) {
+            refreshCurrentPrices();
+        }
+        if (ImGui::MenuItem("Refresh Dashboard")) {
+            reloadData();
+            state.setStatus("Dashboard refreshed.");
+        }
+        if (ImGui::MenuItem("Capital Gains Goals")) {
+            openCapitalGainsGoalsEditor = true;
+        }
+        if (ImGui::MenuItem("Create Manual Snapshot")) {
+            if (DashboardService::hasSnapshotForDate(state, today)) {
+                showSnapshotReplacePopup = true;
+            } else {
+                createSnapshot(false);
+            }
+        }
+
+        ImGui::Separator();
+        if (ImGui::MenuItem("Reset Dashboard Layout")) {
+            std::string error;
+            if (layoutRepository.resetToDefaults(error)) {
+                reloadData();
+                state.setStatus("Dashboard layout reset.");
+            } else {
+                state.setStatus("Could not reset dashboard layout: " + error, true);
+            }
+        }
+
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+
+    drawDashboardSnapshotReplacePopup(showSnapshotReplacePopup, createSnapshot);
 }
 
 void drawDashboardWatchlistPanel(const AppState& state)
@@ -1732,6 +2184,7 @@ void drawDashboardWidget(
 void DashboardView::render(
     AppState& state,
     PortfolioSnapshotRepository& snapshotRepository,
+    AppSettingsRepository& settingsRepository,
     DashboardLayoutRepository& layoutRepository,
     DashboardChartSettingsRepository& chartSettingsRepository,
     const std::function<void()>& refreshCurrentPrices,
@@ -1743,22 +2196,32 @@ void DashboardView::render(
     const auto toggleCustomize = [this]() {
         customizeMode_ = !customizeMode_;
     };
-    drawDashboardToolbar(customizeMode_, toggleCustomize, refreshCurrentPrices);
+    const auto createSnapshot = [this, &state, &snapshotRepository, &reloadData](bool replaceExisting) {
+        createTodaySnapshot(state, snapshotRepository, reloadData, replaceExisting);
+    };
+    bool openCapitalGainsGoals = false;
+    drawDashboardSettingsMenu(state, layoutRepository, customizeMode_, today, toggleCustomize, refreshCurrentPrices, reloadData, createSnapshot, showSettingsSnapshotReplacePopup_, openCapitalGainsGoals);
+    if (openCapitalGainsGoals) {
+        openCapitalGainsGoalsEditor(state);
+    }
+    ImGui::Spacing();
 
     if (customizeMode_) {
         renderCustomizePanel(state, layoutRepository, reloadData);
         ImGui::Spacing();
     }
 
+    drawTradingGoalsSection(state, today, [this, &state]() {
+        openCapitalGainsGoalsEditor(state);
+    });
+    renderCapitalGainsGoalsEditor(state, settingsRepository);
+    ImGui::Spacing();
+
     const std::vector<DashboardWidget> visibleWidgets = DashboardLayoutService::visibleWidgets(state.dashboardWidgets);
     if (visibleWidgets.empty()) {
         UiTheme::emptyState("No dashboard sections are visible", "Open Customize Dashboard and re-enable the sections you want to review.");
         return;
     }
-
-    const auto createSnapshot = [this, &state, &snapshotRepository, &reloadData](bool replaceExisting) {
-        createTodaySnapshot(state, snapshotRepository, reloadData, replaceExisting);
-    };
 
     if (isWidgetVisible(visibleWidgets, "portfolio_summary")) {
         drawPortfolioSummary(data);
@@ -1862,6 +2325,103 @@ void DashboardView::render(
         }
         ImGui::EndTable();
     }
+}
+
+void DashboardView::openCapitalGainsGoalsEditor(const AppState& state)
+{
+    weeklyCapitalGainsGoalDraft_ = formatCurrencyDraft(state.weeklyRealizedCapitalGainsGoal);
+    monthlyCapitalGainsGoalDraft_ = formatCurrencyDraft(state.monthlyRealizedCapitalGainsGoal);
+    capitalGainsGoalsMessage_.clear();
+    capitalGainsGoalsMessageIsError_ = false;
+    showCapitalGainsGoalsPopup_ = true;
+}
+
+void DashboardView::renderCapitalGainsGoalsEditor(AppState& state, AppSettingsRepository& settingsRepository)
+{
+    constexpr const char* PopupId = "Capital Gains Goals";
+
+    if (showCapitalGainsGoalsPopup_) {
+        ImGui::OpenPopup(PopupId);
+        showCapitalGainsGoalsPopup_ = false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(430.0f, 0.0f), ImGuiCond_Appearing);
+    if (!ImGui::BeginPopupModal(PopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+
+    ImGui::TextColored(UiTheme::TextSecondary, "Realized capital gains goals");
+    ImGui::Separator();
+    ImGui::InputText("Weekly Capital Gains Goal", &weeklyCapitalGainsGoalDraft_);
+    ImGui::InputText("Monthly Capital Gains Goal", &monthlyCapitalGainsGoalDraft_);
+
+    const std::optional<double> weeklyGoal = parseNonNegativeCurrencyDraft(weeklyCapitalGainsGoalDraft_);
+    const std::optional<double> monthlyGoal = parseNonNegativeCurrencyDraft(monthlyCapitalGainsGoalDraft_);
+    const std::string activeWeeklyGoal = formatCurrencyDraft(state.weeklyRealizedCapitalGainsGoal);
+    const std::string activeMonthlyGoal = formatCurrencyDraft(state.monthlyRealizedCapitalGainsGoal);
+    const bool draftValid = weeklyGoal.has_value() && monthlyGoal.has_value();
+    const bool hasDraftTextChanges = weeklyCapitalGainsGoalDraft_ != activeWeeklyGoal ||
+        monthlyCapitalGainsGoalDraft_ != activeMonthlyGoal;
+    const bool hasChanges = draftValid &&
+        (std::fabs(*weeklyGoal - state.weeklyRealizedCapitalGainsGoal) >= 0.005 ||
+            std::fabs(*monthlyGoal - state.monthlyRealizedCapitalGainsGoal) >= 0.005);
+
+    if (!draftValid) {
+        ImGui::TextColored(UiTheme::Loss, "Enter non-negative dollar amounts.");
+    } else {
+        ImGui::TextColored(UiTheme::MutedText, "Empty values save as 0.00.");
+    }
+
+    if (!capitalGainsGoalsMessage_.empty()) {
+        ImGui::TextColored(capitalGainsGoalsMessageIsError_ ? UiTheme::Loss : UiTheme::Gain, "%s", capitalGainsGoalsMessage_.c_str());
+    }
+
+    ImGui::Spacing();
+    if (!draftValid || !hasChanges) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Save Goals", ImVec2(118.0f, 0.0f))) {
+        const std::string weeklyValue = formatCurrencyDraft(*weeklyGoal);
+        const std::string monthlyValue = formatCurrencyDraft(*monthlyGoal);
+        std::string error;
+        if (settingsRepository.setString(AppSettingKeys::WeeklyRealizedCapitalGainsGoal, weeklyValue, error) &&
+            settingsRepository.setString(AppSettingKeys::MonthlyRealizedCapitalGainsGoal, monthlyValue, error)) {
+            state.weeklyRealizedCapitalGainsGoal = parseNonNegativeCurrencyDraft(weeklyValue).value_or(0.0);
+            state.monthlyRealizedCapitalGainsGoal = parseNonNegativeCurrencyDraft(monthlyValue).value_or(0.0);
+            weeklyCapitalGainsGoalDraft_ = weeklyValue;
+            monthlyCapitalGainsGoalDraft_ = monthlyValue;
+            capitalGainsGoalsMessage_ = "Capital gains goals saved.";
+            capitalGainsGoalsMessageIsError_ = false;
+            state.setStatus("Capital gains goals saved locally.");
+        } else {
+            capitalGainsGoalsMessage_ = "Could not save capital gains goals: " + error;
+            capitalGainsGoalsMessageIsError_ = true;
+        }
+    }
+    if (!draftValid || !hasChanges) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    if (!hasDraftTextChanges) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Cancel", ImVec2(94.0f, 0.0f))) {
+        weeklyCapitalGainsGoalDraft_ = activeWeeklyGoal;
+        monthlyCapitalGainsGoalDraft_ = activeMonthlyGoal;
+        capitalGainsGoalsMessage_ = "Changes discarded.";
+        capitalGainsGoalsMessageIsError_ = false;
+    }
+    if (!hasDraftTextChanges) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Close", ImVec2(94.0f, 0.0f))) {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
 }
 
 void DashboardView::renderCustomizePanel(AppState& state, DashboardLayoutRepository& layoutRepository, const std::function<void()>& reloadData)

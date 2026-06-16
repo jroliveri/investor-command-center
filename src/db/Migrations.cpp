@@ -592,7 +592,19 @@ CREATE INDEX IF NOT EXISTS idx_technical_indicator_cache_symbol_date
     ON technical_indicator_cache(symbol, calculated_for_date);
 )sql";
 
-    return executeMigration(database, 22, "create_technical_indicator_cache", technicalIndicatorCacheMigration, error);
+    if (!executeMigration(database, 22, "create_technical_indicator_cache", technicalIndicatorCacheMigration, error)) {
+        return false;
+    }
+
+    const char* holdingTargetAllocationMigration = R"sql(
+ALTER TABLE holdings ADD COLUMN target_allocation_percent REAL DEFAULT 0;
+
+UPDATE holdings
+SET target_allocation_percent = 0
+WHERE target_allocation_percent IS NULL;
+)sql";
+
+    return executeMigration(database, 23, "add_holding_target_allocation", holdingTargetAllocationMigration, error);
 }
 
 }

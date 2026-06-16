@@ -13,8 +13,8 @@
 
 namespace SidebarModel {
 
-constexpr int AccountPreviewLimit = 4;
-constexpr int WatchlistPreviewLimit = 5;
+constexpr int AccountPreviewLimit = 5;
+constexpr int WatchlistPreviewLimit = 8;
 
 enum class Tone {
     Primary,

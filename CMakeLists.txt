@@ -96,6 +96,7 @@ set(APP_SOURCES
     src/models/MarketQuote.hpp
     src/models/PortfolioSnapshot.hpp
     src/models/SignalRules.hpp
+    src/models/StockPickResearchReport.hpp
     src/models/TechnicalIndicatorSettings.hpp
     src/models/TechnicalIndicatorSnapshot.hpp
     src/models/Transaction.hpp
@@ -144,6 +145,14 @@ set(APP_SOURCES
     src/services/CsvImportService.cpp
     src/services/PerformanceCalculator.hpp
     src/services/PerformanceCalculator.cpp
+    src/services/StockPickReportDocxExporter.hpp
+    src/services/StockPickReportDocxExporter.cpp
+    src/services/StockPickReportExportCommon.hpp
+    src/services/StockPickReportExportCommon.cpp
+    src/services/StockPickReportPdfExporter.hpp
+    src/services/StockPickReportPdfExporter.cpp
+    src/services/StockPickReportService.hpp
+    src/services/StockPickReportService.cpp
     src/services/DashboardService.hpp
     src/services/DashboardService.cpp
     src/services/DashboardLayoutService.hpp
@@ -184,6 +193,8 @@ set(APP_SOURCES
     src/ui/SettingsView.cpp
     src/ui/ImportCsvView.hpp
     src/ui/ImportCsvView.cpp
+    src/ui/ReportsView.hpp
+    src/ui/ReportsView.cpp
     src/ui/StockResearchView.hpp
     src/ui/StockResearchView.cpp
     src/ui/widgets/DatePicker.hpp
@@ -278,3 +289,54 @@ if(MSVC)
 endif()
 
 add_test(NAME InvestorCommandCenterTests COMMAND InvestorCommandCenterTests)
+
+add_executable(StockPickReportServiceTests
+    tests/StockPickReportServiceTests.cpp
+    src/app/AppState.hpp
+    src/app/AppState.cpp
+    src/models/Account.hpp
+    src/models/DashboardWidget.hpp
+    src/models/DashboardChartSetting.hpp
+    src/models/Holding.hpp
+    src/models/ImportBatch.hpp
+    src/models/MarketQuote.hpp
+    src/models/PortfolioSnapshot.hpp
+    src/models/SignalRules.hpp
+    src/models/StockPickResearchReport.hpp
+    src/models/TechnicalIndicatorSettings.hpp
+    src/models/TechnicalIndicatorSnapshot.hpp
+    src/models/Transaction.hpp
+    src/models/Dividend.hpp
+    src/models/Goal.hpp
+    src/models/Watchlist.hpp
+    src/models/WatchlistItem.hpp
+    src/models/WatchlistPriceRefresh.hpp
+    src/services/DashboardService.hpp
+    src/services/DashboardService.cpp
+    src/services/PerformanceCalculator.hpp
+    src/services/PerformanceCalculator.cpp
+    src/services/StockPickReportDocxExporter.hpp
+    src/services/StockPickReportDocxExporter.cpp
+    src/services/StockPickReportExportCommon.hpp
+    src/services/StockPickReportExportCommon.cpp
+    src/services/StockPickReportPdfExporter.hpp
+    src/services/StockPickReportPdfExporter.cpp
+    src/services/PortfolioCalculator.hpp
+    src/services/PortfolioCalculator.cpp
+    src/services/StockPickReportService.hpp
+    src/services/StockPickReportService.cpp
+    src/util/Date.hpp
+    src/util/Date.cpp
+    src/util/Money.hpp
+    src/util/Money.cpp
+)
+
+target_include_directories(StockPickReportServiceTests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+
+if(MSVC)
+    target_compile_options(StockPickReportServiceTests PRIVATE /W4 /permissive- /utf-8)
+endif()
+
+add_test(NAME StockPickReportServiceTests COMMAND StockPickReportServiceTests)

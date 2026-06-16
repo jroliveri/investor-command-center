@@ -9,11 +9,26 @@
 
 #include <vector>
 
+enum class AllocationStatus {
+    Underweight,
+    OnTarget,
+    Overweight,
+};
+
 struct HoldingMetrics {
     double costBasis = 0.0;
     double marketValue = 0.0;
     double gainLossDollar = 0.0;
     double gainLossPercent = 0.0;
+};
+
+struct HoldingAllocationMetrics {
+    double actualAllocationPercent = 0.0;
+    double targetAllocationPercent = 0.0;
+    double targetAmount = 0.0;
+    double differenceDollar = 0.0;
+    double differencePercent = 0.0;
+    AllocationStatus status = AllocationStatus::OnTarget;
 };
 
 struct PortfolioSummary {
@@ -55,6 +70,9 @@ struct WatchlistSummary {
 
 namespace PortfolioCalculator {
 HoldingMetrics calculateHolding(const Holding& holding);
+HoldingAllocationMetrics calculateHoldingAllocation(const Holding& holding, double totalInvestmentAccountValue);
+AllocationStatus allocationStatus(double actualAllocationPercent, double targetAllocationPercent);
+const char* allocationStatusLabel(AllocationStatus status);
 AccountMetrics calculateAccount(const Account& account, const std::vector<Holding>& holdings);
 PortfolioSummary calculateSummary(const std::vector<Account>& accounts, const std::vector<Holding>& holdings);
 DividendSummary calculateDividends(const std::vector<Dividend>& dividends, const std::string& monthPrefix, const std::string& yearPrefix);

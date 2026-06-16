@@ -36,7 +36,7 @@ constexpr const char* SignalNoticePopup = "Watchlist Price Signal";
 constexpr const char* NewWatchlistGroupEditorPopup = "Watchlist Manager###watchlist_group_edit_popup_new";
 constexpr const char* NewWatchlistEditorPopup = "Watchlist Editor###watchlist_edit_popup_new";
 
-void showGlassTooltip(const std::string& text);
+ImVec4 signalColor(const WatchlistSignalResult& signal);
 
 std::string watchlistGroupEditorPopupId(int watchlistId)
 {
@@ -244,58 +244,271 @@ std::string momentumText(const TechnicalIndicatorEvaluation& evaluation)
         : "N/A";
 }
 
-std::string rsiTooltip(const TechnicalIndicatorEvaluation& evaluation, const TechnicalIndicatorSettings& settings)
+struct TooltipRow {
+    std::string label;
+    std::string value;
+    ImVec4 valueColor = UiTheme::TextSecondary;
+    std::string note;
+};
+
+std::string signedNumberText(double value, int decimals)
 {
-    std::ostringstream stream;
-    stream << "RSI: " << rsiText(evaluation) << "\n"
-           << "State: " << evaluation.rsiClassification << "\n"
-           << "Period: " << settings.rsiPeriod << "\n"
-           << "Oversold at or below " << Money::formatNumber(settings.rsiOversoldThreshold, 1) << "\n"
-           << "Overbought at or above " << Money::formatNumber(settings.rsiOverboughtThreshold, 1) << "\n"
-           << "Informational technical tracking indicator.";
+    return std::string(value > 0.0 ? "+" : "") + Money::formatNumber(value, decimals);
+}
+
+std::string optionalSignedNumberText(const std::optional<double>& value, int decimals)
+{
+    return value.has_value() ? signedNumberText(*value, decimals) : "N/A";
+}
+
+ImVec4 numericPolarityColor(const std::optional<double>& value)
+{
+    if (!value.has_value()) {
+        return UiTheme::Amber;
+    }
+    if (*value > 0.0) {
+        return UiTheme::Gain;
+    }
+    if (*value < 0.0) {
+        return UiTheme::Loss;
+    }
+    return UiTheme::ElectricCyan;
+}
+
+ImVec4 rsiStateColor(const TechnicalIndicatorEvaluation& evaluation)
+{
+    if (!evaluation.rsi.has_value()) {
+        return UiTheme::Amber;
+    }
+    return rsiColor(evaluation);
+}
+
+ImVec4 macdStateColor(const TechnicalIndicatorEvaluation& evaluation)
+{
+    if (!evaluation.macdHistogram.has_value()) {
+        return UiTheme::Amber;
+    }
+    return macdColor(evaluation);
+}
+
+ImVec4 momentumStateColor(const TechnicalIndicatorEvaluation& evaluation)
+{
+    if (!evaluation.momentumPercent.has_value()) {
+        return UiTheme::Amber;
+    }
+    return momentumColor(evaluation);
+}
+
+std::string ruleStatusText(bool available, bool passed)
+{
+    if (!available) {
+        return "N/A";
+    }
+    return passed ? "Pass" : "Fail";
+}
+
+ImVec4 ruleStatusColor(bool available, bool passed)
+{
+    if (!available) {
+        return UiTheme::Amber;
+    }
+    return passed ? UiTheme::Gain : UiTheme::Loss;
+}
+
+std::string thresholdRangeText(double low, double high)
+{
+    return Money::formatNumber(low, 1) + " - " + Money::formatNumber(high, 1);
+}
+
+std::string levelComparisonNote(double currentPrice, double targetPrice, const char* levelName)
+{
+    return std::string("Current ") + currentPriceText(currentPrice) + "; " + levelName + " " + priceOrNotSet(targetPrice);
+}
+
+std::string momentumRuleStatus(const TechnicalIndicatorEvaluation& evaluation)
+{
+    if (!evaluation.momentumPercent.has_value()) {
+        return "N/A";
+    }
+    if (evaluation.momentumClassification == "Rising") {
+        return "Pass";
+    }
+    if (evaluation.momentumClassification == "Falling") {
+        return "Fail";
+    }
+    return "Neutral";
+}
+
+ImVec4 momentumRuleStatusColor(const TechnicalIndicatorEvaluation& evaluation)
+{
+    if (!evaluation.momentumPercent.has_value()) {
+        return UiTheme::Amber;
+    }
+    if (evaluation.momentumClassification == "Rising") {
+        return UiTheme::Gain;
+    }
+    if (evaluation.momentumClassification == "Falling") {
+        return UiTheme::Loss;
+    }
+    return UiTheme::ElectricCyan;
+}
+
+std::string momentumSignalNote(const TechnicalIndicatorEvaluation& evaluation)
+{
+    if (!evaluation.momentumPercent.has_value()) {
+        return evaluation.unavailableReason.empty() ? "Momentum data unavailable." : evaluation.unavailableReason;
+    }
+    return momentumText(evaluation) + " (" + evaluation.momentumClassification + "); informational only in the current Buy/Sell/Hold rule.";
+}
+
+void drawTooltipWrapped(ImVec4 color, const std::string& text)
+{
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+    ImGui::TextColored(color, "%s", text.c_str());
+    ImGui::PopTextWrapPos();
+}
+
+void showTooltipCard(const std::string& title, ImVec4 titleColor, const std::vector<TooltipRow>& rows, const std::string& footer)
+{
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, UiTheme::withAlpha(UiTheme::GlassPanel, 0.96f));
+    ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(UiTheme::ElectricCyan, 0.42f));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 10.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 5.0f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(320.0f, 0.0f), ImVec2(460.0f, FLT_MAX));
+    ImGui::BeginTooltip();
+    ImGui::TextColored(titleColor, "%s", title.c_str());
+    ImGui::Separator();
+
+    if (ImGui::BeginTable("TechnicalTooltipRows", 2, ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        for (const TooltipRow& row : rows) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextColored(UiTheme::MutedText, "%s", row.label.c_str());
+            ImGui::TableNextColumn();
+            drawTooltipWrapped(row.valueColor, row.value);
+            if (!row.note.empty()) {
+                drawTooltipWrapped(UiTheme::TextMuted, row.note);
+            }
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::Separator();
+    drawTooltipWrapped(UiTheme::TextMuted, footer);
+    ImGui::EndTooltip();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+}
+
+void showRsiTooltip(const TechnicalIndicatorEvaluation& evaluation, const TechnicalIndicatorSettings& settings)
+{
+    const SignalRules rules;
+    const bool available = evaluation.rsi.has_value();
+    const bool passed = available && *evaluation.rsi >= rules.rsiBuyMin && *evaluation.rsi <= rules.rsiBuyMax;
+    std::vector<TooltipRow> rows {
+        TooltipRow { "Period", std::to_string(settings.rsiPeriod), UiTheme::TextSecondary, {} },
+        TooltipRow { "Oversold", "<= " + Money::formatNumber(settings.rsiOversoldThreshold, 1), UiTheme::Amber, {} },
+        TooltipRow { "Overbought", ">= " + Money::formatNumber(settings.rsiOverboughtThreshold, 1), UiTheme::Loss, {} },
+        TooltipRow { "State", evaluation.rsiClassification, rsiStateColor(evaluation), {} },
+        TooltipRow { "Buy Range", thresholdRangeText(rules.rsiBuyMin, rules.rsiBuyMax), UiTheme::TextSecondary, {} },
+        TooltipRow { "Rule Status", ruleStatusText(available, passed), ruleStatusColor(available, passed), {} },
+    };
     if (!evaluation.rsi.has_value() && !evaluation.unavailableReason.empty()) {
-        stream << "\n" << evaluation.unavailableReason;
+        rows.push_back(TooltipRow { "Availability", evaluation.unavailableReason, UiTheme::Amber, {} });
     }
-    return stream.str();
+    showTooltipCard("RSI: " + rsiText(evaluation), rsiStateColor(evaluation), rows, "Informational technical tracking indicator.");
 }
 
-std::string macdTooltip(const TechnicalIndicatorEvaluation& evaluation, const TechnicalIndicatorSettings& settings)
+void showMacdTooltip(const TechnicalIndicatorEvaluation& evaluation, const TechnicalIndicatorSettings& settings)
 {
-    std::ostringstream stream;
-    stream << "MACD: " << macdText(evaluation) << "\n"
-           << "Fast / slow / signal periods: "
-           << settings.macdFastPeriod << " / " << settings.macdSlowPeriod << " / " << settings.macdSignalPeriod << "\n"
-           << "MACD line: " << optionalNumberText(evaluation.macdLine, 4) << "\n"
-           << "Signal line: " << optionalNumberText(evaluation.macdSignal, 4) << "\n"
-           << "Histogram: " << optionalNumberText(evaluation.macdHistogram, 4) << "\n"
-           << "Informational technical tracking indicator.";
+    std::vector<TooltipRow> rows {
+        TooltipRow {
+            "Fast / Slow / Signal",
+            std::to_string(settings.macdFastPeriod) + " / " + std::to_string(settings.macdSlowPeriod) + " / " + std::to_string(settings.macdSignalPeriod),
+            UiTheme::TextSecondary,
+            {} },
+        TooltipRow { "MACD Line", optionalSignedNumberText(evaluation.macdLine, 4), numericPolarityColor(evaluation.macdLine), {} },
+        TooltipRow { "Signal Line", optionalSignedNumberText(evaluation.macdSignal, 4), numericPolarityColor(evaluation.macdSignal), {} },
+        TooltipRow { "Histogram", optionalSignedNumberText(evaluation.macdHistogram, 4), numericPolarityColor(evaluation.macdHistogram), {} },
+        TooltipRow { "Signal State", evaluation.macdClassification, macdStateColor(evaluation), {} },
+    };
     if (!evaluation.macdHistogram.has_value() && !evaluation.unavailableReason.empty()) {
-        stream << "\n" << evaluation.unavailableReason;
+        rows.push_back(TooltipRow { "Availability", evaluation.unavailableReason, UiTheme::Amber, {} });
     }
-    return stream.str();
+    showTooltipCard("MACD: " + macdText(evaluation), macdStateColor(evaluation), rows, "Informational technical tracking indicator.");
 }
 
-std::string momentumTooltip(const TechnicalIndicatorEvaluation& evaluation, const TechnicalIndicatorSettings& settings)
+void showMomentumTooltip(const TechnicalIndicatorEvaluation& evaluation, const TechnicalIndicatorSettings& settings)
 {
-    std::ostringstream stream;
-    stream << "Momentum " << settings.momentumLookbackDays << "D: " << momentumText(evaluation) << "\n"
-           << "State: " << evaluation.momentumClassification << "\n"
-           << "Rising at or above " << Money::formatPercent(settings.momentumPositiveThresholdPercent, true) << "\n"
-           << "Falling at or below " << Money::formatPercent(settings.momentumNegativeThresholdPercent, true) << "\n"
-           << "Formula: latest close compared with the configured lookback close.\n"
-           << "Informational technical tracking indicator.";
+    std::vector<TooltipRow> rows {
+        TooltipRow { "Lookback", std::to_string(settings.momentumLookbackDays) + " days", UiTheme::TextSecondary, {} },
+        TooltipRow { "Positive Threshold", Money::formatPercent(settings.momentumPositiveThresholdPercent, true), UiTheme::Gain, {} },
+        TooltipRow { "Negative Threshold", Money::formatPercent(settings.momentumNegativeThresholdPercent, true), UiTheme::Loss, {} },
+        TooltipRow { "State", evaluation.momentumClassification, momentumStateColor(evaluation), {} },
+        TooltipRow {
+            "Rule Status",
+            momentumRuleStatus(evaluation),
+            momentumRuleStatusColor(evaluation),
+            "Relative to the configured momentum thresholds." },
+    };
     if (!evaluation.momentumPercent.has_value() && !evaluation.unavailableReason.empty()) {
-        stream << "\n" << evaluation.unavailableReason;
+        rows.push_back(TooltipRow { "Availability", evaluation.unavailableReason, UiTheme::Amber, {} });
     }
-    return stream.str();
+    showTooltipCard("Momentum " + std::to_string(settings.momentumLookbackDays) + "D: " + momentumText(evaluation), momentumStateColor(evaluation), rows, "Informational technical tracking indicator.");
 }
 
-void drawTechnicalValue(const std::string& value, ImVec4 color, const std::string& tooltip)
+void showSignalTooltip(
+    const WatchlistItem& item,
+    const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators,
+    const TechnicalIndicatorEvaluation& displayedTechnicals,
+    const WatchlistSignalResult& signal)
+{
+    const SignalRules rules;
+    const std::optional<double> signalRsi = technicalIndicators.has_value() ? technicalIndicators->rsi14 : std::nullopt;
+    const std::optional<double> signalMacdHistogram = technicalIndicators.has_value() ? technicalIndicators->macdHistogram : std::nullopt;
+    const bool hasBuyLevel = item.buySignalPrice > 0.0 && signal.hasCurrentPrice;
+    const bool hasSellLevel = item.sellSignalPrice > 0.0 && signal.hasCurrentPrice;
+
+    std::vector<TooltipRow> rows {
+        TooltipRow { "Current Price", currentPriceText(item.currentPrice), signal.hasCurrentPrice ? UiTheme::TextPrimary : UiTheme::Amber, {} },
+        TooltipRow {
+            "Price vs Buy Level",
+            ruleStatusText(hasBuyLevel, signal.priceConditionMet),
+            ruleStatusColor(hasBuyLevel, signal.priceConditionMet),
+            levelComparisonNote(item.currentPrice, item.buySignalPrice, "buy level") },
+        TooltipRow {
+            "Price vs Sell Level",
+            ruleStatusText(hasSellLevel, signal.sellConditionMet),
+            hasSellLevel ? (signal.sellConditionMet ? UiTheme::Loss : UiTheme::TextMuted) : UiTheme::Amber,
+            levelComparisonNote(item.currentPrice, item.sellSignalPrice, "sell level") },
+        TooltipRow {
+            "RSI",
+            ruleStatusText(signal.hasRsi, signal.rsiConditionMet),
+            ruleStatusColor(signal.hasRsi, signal.rsiConditionMet),
+            optionalNumberText(signalRsi, 1) + "; requires " + thresholdRangeText(rules.rsiBuyMin, rules.rsiBuyMax) },
+        TooltipRow {
+            "MACD",
+            ruleStatusText(signal.hasMacd, signal.macdConditionMet),
+            ruleStatusColor(signal.hasMacd, signal.macdConditionMet),
+            optionalSignedNumberText(signalMacdHistogram, 4) + "; histogram must be >= " + Money::formatNumber(rules.macdHistogramMin, 4) },
+        TooltipRow {
+            "Momentum",
+            momentumRuleStatus(displayedTechnicals),
+            momentumRuleStatusColor(displayedTechnicals),
+            momentumSignalNote(displayedTechnicals) },
+        TooltipRow { "Final Reason", signal.reasonText, signalColor(signal), {} },
+    };
+
+    showTooltipCard("Signal: " + signal.signal, signalColor(signal), rows, "User-defined tracking signal. Not financial advice.");
+}
+
+bool drawTechnicalValue(const std::string& value, ImVec4 color)
 {
     ImGui::TextColored(color, "%s", value.c_str());
-    if (ImGui::IsItemHovered() && !tooltip.empty()) {
-        showGlassTooltip(tooltip);
-    }
+    return ImGui::IsItemHovered();
 }
 
 std::string volumeText(const std::optional<TechnicalIndicatorSnapshot>& snapshot)
@@ -344,22 +557,6 @@ std::optional<TechnicalIndicatorSnapshot> cachedIndicatorsFor(TechnicalIndicator
 {
     std::string error;
     return technicalIndicatorService.cachedSnapshot(item.ticker, "Yahoo Finance", error);
-}
-
-void showGlassTooltip(const std::string& text)
-{
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, UiTheme::withAlpha(UiTheme::GlassPanel, 0.96f));
-    ImGui::PushStyleColor(ImGuiCol_Border, UiTheme::withAlpha(UiTheme::ElectricCyan, 0.42f));
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(240.0f, 0.0f), ImVec2(380.0f, FLT_MAX));
-    ImGui::BeginTooltip();
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 340.0f);
-    ImGui::TextUnformatted(text.c_str());
-    ImGui::PopTextWrapPos();
-    ImGui::EndTooltip();
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(2);
 }
 
 void sortWatchlistItemsBySignal(std::vector<WatchlistItem>& items, TechnicalIndicatorService& technicalIndicatorService)
@@ -840,24 +1037,27 @@ void WatchlistView::drawWatchlistItems(AppState& state,
             UiTheme::textRightAligned(priceOrNotSet(item.sellSignalPrice).c_str(), UiTheme::Loss);
             ImGui::TableNextColumn();
             const std::optional<TechnicalIndicatorSnapshot> indicators = cachedIndicatorsFor(technicalIndicatorService, item);
-            drawSignalBadge(item, indicators);
+            const TechnicalIndicatorEvaluation& technicalEvaluation = technicalEvaluationFor(technicalIndicatorService, item, state.technicalIndicatorSettings);
+            drawSignalBadge(item, indicators, technicalEvaluation);
             if (showTechnicals) {
-                const TechnicalIndicatorEvaluation& technicalEvaluation = technicalEvaluationFor(technicalIndicatorService, item, state.technicalIndicatorSettings);
                 ImGui::TableNextColumn();
-                drawTechnicalValue(
+                if (drawTechnicalValue(
                     rsiText(technicalEvaluation),
-                    rsiColor(technicalEvaluation),
-                    rsiTooltip(technicalEvaluation, state.technicalIndicatorSettings));
+                    rsiColor(technicalEvaluation))) {
+                    showRsiTooltip(technicalEvaluation, state.technicalIndicatorSettings);
+                }
                 ImGui::TableNextColumn();
-                drawTechnicalValue(
+                if (drawTechnicalValue(
                     macdText(technicalEvaluation),
-                    macdColor(technicalEvaluation),
-                    macdTooltip(technicalEvaluation, state.technicalIndicatorSettings));
+                    macdColor(technicalEvaluation))) {
+                    showMacdTooltip(technicalEvaluation, state.technicalIndicatorSettings);
+                }
                 ImGui::TableNextColumn();
-                drawTechnicalValue(
+                if (drawTechnicalValue(
                     momentumText(technicalEvaluation),
-                    momentumColor(technicalEvaluation),
-                    momentumTooltip(technicalEvaluation, state.technicalIndicatorSettings));
+                    momentumColor(technicalEvaluation))) {
+                    showMomentumTooltip(technicalEvaluation, state.technicalIndicatorSettings);
+                }
             }
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::TextMuted, "%s", emptyIfBlank(item.lastPriceRefreshAt));
@@ -1282,20 +1482,24 @@ const TechnicalIndicatorEvaluation& WatchlistView::technicalEvaluationFor(
     return inserted.first->second;
 }
 
-void WatchlistView::drawSignalBadge(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators)
+void WatchlistView::drawSignalBadge(
+    const WatchlistItem& item,
+    const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators,
+    const TechnicalIndicatorEvaluation& displayedTechnicals)
 {
     const WatchlistSignalResult signal = WatchlistSignalService::calculateSignal(item, technicalIndicators);
+    const std::string signalDetails = WatchlistSignalService::signalDetailText(item, technicalIndicators, &displayedTechnicals);
     const ImVec4 color = signalColor(signal);
 
     UiTheme::pushBadgeStyle(color);
     if (ImGui::SmallButton((signal.signal + "##signal_badge_" + std::to_string(item.id)).c_str())) {
         signalNoticeTicker_ = item.ticker;
         signalNoticeStatus_ = signal.signal;
-        signalNoticeDetail_ = signal.reasonText;
+        signalNoticeDetail_ = signalDetails;
         openSignalNoticePopup_ = true;
     }
-    if (ImGui::IsItemHovered() && !signal.reasonText.empty()) {
-        showGlassTooltip(signal.reasonText);
+    if (ImGui::IsItemHovered() && !signalDetails.empty()) {
+        showSignalTooltip(item, technicalIndicators, displayedTechnicals, signal);
     }
     UiTheme::popBadgeStyle();
 }

@@ -12,6 +12,7 @@ struct Holding {
     double shares = 0.0;
     double averageCost = 0.0;
     double currentPrice = 0.0;
+    double targetAllocationPercent = 0.0;
     std::string notes;
     std::string status = "Active";
     int lastImportBatchId = 0;

@@ -155,7 +155,8 @@ void testPortfolioSummaryCardContent()
 void testPortfolioSummaryAccountStatusesAndLimits()
 {
     std::vector<Account> accounts;
-    for (int index = 0; index < 5; ++index) {
+    const int totalAccounts = SidebarModel::AccountPreviewLimit + 1;
+    for (int index = 0; index < totalAccounts; ++index) {
         Account account;
         account.id = index + 1;
         account.accountName = "Account " + std::to_string(index + 1);
@@ -173,7 +174,7 @@ void testPortfolioSummaryAccountStatusesAndLimits()
         {});
 
     expectEqual(static_cast<int>(card.accounts.size()), SidebarModel::AccountPreviewLimit, "Account preview is capped");
-    expectEqual(card.hiddenAccountCount, 1, "Hidden account count is exposed for View all affordance");
+    expectEqual(card.hiddenAccountCount, totalAccounts - SidebarModel::AccountPreviewLimit, "Hidden account count is exposed for View all affordance");
     expectTrue(!card.accounts[0].showStatus, "Active status is hidden in compact account rows");
     expectTrue(card.accounts[1].showStatus, "Meaningful non-active account status remains visible");
     expectEqual(card.accounts[1].status, "Dormant", "Non-active account status text is preserved");
@@ -214,7 +215,8 @@ void testWatchlistsTabsAndRows()
 void testWatchlistsDefaultGroupAndLimits()
 {
     std::vector<WatchlistItem> items;
-    for (int index = 0; index < 7; ++index) {
+    const int totalSymbols = SidebarModel::WatchlistPreviewLimit + 2;
+    for (int index = 0; index < totalSymbols; ++index) {
         items.push_back(watchlistItem("SYM" + std::to_string(index + 1), 10.0 + index));
     }
 
@@ -224,7 +226,7 @@ void testWatchlistsDefaultGroupAndLimits()
     expectEqual(static_cast<int>(groups.size()), 1, "Single-list watchlist data becomes one forward-compatible group");
     expectEqual(groups[0].name, "Main", "Default watchlist group is Main");
     expectEqual(static_cast<int>(card.rows.size()), SidebarModel::WatchlistPreviewLimit, "Sidebar watchlist row count is capped");
-    expectEqual(card.hiddenSymbolCount, 2, "Hidden symbol count supports compact +N more row");
+    expectEqual(card.hiddenSymbolCount, totalSymbols - SidebarModel::WatchlistPreviewLimit, "Hidden symbol count supports compact +N more row");
     expectTrue(card.showCreateControl && !card.createEnabled, "Create tab can render disabled until a safe create action exists");
 }
 

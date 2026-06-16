@@ -5,6 +5,7 @@
 #include "services/MarketDataService.hpp"
 #include "services/TechnicalIndicatorService.hpp"
 #include "util/Date.hpp"
+#include "util/Money.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -65,6 +66,53 @@ std::string formatNumber(double value, int decimals = 1)
     std::ostringstream stream;
     stream << std::fixed << std::setprecision(decimals) << value;
     return stream.str();
+}
+
+std::string formatPriceForDetail(double value)
+{
+    return value > 0.0 ? Money::format(value) : "Not set";
+}
+
+std::string optionalNumberForDetail(const std::optional<double>& value, int decimals)
+{
+    return value.has_value() ? Money::formatNumber(*value, decimals) : "N/A";
+}
+
+const char* passFail(bool passed)
+{
+    return passed ? "pass" : "fail";
+}
+
+std::string macdStateText(const std::optional<double>& histogram)
+{
+    if (!histogram.has_value()) {
+        return "N/A";
+    }
+    if (*histogram > 0.0) {
+        return "Bullish";
+    }
+    if (*histogram < 0.0) {
+        return "Bearish";
+    }
+    return "Neutral";
+}
+
+std::string momentumDetail(const TechnicalIndicatorEvaluation* displayedTechnicals)
+{
+    if (displayedTechnicals == nullptr || !displayedTechnicals->momentumPercent.has_value()) {
+        return "Momentum: N/A - unavailable; not required by the current Buy/Sell/Hold rule.";
+    }
+
+    std::string thresholdText = "inside neutral tracking band";
+    if (displayedTechnicals->momentumClassification == "Rising") {
+        thresholdText = "passes positive tracking threshold";
+    } else if (displayedTechnicals->momentumClassification == "Falling") {
+        thresholdText = "passes negative tracking threshold";
+    }
+
+    return "Momentum: " + Money::formatPercent(*displayedTechnicals->momentumPercent, true) +
+        " (" + displayedTechnicals->momentumClassification + ") - " + thresholdText +
+        "; not required by the current Buy/Sell/Hold rule.";
 }
 
 std::string waitingForTechnicalReason(const WatchlistSignalResult& result, const SignalRules& rules)
@@ -180,6 +228,61 @@ WatchlistPriceRefreshStatus refreshPricesWithIndicators(
     return status;
 }
 
+}
+
+std::string WatchlistSignalService::signalDetailText(
+    const WatchlistItem& item,
+    const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators,
+    const TechnicalIndicatorEvaluation* displayedTechnicals)
+{
+    return signalDetailText(item, technicalIndicators, displayedTechnicals, SignalRules {});
+}
+
+std::string WatchlistSignalService::signalDetailText(
+    const WatchlistItem& item,
+    const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators,
+    const TechnicalIndicatorEvaluation* displayedTechnicals,
+    const SignalRules& rules)
+{
+    const WatchlistSignalResult signal = calculateSignal(item, technicalIndicators, rules);
+    std::ostringstream stream;
+
+    stream << signal.reasonText << "\n";
+    stream << "Current price: " << formatPriceForDetail(item.currentPrice) << "\n";
+
+    if (item.buySignalPrice > 0.0 && signal.hasCurrentPrice) {
+        stream << "Buy level: " << formatPriceForDetail(item.buySignalPrice) << " - "
+               << (signal.priceConditionMet ? "pass; price is at/below buy level." : "fail; price is above buy level.") << "\n";
+    } else if (item.buySignalPrice > 0.0) {
+        stream << "Buy level: " << formatPriceForDetail(item.buySignalPrice) << " - waiting for current price.\n";
+    } else {
+        stream << "Buy level: Not set - Buy cannot trigger until a buy level is set.\n";
+    }
+
+    if (item.sellSignalPrice > 0.0 && signal.hasCurrentPrice) {
+        stream << "Sell level: " << formatPriceForDetail(item.sellSignalPrice) << " - "
+               << (signal.sellConditionMet ? "pass; price is at/above sell level." : "not reached.") << "\n";
+    } else if (item.sellSignalPrice > 0.0) {
+        stream << "Sell level: " << formatPriceForDetail(item.sellSignalPrice) << " - waiting for current price.\n";
+    } else {
+        stream << "Sell level: Not set.\n";
+    }
+
+    stream << "RSI signal filter: " << optionalNumberForDetail(technicalIndicators.has_value() ? technicalIndicators->rsi14 : std::nullopt, 1)
+           << " - " << (signal.hasRsi ? passFail(signal.rsiConditionMet) : "missing")
+           << "; requires " << Money::formatNumber(rules.rsiBuyMin, 1) << "-"
+           << Money::formatNumber(rules.rsiBuyMax, 1) << ".\n";
+
+    const std::optional<double> macdHistogram = technicalIndicators.has_value() ? technicalIndicators->macdHistogram : std::nullopt;
+    stream << "MACD signal filter: " << macdStateText(macdHistogram)
+           << " (histogram " << optionalNumberForDetail(macdHistogram, 4) << ") - "
+           << (signal.hasMacd ? passFail(signal.macdConditionMet) : "missing")
+           << "; requires histogram >= " << Money::formatNumber(rules.macdHistogramMin, 4) << ".\n";
+
+    stream << momentumDetail(displayedTechnicals) << "\n";
+    stream << "Final signal: " << signal.signal << ". User-defined tracking signal only; informational and not financial advice.";
+
+    return stream.str();
 }
 
 WatchlistSignalResult WatchlistSignalService::calculateSignal(

@@ -5,6 +5,11 @@
 
 class Database;
 
+namespace AppSettingKeys {
+inline constexpr const char* WeeklyRealizedCapitalGainsGoal = "dashboard.realized_capital_gains_goal.weekly";
+inline constexpr const char* MonthlyRealizedCapitalGainsGoal = "dashboard.realized_capital_gains_goal.monthly";
+}
+
 class AppSettingsRepository {
 public:
     explicit AppSettingsRepository(Database& database);

@@ -7,6 +7,22 @@ namespace PortfolioCalculator {
 
 namespace {
 
+constexpr double AllocationTolerancePercentagePoints = 5.0;
+
+const char* statusLabel(AllocationStatus status)
+{
+    switch (status) {
+    case AllocationStatus::Underweight:
+        return "Underweight";
+    case AllocationStatus::OnTarget:
+        return "On Target";
+    case AllocationStatus::Overweight:
+        return "Overweight";
+    }
+
+    return "On Target";
+}
+
 bool isActiveHolding(const Holding& holding)
 {
     return holding.status.empty() || holding.status == "Active";
@@ -48,6 +64,40 @@ HoldingMetrics calculateHolding(const Holding& holding)
     metrics.gainLossDollar = metrics.marketValue - metrics.costBasis;
     metrics.gainLossPercent = metrics.costBasis == 0.0 ? 0.0 : (metrics.gainLossDollar / metrics.costBasis) * 100.0;
     return metrics;
+}
+
+HoldingAllocationMetrics calculateHoldingAllocation(const Holding& holding, double totalInvestmentAccountValue)
+{
+    HoldingAllocationMetrics metrics;
+    metrics.targetAllocationPercent = holding.targetAllocationPercent;
+    const HoldingMetrics holdingMetrics = calculateHolding(holding);
+
+    if (totalInvestmentAccountValue > 0.0) {
+        metrics.actualAllocationPercent = holdingMetrics.marketValue / totalInvestmentAccountValue * 100.0;
+        metrics.targetAmount = metrics.targetAllocationPercent / 100.0 * totalInvestmentAccountValue;
+    }
+
+    metrics.differenceDollar = holdingMetrics.marketValue - metrics.targetAmount;
+    metrics.differencePercent = metrics.actualAllocationPercent - metrics.targetAllocationPercent;
+    metrics.status = allocationStatus(metrics.actualAllocationPercent, metrics.targetAllocationPercent);
+    return metrics;
+}
+
+AllocationStatus allocationStatus(double actualAllocationPercent, double targetAllocationPercent)
+{
+    const double differencePercent = actualAllocationPercent - targetAllocationPercent;
+    if (differencePercent >= AllocationTolerancePercentagePoints) {
+        return AllocationStatus::Overweight;
+    }
+    if (differencePercent <= -AllocationTolerancePercentagePoints) {
+        return AllocationStatus::Underweight;
+    }
+    return AllocationStatus::OnTarget;
+}
+
+const char* allocationStatusLabel(AllocationStatus status)
+{
+    return statusLabel(status);
 }
 
 AccountMetrics calculateAccount(const Account& account, const std::vector<Holding>& holdings)

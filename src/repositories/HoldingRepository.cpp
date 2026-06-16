@@ -45,7 +45,7 @@ std::vector<Holding> HoldingRepository::listAll(std::string& error) const
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
             "SELECT id, account_id, ticker, asset_name, asset_type, shares, average_cost, current_price, "
-            "notes, status, last_import_batch_id, last_seen_at, created_at, updated_at "
+            "target_allocation_percent, notes, status, last_import_batch_id, last_seen_at, created_at, updated_at "
             "FROM holdings ORDER BY ticker COLLATE NOCASE, asset_name COLLATE NOCASE;",
             &statement)) {
         error = database_.lastError();
@@ -62,15 +62,16 @@ std::vector<Holding> HoldingRepository::listAll(std::string& error) const
         holding.shares = sqlite3_column_double(statement, 5);
         holding.averageCost = sqlite3_column_double(statement, 6);
         holding.currentPrice = sqlite3_column_double(statement, 7);
-        holding.notes = textColumn(statement, 8);
-        holding.status = textColumn(statement, 9);
+        holding.targetAllocationPercent = sqlite3_column_double(statement, 8);
+        holding.notes = textColumn(statement, 9);
+        holding.status = textColumn(statement, 10);
         if (holding.status.empty()) {
             holding.status = "Active";
         }
-        holding.lastImportBatchId = sqlite3_column_type(statement, 10) == SQLITE_NULL ? 0 : sqlite3_column_int(statement, 10);
-        holding.lastSeenAt = textColumn(statement, 11);
-        holding.createdAt = textColumn(statement, 12);
-        holding.updatedAt = textColumn(statement, 13);
+        holding.lastImportBatchId = sqlite3_column_type(statement, 11) == SQLITE_NULL ? 0 : sqlite3_column_int(statement, 11);
+        holding.lastSeenAt = textColumn(statement, 12);
+        holding.createdAt = textColumn(statement, 13);
+        holding.updatedAt = textColumn(statement, 14);
         holdings.push_back(holding);
     }
 
@@ -94,8 +95,8 @@ bool HoldingRepository::create(Holding& holding, std::string& error) const
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
             "INSERT INTO holdings(account_id, ticker, asset_name, asset_type, shares, average_cost, "
-            "current_price, notes, status, last_import_batch_id, last_seen_at, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            "current_price, target_allocation_percent, notes, status, last_import_batch_id, last_seen_at, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
             &statement)) {
         error = database_.lastError();
         return false;
@@ -108,16 +109,17 @@ bool HoldingRepository::create(Holding& holding, std::string& error) const
     sqlite3_bind_double(statement, 5, holding.shares);
     sqlite3_bind_double(statement, 6, holding.averageCost);
     sqlite3_bind_double(statement, 7, holding.currentPrice);
-    sqlite3_bind_text(statement, 8, holding.notes.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 9, holding.status.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(statement, 8, holding.targetAllocationPercent);
+    sqlite3_bind_text(statement, 9, holding.notes.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 10, holding.status.c_str(), -1, SQLITE_TRANSIENT);
     if (holding.lastImportBatchId > 0) {
-        sqlite3_bind_int(statement, 10, holding.lastImportBatchId);
+        sqlite3_bind_int(statement, 11, holding.lastImportBatchId);
     } else {
-        sqlite3_bind_null(statement, 10);
+        sqlite3_bind_null(statement, 11);
     }
-    sqlite3_bind_text(statement, 11, holding.lastSeenAt.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 12, holding.createdAt.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 13, holding.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 12, holding.lastSeenAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 13, holding.createdAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 14, holding.updatedAt.c_str(), -1, SQLITE_TRANSIENT);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());
@@ -150,7 +152,7 @@ bool HoldingRepository::update(const Holding& holding, std::string& error) const
     sqlite3_stmt* statement = nullptr;
     if (!database_.prepare(
             "UPDATE holdings SET account_id = ?, ticker = ?, asset_name = ?, asset_type = ?, shares = ?, "
-            "average_cost = ?, current_price = ?, notes = ?, status = ?, last_import_batch_id = ?, "
+            "average_cost = ?, current_price = ?, target_allocation_percent = ?, notes = ?, status = ?, last_import_batch_id = ?, "
             "last_seen_at = ?, updated_at = ? "
             "WHERE id = ?;",
             &statement)) {
@@ -165,16 +167,17 @@ bool HoldingRepository::update(const Holding& holding, std::string& error) const
     sqlite3_bind_double(statement, 5, normalizedHolding.shares);
     sqlite3_bind_double(statement, 6, normalizedHolding.averageCost);
     sqlite3_bind_double(statement, 7, normalizedHolding.currentPrice);
-    sqlite3_bind_text(statement, 8, normalizedHolding.notes.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 9, normalizedHolding.status.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(statement, 8, normalizedHolding.targetAllocationPercent);
+    sqlite3_bind_text(statement, 9, normalizedHolding.notes.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 10, normalizedHolding.status.c_str(), -1, SQLITE_TRANSIENT);
     if (normalizedHolding.lastImportBatchId > 0) {
-        sqlite3_bind_int(statement, 10, normalizedHolding.lastImportBatchId);
+        sqlite3_bind_int(statement, 11, normalizedHolding.lastImportBatchId);
     } else {
-        sqlite3_bind_null(statement, 10);
+        sqlite3_bind_null(statement, 11);
     }
-    sqlite3_bind_text(statement, 11, normalizedHolding.lastSeenAt.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(statement, 12, timestamp.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(statement, 13, normalizedHolding.id);
+    sqlite3_bind_text(statement, 12, normalizedHolding.lastSeenAt.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 13, timestamp.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(statement, 14, normalizedHolding.id);
 
     if (sqlite3_step(statement) != SQLITE_DONE) {
         error = sqlite3_errmsg(database_.handle());
@@ -246,6 +249,11 @@ bool HoldingRepository::validate(const Holding& holding, std::string& error)
 
     if (holding.shares < 0.0 || holding.averageCost < 0.0 || holding.currentPrice < 0.0) {
         error = "Shares, average cost, and current price cannot be negative.";
+        return false;
+    }
+
+    if (holding.targetAllocationPercent < 0.0 || holding.targetAllocationPercent > 100.0) {
+        error = "Target allocation must be between 0% and 100%.";
         return false;
     }
 

@@ -27,6 +27,15 @@ struct WatchlistSignalResult {
 };
 
 namespace WatchlistSignalService {
+std::string signalDetailText(
+    const WatchlistItem& item,
+    const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators,
+    const TechnicalIndicatorEvaluation* displayedTechnicals = nullptr);
+std::string signalDetailText(
+    const WatchlistItem& item,
+    const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators,
+    const TechnicalIndicatorEvaluation* displayedTechnicals,
+    const SignalRules& rules);
 WatchlistSignalResult calculateSignal(
     double currentPrice,
     double buySignalPrice,

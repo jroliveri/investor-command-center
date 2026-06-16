@@ -24,6 +24,7 @@ private:
     bool editing_ = false;
     bool openEditorPopup_ = false;
     bool openDeletePopup_ = false;
+    int selectedAccountId_ = 0;
     int deleteId_ = 0;
     std::string deleteName_;
     std::string editorPopupId_;

@@ -79,6 +79,8 @@ public:
     WatchlistPriceRefreshStatus watchlistPriceRefreshStatus;
     TechnicalIndicatorSettings technicalIndicatorSettings;
     std::vector<CapitalGainAllocationRule> capitalGainAllocationRules;
+    double weeklyRealizedCapitalGainsGoal = 0.0;
+    double monthlyRealizedCapitalGainsGoal = 0.0;
     std::string themeKey = "dark_command_center";
     std::string statusMessage;
     bool statusIsError = false;

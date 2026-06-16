@@ -35,7 +35,10 @@ private:
     void refreshPrices(AppState& state, WatchlistRepository& repository, MarketDataService& marketDataService, TechnicalIndicatorService& technicalIndicatorService, const std::vector<WatchlistItem>& items, const std::string& watchlistName, const std::function<void()>& reloadData);
     void refreshHistory(AppState& state, MarketDataService& marketDataService, TechnicalIndicatorService& technicalIndicatorService, const std::vector<WatchlistItem>& items, const std::string& watchlistName);
     void drawPriorityBadge(const std::string& priority) const;
-    void drawSignalBadge(const WatchlistItem& item, const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators);
+    void drawSignalBadge(
+        const WatchlistItem& item,
+        const std::optional<TechnicalIndicatorSnapshot>& technicalIndicators,
+        const TechnicalIndicatorEvaluation& displayedTechnicals);
     const TechnicalIndicatorEvaluation& technicalEvaluationFor(TechnicalIndicatorService& technicalIndicatorService, const WatchlistItem& item, const TechnicalIndicatorSettings& settings);
     void drawSignalNoticePopup();
     void ensureSelectedWatchlist(const AppState& state);

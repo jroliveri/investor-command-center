@@ -14,9 +14,13 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
+#include <iomanip>
 #include <optional>
 #include <set>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -83,6 +87,11 @@ float sidebarRowHeight()
     return std::max(18.0f, ImGui::GetTextLineHeightWithSpacing());
 }
 
+float sidebarDataStatusCardHeight(const SidebarModel::DataStatusCard& card)
+{
+    return card.abnormal ? 152.0f : 112.0f;
+}
+
 bool isPortfolioShellSection(AppSection section)
 {
     return section == AppSection::Accounts ||
@@ -121,6 +130,90 @@ const char* sectionSubtitle(AppSection section)
     }
 
     return "Local-first portfolio intelligence.";
+}
+
+std::string trimCopy(const std::string& value)
+{
+    const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char character) {
+        return std::isspace(character) != 0;
+    });
+    if (first == value.end()) {
+        return {};
+    }
+
+    const auto last = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char character) {
+        return std::isspace(character) != 0;
+    }).base();
+    return std::string(first, last);
+}
+
+std::optional<double> parseNonNegativeCurrencySetting(const std::string& raw)
+{
+    std::string value = trimCopy(raw);
+    if (value.empty()) {
+        return 0.0;
+    }
+
+    value.erase(std::remove(value.begin(), value.end(), ','), value.end());
+    if (!value.empty() && value.front() == '$') {
+        value.erase(value.begin());
+        value = trimCopy(value);
+    }
+
+    try {
+        std::size_t consumed = 0;
+        const double parsed = std::stod(value, &consumed);
+        if (consumed != value.size() || !std::isfinite(parsed) || parsed < 0.0) {
+            return std::nullopt;
+        }
+        return parsed;
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
+    }
+}
+
+std::string serializeCurrencySetting(double value)
+{
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(2) << std::max(0.0, value);
+    return stream.str();
+}
+
+double readNonNegativeCurrencySetting(const AppSettingsRepository& settingsRepository, const char* key, std::string& error)
+{
+    std::string repositoryError;
+    const std::string raw = settingsRepository.getString(key, serializeCurrencySetting(0.0), repositoryError);
+    if (!repositoryError.empty()) {
+        error = repositoryError;
+        return 0.0;
+    }
+
+    const std::optional<double> parsed = parseNonNegativeCurrencySetting(raw);
+    if (!parsed.has_value()) {
+        error = std::string("Capital gains goal setting ") + key + " is invalid. Defaults are active.";
+        return 0.0;
+    }
+
+    return *parsed;
+}
+
+std::optional<TechnicalIndicatorSnapshot> cachedSidebarIndicators(TechnicalIndicatorService* technicalIndicatorService, const WatchlistItem& item)
+{
+    if (technicalIndicatorService == nullptr) {
+        return std::nullopt;
+    }
+
+    std::string error;
+    return technicalIndicatorService->cachedSnapshot(item.ticker, "Yahoo Finance", error);
+}
+
+WatchlistItem sidebarSignalItem(TechnicalIndicatorService* technicalIndicatorService, const WatchlistItem& item)
+{
+    WatchlistItem sidebarItem = item;
+    sidebarItem.signalStatus = WatchlistSignalService::calculateSignal(item, cachedSidebarIndicators(technicalIndicatorService, item)).signal;
+    return sidebarItem;
 }
 
 ImVec4 sidebarToneColor(const SidebarModel::MetricRow& metric)
@@ -455,7 +548,9 @@ void App::render()
     ImGui::BeginChild("Content", ImVec2(0.0f, 0.0f), true);
     ImGui::PopStyleVar();
 
-    UiTheme::sectionHeading(sectionTitle(state_.currentSection), sectionSubtitle(state_.currentSection));
+    if (state_.currentSection != AppSection::Dashboard) {
+        UiTheme::sectionHeading(sectionTitle(state_.currentSection), sectionSubtitle(state_.currentSection));
+    }
 
     const float statusHeight = state_.statusMessage.empty() ? 0.0f : 38.0f;
     ImGui::BeginChild("PageContent", ImVec2(0.0f, -statusHeight), false);
@@ -549,6 +644,18 @@ void App::reloadData()
     if (!error.empty()) {
         state_.setStatus("Could not load app settings: " + error, true);
         error.clear();
+    }
+
+    std::string weeklyGoalError;
+    std::string monthlyGoalError;
+    state_.weeklyRealizedCapitalGainsGoal = readNonNegativeCurrencySetting(*appSettingsRepository_, AppSettingKeys::WeeklyRealizedCapitalGainsGoal, weeklyGoalError);
+    state_.monthlyRealizedCapitalGainsGoal = readNonNegativeCurrencySetting(*appSettingsRepository_, AppSettingKeys::MonthlyRealizedCapitalGainsGoal, monthlyGoalError);
+    if (!weeklyGoalError.empty() || !monthlyGoalError.empty()) {
+        std::string goalsError = weeklyGoalError;
+        if (!monthlyGoalError.empty()) {
+            goalsError += goalsError.empty() ? monthlyGoalError : " " + monthlyGoalError;
+        }
+        state_.setStatus("Could not load capital gains goal settings: " + goalsError, true);
     }
 
     state_.technicalIndicatorSettings = TechnicalIndicatorSettingsService::load(*appSettingsRepository_, error);
@@ -964,6 +1071,14 @@ void App::renderTopNavigationTabs()
 
 void App::renderAccountColumn()
 {
+    const SidebarModel::DataStatusCard dataStatusCard = SidebarModel::buildDataStatusCard(
+        sidebarRefreshSummary(state_.dashboardPriceRefreshStatus),
+        sidebarRefreshSummary(state_.watchlistPriceRefreshStatus),
+        marketDataService_ == nullptr ? "Yahoo Finance" : marketDataService_->providerName(),
+        AppVersion,
+        startupError_,
+        Date::todayIso8601());
+
     UiTheme::pushPanelStyle();
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
     ImGui::BeginChild("AccountColumn", ImVec2(AccountColumnWidth, 0.0f), true);
@@ -971,8 +1086,16 @@ void App::renderAccountColumn()
     renderPortfolioSummaryCard();
     ImGui::Spacing();
     renderWatchlistPanel();
-    ImGui::Spacing();
-    renderDataStatusCard();
+
+    const float statusCardHeight = sidebarDataStatusCardHeight(dataStatusCard);
+    const float spacerHeight = ImGui::GetContentRegionAvail().y - statusCardHeight - ImGui::GetStyle().ItemSpacing.y;
+    if (spacerHeight > ImGui::GetStyle().ItemSpacing.y) {
+        ImGui::Dummy(ImVec2(0.0f, spacerHeight));
+    } else {
+        ImGui::Spacing();
+    }
+
+    renderDataStatusCard(dataStatusCard);
     ImGui::EndChild();
     UiTheme::popPanelStyle();
 }
@@ -991,7 +1114,7 @@ void App::renderPortfolioSummaryCard()
     const int visibleAccountCount = static_cast<int>(card.accounts.size());
     const bool hasMoreAccounts = card.hiddenAccountCount > 0;
     const float rowHeight = sidebarRowHeight();
-    const float cardHeight = 224.0f +
+    const float cardHeight = 268.0f +
         static_cast<float>(std::max(visibleAccountCount, 1)) * rowHeight +
         (hasMoreAccounts ? rowHeight + 6.0f : 0.0f);
 
@@ -1070,14 +1193,19 @@ void App::renderWatchlistPanel()
         group.name = watchlist.name;
         for (const WatchlistItem& item : state_.watchlist) {
             if (item.watchlistId == watchlist.id) {
-                group.items.push_back(item);
+                group.items.push_back(sidebarSignalItem(technicalIndicatorService_.get(), item));
             }
         }
         groups.push_back(group);
     }
 
     if (groups.empty()) {
-        groups = SidebarModel::defaultWatchlistGroups(state_.watchlist);
+        std::vector<WatchlistItem> defaultItems;
+        defaultItems.reserve(state_.watchlist.size());
+        for (const WatchlistItem& item : state_.watchlist) {
+            defaultItems.push_back(sidebarSignalItem(technicalIndicatorService_.get(), item));
+        }
+        groups = SidebarModel::defaultWatchlistGroups(defaultItems);
     }
 
     std::vector<MarketQuote> cachedQuotes;
@@ -1140,7 +1268,7 @@ void App::renderWatchlistPanel()
     } else if (ImGui::BeginTable("SidebarWatchlistsRows", 3, ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Symbol", ImGuiTableColumnFlags_WidthStretch, 1.2f);
         ImGui::TableSetupColumn("Price", ImGuiTableColumnFlags_WidthFixed, 84.0f);
-        ImGui::TableSetupColumn("Change", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+        ImGui::TableSetupColumn("Signal", ImGuiTableColumnFlags_WidthFixed, 70.0f);
 
         for (const SidebarModel::WatchlistRow& row : card.rows) {
             const std::string symbol = SidebarModel::truncate(row.symbol, 10);
@@ -1153,7 +1281,7 @@ void App::renderWatchlistPanel()
             ImGui::TableNextColumn();
             ImGui::TextColored(UiTheme::TextPrimary, "%s", SidebarModel::truncate(row.price, 11).c_str());
             ImGui::TableNextColumn();
-            ImGui::TextColored(row.change.rfind("-", 0) == 0 ? UiTheme::Loss : (row.change.rfind("+", 0) == 0 ? UiTheme::Gain : UiTheme::MutedText), "%s", SidebarModel::truncate(row.change, 10).c_str());
+            ImGui::TextColored(sidebarWatchlistSymbolColor(row.signalStatus), "%s", SidebarModel::truncate(row.signalStatus, 10).c_str());
         }
         ImGui::EndTable();
 
@@ -1170,16 +1298,9 @@ void App::renderWatchlistPanel()
     endFinancePanel();
 }
 
-void App::renderDataStatusCard()
+void App::renderDataStatusCard(const SidebarModel::DataStatusCard& card)
 {
-    const SidebarModel::DataStatusCard card = SidebarModel::buildDataStatusCard(
-        sidebarRefreshSummary(state_.dashboardPriceRefreshStatus),
-        sidebarRefreshSummary(state_.watchlistPriceRefreshStatus),
-        marketDataService_ == nullptr ? "Yahoo Finance" : marketDataService_->providerName(),
-        AppVersion,
-        startupError_,
-        Date::todayIso8601());
-    const float cardHeight = card.abnormal ? 152.0f : 112.0f;
+    const float cardHeight = sidebarDataStatusCardHeight(card);
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 3.0f));
@@ -1214,7 +1335,7 @@ void App::renderCurrentSection()
 
     switch (state_.currentSection) {
     case AppSection::Dashboard:
-        dashboardView_.render(state_, *portfolioSnapshotRepository_, *dashboardLayoutRepository_, *dashboardChartSettingsRepository_, [this]() {
+        dashboardView_.render(state_, *portfolioSnapshotRepository_, *appSettingsRepository_, *dashboardLayoutRepository_, *dashboardChartSettingsRepository_, [this]() {
             refreshDashboardPrices();
         },
             reload);
@@ -1244,7 +1365,7 @@ void App::renderCurrentSection()
         stockResearchView_.render(state_, *marketDataService_, *watchlistRepository_, reload);
         break;
     case AppSection::Reports:
-        renderPlaceholder("Reports", "Reports will summarize local records without advice or recommendations.");
+        reportsView_.render(state_);
         break;
     case AppSection::Settings:
         settingsView_.render(state_, *appSettingsRepository_, *capitalGainAllocationRepository_, activeDatabasePath_, AppVersion, [this](const std::string& configuredPath, std::string& message) {
